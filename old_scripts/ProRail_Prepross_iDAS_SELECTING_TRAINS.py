@@ -299,8 +299,9 @@ class RecordSelection:
             plt.plot(np.arange(0,500),np.ones((500))*np.mean(all_mean_amp),'--',color='red')
             plt.xlabel('Record Number',fontsize=14)
             plt.ylabel('Mean amplitude',fontsize=14)
-            plt.xlim(0,max(rec_num))
+            #plt.xlim(0,max(rec_num))
             plt.grid()
+            plt.show()
     
         else:
             
@@ -356,7 +357,7 @@ class RecordSelection:
 
 import numpy as np
 import os
-path = r'G:\continuous_measurements_30s_20112020'
+path = r'D:\FO_culemborg_22112020'
 #path = r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES PROJECTS_2020\06_PRORAIL_PROJECT\01_FIELD_MEASUREMENTS\FIELD_MEASUREMENTS_PRORAIL_09112020\ProRail-09112020-signal-test'
 os.chdir(path)
 import glob
@@ -365,7 +366,7 @@ Allfiles=glob.glob('*.tdms')
 
 
 #%%
-Allfiles = Allfiles[5428:6988]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
+Allfiles = Allfiles[0:500]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
 
 #%%
 DATAFiles = Allfiles
@@ -405,9 +406,9 @@ df_names = df_names.transpose()
 df_mean = pandas.DataFrame(All_mean,columns=['mean'])
 
 
-df.to_csv(r'F:\PRORAIL_CSV_FILES\10_SITES\SITE_4900_5200_ADD\iDAS_4900_5200_22112020_1.csv')
-df_names.to_csv(r'F:\PRORAIL_CSV_FILES\10_SITES\SITE_4900_5200_ADD\iDAS_4900_5200_22112020_1_filenames.csv')
-df_mean.to_csv(r'F:\PRORAIL_CSV_FILES\10_SITES\SITE_4900_5200_ADD\iDAS_4900_5200_22112020_1_mean.csv')
+df.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1.csv')
+df_names.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_filenames.csv')
+df_mean.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_mean.csv')
 
 
 

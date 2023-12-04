@@ -113,7 +113,9 @@ class ReadTDMS:
 
     def plot_data(self):
         """
-        Plot the data stored in the class instance
+        Plot the data from the TDMS file
+        If 1 channel is selected, plot the data as a line plot
+        If more than 1 channel is selected, plot the data as an image plot
         """
         if self.data is None:
             print("No data to plot. Please call get_data first.")
