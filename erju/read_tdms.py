@@ -54,8 +54,23 @@ class ReadTDMS:
                 'zero_offset': properties.get('Zero Offset (m)'),
                 'pulse_width_2': properties.get('Pulse Width 2 (ns)'),
                 'gauge_length': properties.get('GaugeLength'),
-                'gps_time': properties.get('GPSTimeStamp')
+                'gps_time': properties.get('GPSTimeStamp'),
+
+                'group_name': tdms_file.groups()[0].name,
+                'first_channel_name': tdms_file.groups()[0].channels()[0].name
             }
+
+        # Add the 'n_samples_per_channel' key to the dictionary
+        properties_dict['n_samples_per_channel'] = len(
+            tdms_file[properties_dict['group_name']][properties_dict['first_channel_name']])
+        # Add the 'measurement_time (in seconds)' key to the dictionary
+        properties_dict['measurement_time'] = properties_dict['n_samples_per_channel'] / \
+                                              properties_dict['sampling_frequency']
+        # Add the 'distance' key to the dictionary
+        properties_dict['distance'] = np.arange(properties_dict['n_channels']+1) * \
+                                      properties_dict['spatial_resolution'] * \
+                                      properties_dict['fibre_length_multiplier'] + \
+                                      properties_dict['zero_offset']
 
         return properties_dict
 
@@ -93,6 +108,27 @@ class ReadTDMS:
         return data
 
 
+    def plot_data(self, data):
+        """
+        Plot all the channels in the TDMS file
+
+        @param data: data to be plotted (2D array like {channels, samples})
+        @param starting_channel: first channel to be plotted
+        @param n_traces: number of traces to be plotted
+        """
+        data = np.abs(data.T) # Transpose the data and take the absolute value
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
+        ax.set_xlabel('Channel / Distance [m]')
+        ax.set_ylabel('Time [s]')
+        # Use a lambda function to display the time in seconds
+        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
+
+        plt.show()
+
+
+
+
     def plot_imshow(self, data, start_channel, n_traces, start_time, end_time, save_figure=True):
         """
         Function for plotting DAS traces
@@ -111,10 +147,11 @@ class ReadTDMS:
 
         matplotlib.rc('xtick', labelsize=14)
         matplotlib.rc('ytick', labelsize=14)
-        fig, ax = plt.subplots(figsize=(15, 8))
+        fig, ax = plt.subplots(figsize=(10, 6))
         Z = np.abs(data)
-        plt.imshow((Z), interpolation='kaiser', aspect='auto', cmap='jet',
-                   extent=[start_channel, start_channel + n_traces, end_time, start_time], vmax=Z.max() * 0.30)
+        plt.imshow((Z), interpolation='kaiser',
+                   extent=[start_channel, start_channel + n_traces, end_time, start_time],
+                   aspect='auto', cmap='jet', vmax=Z.max() * 0.30)
         plt.xlabel('Distance[m]', fontsize=14)
         plt.ylabel('Time [s]', fontsize=14)
         plt.show(block=False)
@@ -133,6 +170,8 @@ class ReadTDMS:
 
 file_path = r'C:\Projects\erju\data\iDAS_continous_measurements_30s_UTC_20201121_101949.913.tdms'
 file_1 = ReadTDMS(file_path)
-data = file_1.get_data(4200, 4210)
-file_1.plot_imshow(data, 4200, 10, 0, 30, save_figure=True)
-
+properties = file_1.get_properties()
+data = file_1.get_data(4200, 4300)
+file_1.plot_imshow(data, 4200, 100, 0, 30, save_figure=True)
+file_1.plot_data(data)
+print(data.shape)
