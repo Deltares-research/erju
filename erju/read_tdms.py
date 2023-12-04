@@ -15,6 +15,7 @@ class ReadTDMS:
         @param file_path: path to the TDMS file
         """
         self.file_path = file_path
+        self.data = None
 
 
     def get_properties(self):
@@ -105,29 +106,48 @@ class ReadTDMS:
         # Convert the list of selected data to a numpy array and transpose it
         data = np.array(data)
 
+        # Store the data in the class instance
+        self.data = data
+
         return data
 
-
-    def plot_data(self, data):
+    def plot_data(self):
         """
-        Plot all the channels in the TDMS file
-
-        @param data: data to be plotted (2D array like {channels, samples})
-        @param starting_channel: first channel to be plotted
-        @param n_traces: number of traces to be plotted
+        Plot the data stored in the class instance
         """
-        data = np.abs(data.T) # Transpose the data and take the absolute value
+        if self.data is None:
+            print("No data to plot. Please call get_data first.")
+            return
+
+        # Create a figure and axes
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
-        ax.set_xlabel('Channel / Distance [m]')
-        ax.set_ylabel('Time [s]')
-        # Use a lambda function to display the time in seconds
-        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
+
+        # Check if the data is a 1D array (single channel)
+        if self.data.shape[0] == 1:
+            # Squeeze out the second dimension
+            data = np.squeeze(self.data)
+            # Plot the data as a line plot
+            ax.plot(data)
+            ax.set_xlabel('Time [s]')
+            ax.set_ylabel('Amplitude')
+
+            # Use a lambda function to display the time in seconds
+            ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
+
+        # Check if the data is a 2D array (multiple channels)
+        elif self.data.shape[0] > 1:
+            # Transpose the data and take the absolute value
+            data = np.abs(self.data.T)
+
+            # Plot the data as an image plot
+            ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
+            ax.set_xlabel('Channel / Distance [m]')
+            ax.set_ylabel('Time [s]')
+
+            # Use a lambda function to display the time in seconds
+            ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
 
         plt.show()
-
-
-
 
     def plot_imshow(self, data, start_channel, n_traces, start_time, end_time, save_figure=True):
         """
@@ -171,7 +191,10 @@ class ReadTDMS:
 file_path = r'C:\Projects\erju\data\iDAS_continous_measurements_30s_UTC_20201121_101949.913.tdms'
 file_1 = ReadTDMS(file_path)
 properties = file_1.get_properties()
-data = file_1.get_data(4200, 4300)
-file_1.plot_imshow(data, 4200, 100, 0, 30, save_figure=True)
-file_1.plot_data(data)
+data = file_1.get_data(2, 3)
+file_1.plot_data()
+
+#file_1.plot_imshow(data, 4200, 100, 0, 30, save_figure=True)
+
 print(data.shape)
+
