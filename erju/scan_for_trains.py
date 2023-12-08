@@ -9,7 +9,6 @@ os.chdir(file_path)
 # Get a list of all .tdms files in the directory
 all_files = glob.glob('*.tdms')
 
-
 def search_energy(self, data_type='1Hz', plot=True):
     """
     Function to search for train in the selected data
