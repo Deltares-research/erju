@@ -286,6 +286,7 @@ class RecordSelection:
                 print('Please, select an appropiate data type')
             
             all_mean_amp[iiz,:] = np.mean(np.abs(data))
+            print(all_mean_amp)
     
     
         if plot == True:
@@ -358,6 +359,7 @@ class RecordSelection:
 import numpy as np
 import os
 path = r'D:\FO_culemborg_22112020'
+#path = r'C:\Projects\erju\data'
 #path = r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES PROJECTS_2020\06_PRORAIL_PROJECT\01_FIELD_MEASUREMENTS\FIELD_MEASUREMENTS_PRORAIL_09112020\ProRail-09112020-signal-test'
 os.chdir(path)
 import glob
@@ -370,8 +372,8 @@ Allfiles = Allfiles[0:400]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
 
 #%%
 DATAFiles = Allfiles
-reference_channel = 4900
-n_traces = 50
+reference_channel = 100
+n_traces = 100
 fs = 1000
 record_length = 30
 rs = RecordSelection(DATAFiles,fs,reference_channel,n_traces,record_length)

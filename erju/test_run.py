@@ -4,6 +4,7 @@ from erju.scan_for_trains import ScanForTrains
 
 # Define the path to the TDMS file
 file_path = r'C:\Projects\erju\data\iDAS_continous_measurements_30s_UTC_20201121_101949.913.tdms'
+#file_path = r'D:\FO_culemborg_22112020'
 # Define the first and last channel to be extracted
 first_channel = 100
 last_channel = 200
@@ -25,6 +26,10 @@ scan_channel, start_time, end_time = scan_for_trains.search_params()
 print('scan_channel: ', scan_channel)
 print('start_time: ', start_time)
 print('end_time: ', end_time)
+
+# Get the average signal
+mean_signal = scan_for_trains.signal_averaging()
+print('mean_signal: ', mean_signal)
 
 # Plot the selected data
 #read_tdms.plot_data(save_figure=True)
