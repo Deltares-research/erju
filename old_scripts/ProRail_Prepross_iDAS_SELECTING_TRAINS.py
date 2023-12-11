@@ -296,8 +296,8 @@ class RecordSelection:
             fig, ax = plt.subplots(figsize=(15,6))
             rec_num = np.arange(0,len(all_mean_amp))
             plt.plot(rec_num, all_mean_amp)
-            plt.plot(np.arange(0,500),np.ones((500))*np.mean(all_mean_amp),'--',color='red')
-            plt.xlabel('Record Number',fontsize=14)
+            #plt.plot(np.arange(0,500),np.ones((500))*np.mean(all_mean_amp),'--',color='red')
+            plt.xlabel('Record/file Number',fontsize=14)
             plt.ylabel('Mean amplitude',fontsize=14)
             #plt.xlim(0,max(rec_num))
             plt.grid()
@@ -366,12 +366,12 @@ Allfiles=glob.glob('*.tdms')
 
 
 #%%
-Allfiles = Allfiles[0:500]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
+Allfiles = Allfiles[0:400]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
 
 #%%
 DATAFiles = Allfiles
 reference_channel = 4900
-n_traces = 200
+n_traces = 50
 fs = 1000
 record_length = 30
 rs = RecordSelection(DATAFiles,fs,reference_channel,n_traces,record_length)
@@ -382,45 +382,49 @@ data = rs.getData(All_mean,set_limit)
 
 rec_names_selected,selected_data = data.get_energetic_iDAS_records()
 
+print('rec_names_selected')
+print(rec_names_selected)
+print('selected_data')
+print(selected_data)
 
-#from segypy import wiggle
-
-#wiggle(selected_data[:,:,12])
-
-
-#%%
-
-data_2d = Convert_3d_to_2d_array(selected_data)
-
-
-
-#%np.save('Trains_Only_4200.npy',selected_data)
-
-import pandas
-df = pandas.DataFrame(data_2d,columns=['iDAS'+ str(i) for i in range(0,201)])
-
-df_names = pandas.DataFrame(rec_names_selected,index=['filenames'])
-
-df_names = df_names.transpose()
-
-df_mean = pandas.DataFrame(All_mean,columns=['mean'])
-
-
-df.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1.csv')
-df_names.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_filenames.csv')
-df_mean.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_mean.csv')
-
-
-
-
-
-
-
-
-
-
-
-
+# #from segypy import wiggle
+#
+# #wiggle(selected_data[:,:,12])
+#
+#
+# #%%
+#
+# data_2d = Convert_3d_to_2d_array(selected_data)
+#
+#
+#
+# #%np.save('Trains_Only_4200.npy',selected_data)
+#
+# import pandas
+# df = pandas.DataFrame(data_2d,columns=['iDAS'+ str(i) for i in range(0,201)])
+#
+# df_names = pandas.DataFrame(rec_names_selected,index=['filenames'])
+#
+# df_names = df_names.transpose()
+#
+# df_mean = pandas.DataFrame(All_mean,columns=['mean'])
+#
+#
+# df.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1.csv')
+# df_names.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_filenames.csv')
+# df_mean.to_csv(r'C:\Projects\erju\test\iDAS_4900_5200_22112020_1_mean.csv')
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 
 
 

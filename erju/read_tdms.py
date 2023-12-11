@@ -1,20 +1,24 @@
 import numpy as np
 from nptdms import TdmsFile as td
 import matplotlib.pyplot as plt
-import matplotlib
-
+import matplotlib.ticker as ticker
 
 
 class ReadTDMS:
     """"
     Class to extract properties and data from TDMS files
     """
-    def __init__(self, file_path):
+    def __init__(self, file_path, first_channel, last_channel):
         """
         Initialize the class
         @param file_path: path to the TDMS file
+        @param first_channel: first channel to be extracted
+        @param last_channel: last channel to be extracted
+        @param data: extracted data
         """
         self.file_path = file_path
+        self.first_channel = first_channel
+        self.last_channel = last_channel
         self.data = None
 
 
@@ -25,6 +29,7 @@ class ReadTDMS:
         @return: properties of the TDMS file
         """
         # Open the TDMS file
+        print('Reading the TDMS file...')
         with td.read(self.file_path) as tdms_file:
             # Get the properties of the TDMS file
             properties = tdms_file.properties
@@ -76,7 +81,7 @@ class ReadTDMS:
         return properties_dict
 
 
-    def get_data(self, first_channel, last_channel):
+    def get_data(self):
         """
         Get the FO measurements from the TDMS file in a given range of channels
 
@@ -91,13 +96,14 @@ class ReadTDMS:
         with td.read(self.file_path) as tdms_file:
 
             # Loop over all the groups in the TDMS file
+            print('Extracting the measurements...')
             for group in tdms_file.groups():
                 # Loop over all the channels in the group
                 for channel in group.channels():
                     # Get the channel number
                     channel_number = int(channel.name)
                     # Check if the channel is within the range of selected channels
-                    if first_channel <= channel_number < last_channel:
+                    if self.first_channel <= channel_number < self.last_channel:
                         # Access numpy array of data for channel:
                         measurements = channel[:]
                         # Append the measurements to the list of data
@@ -127,6 +133,7 @@ class ReadTDMS:
             self.plot_single_channel()
             if save_figure == True:
                 plt.savefig('figura1D.jpg', dpi=300)
+                print('Figure for 1D data saved')
             elif save_figure == False:
                 pass
 
@@ -136,6 +143,7 @@ class ReadTDMS:
             self.plot_array_channels()
             if save_figure == True:
                 plt.savefig('figura2D.jpg', dpi=300)
+                print('Figure for 2D data saved')
             elif save_figure == False:
                 pass
 
@@ -157,7 +165,7 @@ class ReadTDMS:
         ax.set_ylabel('Amplitude')
 
         # Use a lambda function to display the time in seconds
-        ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
 
 
     def plot_array_channels(self):
@@ -175,15 +183,17 @@ class ReadTDMS:
         ax.set_xlabel('Channel count')
         ax.set_ylabel('Time [s]')
 
+        #TODO: Find a more elegant solution for the labels in the x-axis
+
+        # Generate evenly spaced values for x-ticks
+        x_ticks = np.linspace(0, self.data.shape[0] - 1, num=10)
+        x_labels = np.linspace(self.first_channel, self.last_channel,
+                               num=10)
+
+        # Set the x-ticks and their labels
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels(x_labels.astype(int))  # Convert labels to integers
+
         # Use a lambda function to display the time in seconds
-        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, pos: x / 1000))
-
-
-##############################################################
-
-file_path = r'C:\Projects\erju\data\iDAS_continous_measurements_30s_UTC_20201121_101949.913.tdms'
-file_1 = ReadTDMS(file_path)
-properties = file_1.get_properties()
-data = file_1.get_data(100, 200)
-file_1.plot_data(save_figure=True)
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
 
