@@ -372,8 +372,8 @@ Allfiles = Allfiles[0:400]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
 
 #%%
 DATAFiles = Allfiles
-reference_channel = 100
-n_traces = 100
+reference_channel = 0
+n_traces = 500
 fs = 1000
 record_length = 30
 rs = RecordSelection(DATAFiles,fs,reference_channel,n_traces,record_length)

@@ -21,7 +21,6 @@ class ReadTDMS:
         self.last_channel = last_channel
         self.data = None
 
-
     def get_properties(self):
         """
         Get the properties of the TDMS file
@@ -34,52 +33,34 @@ class ReadTDMS:
             # Get the properties of the TDMS file
             properties = tdms_file.properties
 
+            # List of property names
+            property_names = ['name', 'SamplingFrequency[Hz]', 'SpatialResolution[m]', 'StartPosition[m]',
+                              'MeasureLength[m]', 'Start Distance (m)', 'Stop Distance (m)', 'PeakVoltage[V]',
+                              'Pulse 2 Delay (ns)', 'PulseWidth[ns]', 'OffsetLength', 'Reference Level 1',
+                              'Reference Level 2', 'Reference Level 3', 'FibreIndex', 'Fibre Length Multiplier',
+                              'UserZeroRef', 'Unit Calibration (nm)', 'Attenuator 1', 'Attenuator 2',
+                              'Fibre Length per Metre', 'Zero Offset (m)', 'Pulse Width 2 (ns)', 'GaugeLength',
+                              'GPSTimeStamp']
+
             # From properties extract the important ones and store them in a dictionary
-            properties_dict = {
-                'name': properties.get('name'),
-                'sampling_frequency': properties.get('SamplingFrequency[Hz]'),
-                'spatial_resolution': properties.get('SpatialResolution[m]'),
-                'start_position': properties.get('StartPosition[m]'),
-                'n_channels': properties.get('MeasureLength[m]'),
-                'start_distance': properties.get('Start Distance (m)'),
-                'stop_distance': properties.get('Stop Distance (m)'),
-                'peak_voltage': properties.get('PeakVoltage[V]'),
-                'pulse_2_delay': properties.get('Pulse 2 Delay (ns)'),
-                'pulse_width': properties.get('PulseWidth[ns]'),
-                'offset_length': properties.get('OffsetLength'),
-                'reference_level_1': properties.get('Reference Level 1'),
-                'reference_level_2': properties.get('Reference Level 2'),
-                'reference_level_3': properties.get('Reference Level 3'),
-                'fibre_index': properties.get('FibreIndex'),
-                'fibre_length_multiplier': properties.get('Fibre Length Multiplier'),
-                'user_zero_ref': properties.get('UserZeroRef'),
-                'unit_calibration': properties.get('Unit Calibration (nm)'),
-                'attenuator1': properties.get('Attenuator 1'),
-                'attenuator2': properties.get('Attenuator 2'),
-                'fibre_length_per_metre': properties.get('Fibre Length per Metre'),
-                'zero_offset': properties.get('Zero Offset (m)'),
-                'pulse_width_2': properties.get('Pulse Width 2 (ns)'),
-                'gauge_length': properties.get('GaugeLength'),
-                'gps_time': properties.get('GPSTimeStamp'),
+            properties_dict = {name: properties.get(name) for name in property_names}
 
-                'group_name': tdms_file.groups()[0].name,
-                'first_channel_name': tdms_file.groups()[0].channels()[0].name
-            }
+            # Get group and channel names
+            group_name = tdms_file.groups()[0].name
+            first_channel_name = tdms_file.groups()[0].channels()[0].name
 
-        # Add the 'n_samples_per_channel' key to the dictionary
-        properties_dict['n_samples_per_channel'] = len(
-            tdms_file[properties_dict['group_name']][properties_dict['first_channel_name']])
-        # Add the 'measurement_time (in seconds)' key to the dictionary
-        properties_dict['measurement_time'] = properties_dict['n_samples_per_channel'] / \
-                                              properties_dict['sampling_frequency']
-        # Add the 'distance' key to the dictionary
-        properties_dict['distance'] = np.arange(properties_dict['n_channels']+1) * \
-                                      properties_dict['spatial_resolution'] * \
-                                      properties_dict['fibre_length_multiplier'] + \
-                                      properties_dict['zero_offset']
+            # Add the 'n_samples_per_channel' key to the dictionary
+            n_samples_per_channel = len(tdms_file[group_name][first_channel_name])
+            properties_dict['n_samples_per_channel'] = n_samples_per_channel
+            # Add the 'measurement_time (in seconds)' key to the dictionary
+            properties_dict['measurement_time'] = n_samples_per_channel / properties_dict['SamplingFrequency[Hz]']
+            # Add the 'distance' key to the dictionary
+            properties_dict['distance'] = np.arange(properties_dict['MeasureLength[m]'] + 1) * \
+                                          properties_dict['SpatialResolution[m]'] * \
+                                          properties_dict['Fibre Length Multiplier'] + \
+                                          properties_dict['Zero Offset (m)']
 
         return properties_dict
-
 
     def get_data(self):
         """

@@ -54,7 +54,7 @@ class ScanForTrains:
         relative_scan_channel = scan_channel - self.first_channel
 
         # Convert the start and end times to indices
-        sampling_frequency = self.properties['sampling_frequency']
+        sampling_frequency = self.properties['SamplingFrequency[Hz]']
         start_index = int(start_time * sampling_frequency)
         end_index = int(end_time * sampling_frequency)
 
