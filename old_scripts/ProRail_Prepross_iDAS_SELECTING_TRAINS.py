@@ -5,6 +5,8 @@ Created on Wed Oct 14 16:40:20 2020
 @author: obandohe
 """
 
+import time
+
 ######################################################################MAIN FUNCTIONS##################################################
 def ProRail_Viz_init_iDAS_Data(path):
     # All imports to perform operation. Import must be installed in python using pip install name of import
@@ -286,7 +288,7 @@ class RecordSelection:
                 print('Please, select an appropiate data type')
             
             all_mean_amp[iiz,:] = np.mean(np.abs(data))
-            print(all_mean_amp)
+            print('the means are>' ,all_mean_amp)
     
     
         if plot == True:
@@ -359,16 +361,20 @@ class RecordSelection:
 import numpy as np
 import os
 path = r'D:\FO_culemborg_22112020'
-#path = r'C:\Projects\erju\data'
+path = r'C:\Projects\erju\data'
 #path = r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES PROJECTS_2020\06_PRORAIL_PROJECT\01_FIELD_MEASUREMENTS\FIELD_MEASUREMENTS_PRORAIL_09112020\ProRail-09112020-signal-test'
 os.chdir(path)
 import glob
 #Allfiles=glob.glob('*.dat')
 Allfiles=glob.glob('*.tdms')
 
+# start the timer
+start_time = time.time()
 
 #%%
 Allfiles = Allfiles[0:400]  # 1--0:1500; 2 -- 2548:4110;  3 -- 5428:6988
+
+
 
 #%%
 DATAFiles = Allfiles
@@ -377,7 +383,16 @@ n_traces = 500
 fs = 1000
 record_length = 30
 rs = RecordSelection(DATAFiles,fs,reference_channel,n_traces,record_length)
-All_mean = rs.search_energy(data_type='iDAS',plot=True)
+
+all_data = ProRail_Viz_load_iDAS_Data(DATAFiles[0],0,30,0,500)
+print(all_data)
+
+All_mean = rs.search_energy(data_type='iDAS',plot=False)
+
+# stop the timer
+stop_time = time.time()
+print('Elapsed time: ', stop_time - start_time, 'seconds')
+
 #%%
 set_limit = 400 
 data = rs.getData(All_mean,set_limit)

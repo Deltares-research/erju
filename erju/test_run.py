@@ -1,22 +1,43 @@
 # Purpose: Test run of the ReadTDMS class
-from erju.read_tdms import ReadTDMS
-from erju.scan_for_trains import ScanForTrains
+import time
+
 from erju.find_trains import FindTrains
 
 # Define the path to the TDMS file
 dir_path = r'C:\Projects\erju\data'
+dir_path = r'D:\FO_culemborg_22112020\subtest'
 # Define the first and last channel to be extracted
 first_channel = 0
 last_channel = 500
 
 
+# Start the timer
+start_time = time.time()
 
-##############################
-
+# Initialize the FindTrains class instance
 trains = FindTrains(dir_path, first_channel, last_channel)
-trains.extract_properties()
-print(trains.search_params())
-print(trains.signal_averaging())
+
+# Extract the properties of the TDMS file
+properties = trains.extract_properties()
+print(properties)
+
+# Get the average signal
+signal_mean = trains.signal_averaging(plot=False)
+print(signal_mean)
+
+# Stop the timer
+stop_time = time.time()
+print('Elapsed time: ', stop_time - start_time, 'seconds')
+
+# Find the file names above the threshold
+selected_files = trains.get_files_above_threshold(signal_mean, threshold=500)
+print('files with trains: ', selected_files)
+
+# From the selected files, extract the data
+data = trains.get_data(selected_files)
+print('selected data: ', data)
+
+
 
 
 ##################

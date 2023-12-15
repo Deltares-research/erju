@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from nptdms import TdmsFile as td
+import matplotlib.pyplot as plt
 
 
 class FindTrains:
@@ -12,10 +13,12 @@ class FindTrains:
     def __init__(self, dir_path, first_channel, last_channel):
         """
         Initialize the class instance
+
         @param dir_path: path to the directory containing the TDMS files
         @param first_channel: first channel to be extracted
         @param last_channel: last channel to be extracted
         """
+
         self.dir_path = dir_path
         self.first_channel = first_channel
         self.last_channel = last_channel
@@ -26,7 +29,12 @@ class FindTrains:
         """
         Extract the file properties and the measurement data
         as a dictionary and an array respectively
+
+        @param file_name: name of the TDMS file to extract properties from
+
+        @return: properties_dict
         """
+
         # Get a list of all TDMS files in the directory
         tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
 
@@ -73,51 +81,75 @@ class FindTrains:
 
         return properties_dict
 
-    def extract_data(self, file_name=None):
+    def extract_data(self, file_name=None, first_channel=None, last_channel=None,
+                     start_time=None, end_time=None, frequency=None):
         """
-        Extract the file properties and the measurement data
-        as a dictionary and an array respectively
-        """
-        # Get a list of all TDMS files in the directory
-        tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
+        Extract the file properties and the measurement data as a dictionary and an array respectively.
 
-        # If no file name is specified, use the first file
-        if file_name is None:
-            file_name = tdms_files[0]
+        @param file_name: name of the TDMS file to extract data from
+        @param first_channel: first channel to be extracted
+        @param last_channel: last channel to be extracted
+        @param start_time: start time of the data to be extracted
+        @param end_time: end time of the data to be extracted
+        @param frequency: sampling frequency of the data
+
+        @return: data
+        """
+
+        # Use the first TDMS file in the directory if file_name is not specified
+        file_name = file_name or next(f for f in os.listdir(self.dir_path) if f.endswith('.tdms'))
+
+        # Use instance's channels if first_channel or last_channel are not specified
+        first_channel = first_channel if first_channel is not None else self.first_channel
+        last_channel = last_channel if last_channel is not None else self.last_channel
+
+        # Use the instance's properties if frequency is not specified
+        frequency = frequency or self.properties['SamplingFrequency[Hz]']
+
+        # Convert start_time and end_time to indices
+        start_index = int(start_time * frequency) if start_time is not None else 0
+        end_index = int(end_time * frequency) if end_time is not None else int(
+            self.properties['measurement_time'] * frequency)
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
         print('Extracting the data...')
         with td.read(file_path) as tdms_file:
-            # Initialize an empty list to store the selected data
-            data = []
-            # Loop over all the groups in the TDMS file
-            for group in tdms_file.groups():
-                # Loop over all the channels in the group
-                for channel in group.channels():
-                    # Get the channel number
-                    channel_number = int(channel.name)
-                    # Check if the channel is within the range of selected channels
-                    if self.first_channel <= channel_number < self.last_channel:
-                        # Access numpy array of data for channel:
-                        measurements = channel[:]
-                        # Append the measurements to the list of data
-                        data.append(measurements)
+            # Pre-filter the channels
+            # Extract channels from TDMS groups within the specified channel range
+            channels = [channel for group in tdms_file.groups() for channel in group.channels()
+                        if first_channel <= int(channel.name) < last_channel]
 
-        # Convert the list of selected data to a numpy array and transpose it
-        data = np.array(data)
+            # Calculate the shape of the data array based on the number of channels and time range
+            data_shape = (len(channels), end_index - start_index) if all(
+                (end_index is not None, start_index is not None)) else None
 
-        # Store the data in the class instance
-        self.data = data
+            # Initialize data as an empty numpy array if data_shape is not None, otherwise set data to None
+            data = np.empty(data_shape) if data_shape is not None else None
 
-        return data
+            # Populate data if it is not None
+            if data is not None:
+                for i, channel in enumerate(channels):
+                    # Access numpy array of data for channel within the time range:
+                    data[i] = channel[start_index:end_index]
+
+            # Store the data in the class instance
+            self.data = data
+
+            return data
 
     def _calculate_cutoff_times(self, start_rate=0.2, end_rate=0.8):
         """
         Helper function to calculate the start and end times
         by removing the first and last 20% of the data
+
+        @param start_rate: start rate of the data to be extracted
+        @param end_rate: end rate of the data to be extracted
+
+        @return: start_time, end_time
         """
+
         # Pull the measurement time from the properties
         measurement_time = self.properties['measurement_time']
         # Calculate the start and end times
@@ -129,6 +161,8 @@ class FindTrains:
         """
         Define the middle of the domain, the time window
         and the spatial window for the search
+
+        @return: scan_channel, start_time, end_time
         """
 
         # Define the middle of the interest domain to scan there
@@ -139,10 +173,14 @@ class FindTrains:
 
         return scan_channel, start_time, end_time
 
-    def signal_averaging(self):
+    def signal_averaging(self, plot=False):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
+
+        @param plot: boolean to plot the mean signal
+
+        @return: mean_signal
         """
 
         # Get the search parameters
@@ -151,22 +189,66 @@ class FindTrains:
         # Adjust the scan_channel to be relative to the first_channel
         relative_scan_channel = scan_channel - self.first_channel
 
-        # Convert the start and end times to indices
-        sampling_frequency = self.properties['SamplingFrequency[Hz]']
-        start_index = int(start_time * sampling_frequency)
-        end_index = int(end_time * sampling_frequency)
-
         mean_signal = []
         # Loop through all the TDMS files in the directory
         for file_name in os.listdir(self.dir_path):
             # Get the mean signal for each file in the relative scan channel
             # and using the start_index and end_index, and get them in a list
-            tdms_data = self.extract_data(file_name)
-            mean_signal.append(np.mean(np.abs(
-                self.data[relative_scan_channel, start_index:end_index])))
+            data = self.extract_data(file_name, relative_scan_channel, relative_scan_channel + 1, start_time, end_time)
+            mean_signal.append(np.mean(np.abs(data)))
         # Convert the list to a numpy array
         mean_signal = np.array(mean_signal)
+
+        # Plot the mean signal if plot is True
+        if plot:
+            plt.figure(figsize=(10, 6))
+            plt.plot(mean_signal, label='Mean Signal')
+            plt.xlabel('File Index')
+            plt.ylabel('Mean Signal Value')
+            plt.title('Mean Signal Line Plot')
+            plt.legend()
+
+            # Save the figure
+            plt.savefig('mean_signal.jpg', dpi=300)
 
         return mean_signal
 
 
+    def get_files_above_threshold(self, mean_signal, threshold):
+        """
+        Get the list of file names based on a threshold value.
+
+        @param mean_signal: list of mean signal values for each file
+        @param threshold: threshold value to filter the files
+
+        @return: selected_files
+        """
+
+        # Get the list of TDMS files in the directory
+        tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
+
+        # Filter files based on the threshold
+        selected_files = [file_name for file_name, mean_value in zip(
+            tdms_files, mean_signal) if mean_value >= threshold]
+
+        return selected_files
+
+    def get_data(self, selected_files):
+        """
+        Extract measurement data for selected files.
+
+        @param selected_files: list of file names to extract data from
+
+        @return: selected_data
+        """
+
+        # Initialize an empty dictionary to store the selected data
+        selected_data = {}
+
+        # Loop through the selected files and extract the data
+        for file_name in selected_files:
+            data = self.extract_data(file_name)
+            # Store the data in the dictionary
+            selected_data[file_name] = data
+
+        return selected_data
