@@ -239,16 +239,16 @@ class FindTrains:
 
         @param selected_files: list of file names to extract data from
 
-        @return: selected_data
+        @return: all_selected_data
         """
 
         # Initialize an empty dictionary to store the selected data
-        selected_data = {}
+        all_selected_data = {}
 
         # Loop through the selected files and extract the data
         for file_name in selected_files:
             data = self.extract_data(file_name)
             # Store the data in the dictionary
-            selected_data[file_name] = data
+            all_selected_data[file_name] = data
 
-        return selected_data
+        return all_selected_data
