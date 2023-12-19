@@ -9,7 +9,7 @@ dir_path = r'C:\Projects\erju\data'
 dir_path = r'D:\FO_culemborg_22112020\subtest'
 # Define the first and last channel to be extracted
 first_channel = 0
-last_channel = 500
+last_channel = 8000
 
 #########################################################################
 # Start the timer
@@ -25,6 +25,7 @@ signal_mean = train_22_cul.signal_averaging(plot=True)
 
 # Find the file names above the threshold
 selected_files = train_22_cul.get_files_above_threshold(signal_mean, threshold=500)
+print(selected_files)
 # From the selected files, extract the data
 all_data = train_22_cul.get_data(selected_files)
 
@@ -33,7 +34,8 @@ all_data = train_22_cul.get_data(selected_files)
 # Plot the data
 # Create the plotting instance
 train_22_cul_plots = PlotData(dir_path, selected_files[0], all_data)
-train_22_cul_plots.plot_data(save_figure=True)
+train_22_cul_plots.plot_array_channels(save_figure=True)
+train_22_cul_plots.plot_single_channel(channel_index=3800, save_figure=True)
 
 # Stop the timer
 stop_time = time.time()

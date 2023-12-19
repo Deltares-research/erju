@@ -10,6 +10,7 @@ dir_path = r'D:\FO_culemborg_22112020\subtest'
 # Define the first and last channel to be extracted
 first_channel = 0
 last_channel = 8000
+
 #########################################################################
 # Start the timer
 start_time = time.time()
