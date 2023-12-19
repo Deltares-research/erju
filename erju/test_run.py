@@ -19,14 +19,9 @@ start_time = time.time()
 train_22_cul = FindTrains(dir_path, first_channel, last_channel)
 # Extract the properties of the TDMS file
 properties = train_22_cul.extract_properties()
-print(properties)
 
 # Get the average signal
-signal_mean = train_22_cul.signal_averaging(plot=False)
-
-# Stop the timer
-stop_time = time.time()
-print('Elapsed time: ', stop_time - start_time, 'seconds')
+signal_mean = train_22_cul.signal_averaging(plot=True)
 
 # Find the file names above the threshold
 selected_files = train_22_cul.get_files_above_threshold(signal_mean, threshold=500)
@@ -34,9 +29,12 @@ selected_files = train_22_cul.get_files_above_threshold(signal_mean, threshold=5
 all_data = train_22_cul.get_data(selected_files)
 
 #################################################################################
+
 # Plot the data
 # Create the plotting instance
 train_22_cul_plots = PlotData(dir_path, selected_files[0], all_data)
 train_22_cul_plots.plot_data(save_figure=True)
 
-
+# Stop the timer
+stop_time = time.time()
+print('Elapsed time: ', stop_time - start_time, 'seconds')

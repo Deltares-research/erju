@@ -137,6 +137,7 @@ class FindTrains:
             # Store the data in the class instance
             self.data = data
 
+            # TO NOTE: The data is returned with shape (n_channel, n_samples_per_ch)
             return data
 
     def _calculate_cutoff_times(self, start_rate=0.2, end_rate=0.8):
@@ -209,7 +210,11 @@ class FindTrains:
             plt.legend()
 
             # Save the figure
-            plt.savefig('mean_signal.jpg', dpi=300)
+            file_name_suffix = 'Mean_Signal'
+            full_file_name = f'{file_name_suffix}.jpg'
+            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            plt.savefig(save_path, dpi=300)
+            print('Mean Signal figure saved')
 
         return mean_signal
 

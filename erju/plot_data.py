@@ -24,72 +24,50 @@ class PlotData:
         if file_name in all_data:
             self.selected_data = all_data[file_name]
         else:
-            # Handle the case where the specified file_name is not found
-            self.selected_data = np.array([])  # or raise an exception, set to None, etc.
+            # Raise an error if the file_name is not in the dictionary
+            raise ValueError(f'{file_name} is not in the dictionary')
 
-    def plot_data(self, save_figure=False):
+    def plot_single_channel(self, channel_index, save_figure=False):
         """
-        Plot the data from the TDMS file
-        If 1 channel is selected, plot the data as a line plot
-        If more than 1 channel is selected, plot the data as an image plot
+        Plot a single channel as a line plot
+        @param channel_index: index of the channel to plot
+        @param save_figure: boolean to save the figure
+        """
+        # Check if the specified channel_index is valid
+        if channel_index < 0 or channel_index >= self.selected_data.shape[0]:
+            raise ValueError(f'Invalid channel index: {channel_index}. It should be between 0 and {self.selected_data.shape[0] - 1}.')
 
+        # Extract the data for the specified channel
+        channel_data = np.squeeze(self.selected_data[channel_index])
+
+        # Create a figure and axes
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Plot the data as a line plot
+        ax.plot(channel_data)
+        ax.set_xlabel('Time [s]')
+        ax.set_ylabel(f'Amplitude (Channel {channel_index})')
+
+        # Use a lambda function to display the time in seconds
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
+
+        if save_figure:
+            file_name_suffix = f'Figure_1D_Channel_{channel_index}'
+            full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
+            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            plt.savefig(save_path, dpi=300)
+            print(f'Figure for 1D data of Channel {channel_index} saved')
+
+
+    def plot_array_channels(self, save_figure=False):
+        """
+        Plot an array of channels as an image plot
         @param save_figure: boolean to save the figure
         """
         if self.selected_data is None:
             print("No data to plot. Please call get_data first.")
             return
 
-        # Check if the data is a 1D array (single channel)
-        if self.selected_data.shape[0] == 1:
-            # call the single channel function
-            self.plot_single_channel()
-            if save_figure == True:
-                file_name_suffix = 'Figure_1D'
-                full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-                save_path = os.path.join('..', 'test', 'test_output', full_file_name)
-                plt.savefig(save_path, dpi=300)
-                print('Figure for 1D data saved')
-            elif save_figure == False:
-                pass
-
-        # Check if the data is a 2D array (multiple channels)
-        elif self.selected_data.shape[0] > 1:
-            # call the multiple channels function
-            self.plot_array_channels()
-            if save_figure == True:
-                file_name_suffix = 'Figure_2D'
-                full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-                save_path = os.path.join('..', 'test', 'test_output', full_file_name)
-                plt.savefig(save_path, dpi=300)
-                print('Figure for 2D data saved')
-            elif save_figure == False:
-                pass
-
-
-    def plot_single_channel(self):
-        """
-        Plot a single channel as a line plot
-        """
-
-        # Create a figure and axes
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        # Squeeze out the second dimension
-        data = np.squeeze(self.selected_data)
-
-        # Plot the data as a line plot
-        ax.plot(data)
-        ax.set_xlabel('Time [s]')
-        ax.set_ylabel('Amplitude')
-
-        # Use a lambda function to display the time in seconds
-        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
-
-
-    def plot_array_channels(self):
-        """
-        Plot an array of channels as an image plot
-        """
         # Create a figure and axes
         fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -97,19 +75,31 @@ class PlotData:
         data = np.abs(self.selected_data.T)
 
         # Plot the data as an image plot
-        ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
+        im = ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
         ax.set_xlabel('Channel count')
         ax.set_ylabel('Time [s]')
 
-        #TODO: Find a more elegant solution for the labels in the x-axis
-
-        # Generate evenly spaced values for x-ticks
-        x_ticks = np.linspace(0, self.selected_data.shape[0] - 1, num=10)
+        # Set the number of ticks based on the dimensions of the data
+        num_channels = self.selected_data.shape[0]
+        num_time_points = self.selected_data.shape[1]
 
         # Set the x-ticks and their labels
+        x_ticks = np.linspace(0, num_channels - 1, num=min(10, num_channels))
         ax.set_xticks(x_ticks)
+        ax.set_xticklabels([f'{int(x)}' for x in x_ticks])
 
-        # Use a lambda function to display the time in seconds
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
+        # Set the y-ticks and their labels
+        y_ticks = np.linspace(0, num_time_points - 1, num=min(6, num_time_points))
+        ax.set_yticks(y_ticks)
+        ax.set_yticklabels([f'{int(y / 1000)}' for y in y_ticks])
 
+        # Show colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Intensity')
 
+        if save_figure:
+            file_name_suffix = 'Figure_2D'
+            full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
+            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            plt.savefig(save_path, dpi=300)
+            print('Figure for 2D data saved')

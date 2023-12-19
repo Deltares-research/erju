@@ -82,9 +82,6 @@ class FindTrains:
         @return: data
         """
 
-        # Use the first TDMS file in the directory if file_name is not specified
-        file_name = file_name or next(f for f in os.listdir(self.dir_path) if f.endswith('.tdms'))
-
         # Use instance's channels if first_channel or last_channel are not specified
         first_channel = first_channel if first_channel is not None else self.first_channel
         last_channel = last_channel if last_channel is not None else self.last_channel
@@ -100,30 +97,17 @@ class FindTrains:
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
+        # Create the TDMS instance
+        tdms_instance = TdmsReader(file_path)
+
         print('Extracting the data...')
-        with td.read(file_path) as tdms_file:
-            # Pre-filter the channels
-            # Extract channels from TDMS groups within the specified channel range
-            channels = [channel for group in tdms_file.groups() for channel in group.channels()
-                        if first_channel <= int(channel.name) < last_channel]
+        data = tdms_instance.get_data(first_channel, last_channel, start_index, end_index)
 
-            # Calculate the shape of the data array based on the number of channels and time range
-            data_shape = (len(channels), end_index - start_index) if all(
-                (end_index is not None, start_index is not None)) else None
+        # Store the data in the class instance
+        self.data = data.T
 
-            # Initialize data as an empty numpy array if data_shape is not None, otherwise set data to None
-            data = np.empty(data_shape) if data_shape is not None else None
-
-            # Populate data if it is not None
-            if data is not None:
-                for i, channel in enumerate(channels):
-                    # Access numpy array of data for channel within the time range:
-                    data[i] = channel[start_index:end_index]
-
-            # Store the data in the class instance
-            self.data = data
-
-            return data
+        # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
+        return data.T
 
     def _calculate_cutoff_times(self, start_rate=0.2, end_rate=0.8):
         """
@@ -195,7 +179,11 @@ class FindTrains:
             plt.legend()
 
             # Save the figure
-            plt.savefig('mean_signal.jpg', dpi=300)
+            file_name_suffix = 'Mean_Signal_silixa'
+            full_file_name = f'{file_name_suffix}.jpg'
+            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            plt.savefig(save_path, dpi=300)
+            print('Mean Signal figure saved')
 
         return mean_signal
 
