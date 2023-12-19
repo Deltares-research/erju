@@ -19,6 +19,7 @@ start_time = time.time()
 train_22_cul = FindTrains(dir_path, first_channel, last_channel)
 # Extract the properties of the TDMS file
 properties = train_22_cul.extract_properties()
+print(properties)
 
 # Get the average signal
 signal_mean = train_22_cul.signal_averaging(plot=False)

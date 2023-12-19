@@ -3,6 +3,8 @@ import numpy as np
 from nptdms import TdmsFile as td
 import matplotlib.pyplot as plt
 
+from utils.TDMS_Read import TdmsReader
+
 
 class FindTrains:
     """
@@ -25,7 +27,8 @@ class FindTrains:
         self.properties = None
         self.data = None
 
-    def extract_properties(self, file_name=None):
+
+    def extract_properties(self):
         """
         Extract the file properties and the measurement data
         as a dictionary and an array respectively
@@ -37,49 +40,32 @@ class FindTrains:
 
         # Get a list of all TDMS files in the directory
         tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
-
-        # If no file name is specified, use the first file
-        if file_name is None:
-            file_name = tdms_files[0]
+        file_name = tdms_files[0]
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
         print('Extracting the properties...')
-        with td.read(file_path) as tdms_file:
-            # Get the properties of the TDMS file
-            properties = tdms_file.properties
+        tdms_instance = TdmsReader(file_path)
+        # Get the properties of the TDMS file
+        properties = tdms_instance.get_properties()
 
-            # List of property names
-            property_names = ['name', 'SamplingFrequency[Hz]', 'SpatialResolution[m]', 'StartPosition[m]',
-                              'MeasureLength[m]', 'Start Distance (m)', 'Stop Distance (m)', 'PeakVoltage[V]',
-                              'Pulse 2 Delay (ns)', 'PulseWidth[ns]', 'OffsetLength', 'Reference Level 1',
-                              'Reference Level 2', 'Reference Level 3', 'FibreIndex', 'Fibre Length Multiplier',
-                              'UserZeroRef', 'Unit Calibration (nm)', 'Attenuator 1', 'Attenuator 2',
-                              'Fibre Length per Metre', 'Zero Offset (m)', 'Pulse Width 2 (ns)', 'GaugeLength',
-                              'GPSTimeStamp']
+        data = tdms_instance.get_data()
 
-            # From properties extract the important ones and store them in a dictionary
-            properties_dict = {name: properties.get(name) for name in property_names}
+        # Add the 'n_samples_per_channel' key to the dictionary
+        n_samples_per_channel = len(data)
+        properties['n_samples_per_channel'] = n_samples_per_channel
+        # Add the 'measurement_time (in seconds)' key to the dictionary
+        properties['measurement_time'] = n_samples_per_channel / properties['SamplingFrequency[Hz]']
+        # Add the 'distance' key to the dictionary
+        properties['distance'] = np.arange(properties['MeasureLength[m]'] + 1) * \
+                                      properties['SpatialResolution[m]'] * \
+                                      properties['Fibre Length Multiplier'] + \
+                                      properties['Zero Offset (m)']
 
-            # Get group and channel names
-            group_name = tdms_file.groups()[0].name
-            first_channel_name = tdms_file.groups()[0].channels()[0].name
+        self.properties = properties
 
-            # Add the 'n_samples_per_channel' key to the dictionary
-            n_samples_per_channel = len(tdms_file[group_name][first_channel_name])
-            properties_dict['n_samples_per_channel'] = n_samples_per_channel
-            # Add the 'measurement_time (in seconds)' key to the dictionary
-            properties_dict['measurement_time'] = n_samples_per_channel / properties_dict['SamplingFrequency[Hz]']
-            # Add the 'distance' key to the dictionary
-            properties_dict['distance'] = np.arange(properties_dict['MeasureLength[m]'] + 1) * \
-                                          properties_dict['SpatialResolution[m]'] * \
-                                          properties_dict['Fibre Length Multiplier'] + \
-                                          properties_dict['Zero Offset (m)']
-
-            self.properties = properties_dict
-
-        return properties_dict
+        return properties
 
     def extract_data(self, file_name=None, first_channel=None, last_channel=None,
                      start_time=None, end_time=None, frequency=None):
