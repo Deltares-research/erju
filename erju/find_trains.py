@@ -46,6 +46,7 @@ class FindTrains:
         file_path = os.path.join(self.dir_path, file_name)
 
         print('Extracting the properties...')
+        # Extract the properties
         with td.read(file_path) as tdms_file:
             # Get the properties of the TDMS file
             properties = tdms_file.properties
@@ -114,7 +115,7 @@ class FindTrains:
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
-        print('Extracting the data...')
+        # Extract the data
         with td.read(file_path) as tdms_file:
             # Pre-filter the channels
             # Extract channels from TDMS groups within the specified channel range

@@ -2,6 +2,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import logging
+
+# Configure the logging module
+logging.basicConfig(level=logging.INFO)
 
 # class to plot the data that takes in the path and file names
 class PlotData:
@@ -56,8 +60,7 @@ class PlotData:
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
             save_path = os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
-            print(f'Figure for 1D data of Channel {channel_index} saved')
-
+            logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
 
     def plot_array_channels(self, save_figure=False):
         """
@@ -65,7 +68,7 @@ class PlotData:
         @param save_figure: boolean to save the figure
         """
         if self.selected_data is None:
-            print("No data to plot. Please call get_data first.")
+            logging.warning("No data to plot. Please call get_data first.")
             return
 
         # Create a figure and axes
@@ -102,4 +105,4 @@ class PlotData:
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
             save_path = os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
-            print('Figure for 2D data saved')
+            logging.info(f'2D figure for file {self.file_name} saved. File name: {full_file_name}')

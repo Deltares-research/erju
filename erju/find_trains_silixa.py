@@ -100,7 +100,7 @@ class FindTrains:
         # Create the TDMS instance
         tdms_instance = TdmsReader(file_path)
 
-        print('Extracting the data...')
+        # Get the data
         data = tdms_instance.get_data(first_channel, last_channel, start_index, end_index)
 
         # Store the data in the class instance
