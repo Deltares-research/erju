@@ -10,13 +10,17 @@ class FindTrains:
     that contain train measurements
     """
 
-    def __init__(self, dir_path, first_channel, last_channel):
+    def __init__(self, dir_path: str, first_channel: int, last_channel: int) -> None:
         """
         Initialize the class instance
 
-        @param dir_path: path to the directory containing the TDMS files
-        @param first_channel: first channel to be extracted
-        @param last_channel: last channel to be extracted
+        Args:
+            dir_path (str): path to the directory containing the TDMS files
+            first_channel (int): first channel to be extracted
+            last_channel (int): last channel to be extracted
+
+        Returns:
+            None
         """
 
         self.dir_path = dir_path

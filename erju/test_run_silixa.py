@@ -1,6 +1,8 @@
 # Purpose: Test run of the ReadTDMS class
 import time
 
+from tqdm import tqdm
+
 from erju.find_trains_silixa import FindTrains
 from erju.plot_data import PlotData
 
@@ -22,26 +24,29 @@ file_cul = FindTrains(dir_path, first_channel, last_channel)
 properties = file_cul.extract_properties()
 
 # Get the average signal
-signal_mean = file_cul.signal_averaging(plot=True)
+signal_mean = file_cul.signal_averaging(plot=False)
 
 # Find the file names above the threshold
 selected_files = file_cul.get_files_above_threshold(signal_mean, threshold=threshold)
 # From the selected files, extract the data
 all_data = file_cul.get_data(selected_files)
 
+pbar = tqdm(total=len(selected_files))
 # Plot the data for all the files inside the selected files
 for file_name in selected_files:
     # Create the plotting instance
     train_22_cul_plots = PlotData(dir_path, file_name, all_data)
     # Plot the data
     train_22_cul_plots.plot_array_channels(save_figure=True)
+    pbar.update(1)
 
+pbar.close()
 #################################################################################
 
 # Plot a single channel
 # Choose a channel index
 file_index = 0
-channel_index = 4500
+channel_index =5500
 
 # Create the instance for a given file index
 single_ch_plot = PlotData(dir_path, selected_files[file_index], all_data)

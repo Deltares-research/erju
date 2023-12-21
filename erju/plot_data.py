@@ -61,6 +61,12 @@ class PlotData:
             save_path = os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
             logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
+        plt.close()
+
+        from numpy.fft import fft
+        sp = fft(channel_data)
+        plt.plot(np.abs(sp.real))
+        plt.show()
 
     def plot_array_channels(self, save_figure=False):
         """
@@ -106,3 +112,4 @@ class PlotData:
             save_path = os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
             logging.info(f'2D figure for file {self.file_name} saved. File name: {full_file_name}')
+        plt.close()
