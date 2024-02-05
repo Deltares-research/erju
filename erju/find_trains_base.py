@@ -62,6 +62,7 @@ class BaseFindTrains:
         Returns:
             properties (dict): The extracted properties
         """
+        # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
@@ -75,6 +76,7 @@ class BaseFindTrains:
         Returns:
             data (np.ndarray): The extracted data
         """
+        # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
 
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
