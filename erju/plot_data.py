@@ -63,10 +63,12 @@ class PlotData:
             logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
         plt.close()
 
+        '''
         from numpy.fft import fft
         sp = fft(channel_data)
         plt.plot(np.abs(sp.real))
         plt.show()
+        '''
 
     def plot_array_channels(self, save_figure=False):
         """

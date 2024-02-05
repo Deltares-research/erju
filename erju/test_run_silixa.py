@@ -8,7 +8,7 @@ from erju.plot_data import PlotData
 
 # Define the path to the TDMS file
 dir_path = r'C:\Projects\erju\data'
-dir_path = r'D:\FO_culemborg_22112020\subtest'
+dir_path = r'D:\FO_culemborg_20112020\subset'
 # Define the first and last channel to be extracted
 first_channel = 0
 last_channel = 8000
@@ -16,7 +16,7 @@ threshold = 500
 
 #########################################################################
 # Start the timer
-start_time = time.time()
+start_timer = time.time()
 
 # Initialize the FindTrains class instance
 file_cul = FindTrains(dir_path, first_channel, last_channel)
@@ -45,15 +45,18 @@ pbar.close()
 
 # Plot a single channel
 # Choose a channel index
-file_index = 0
-channel_index =5500
+file_index = 1
+channel_index =3500
 
 # Create the instance for a given file index
 single_ch_plot = PlotData(dir_path, selected_files[file_index], all_data)
+
+# plot an array of channels
+single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index, save_figure=True)
 
 
 # Stop the timer
-stop_time = time.time()
-print('Elapsed time: ', stop_time - start_time, 'seconds')
+stop_timer = time.time()
+print('Elapsed time: ', stop_timer - start_timer, 'seconds')

@@ -12,13 +12,14 @@ class FindTrains:
     that contain train measurements
     """
 
-    def __init__(self, dir_path, first_channel, last_channel):
+    def __init__(self, dir_path: str, first_channel: int, last_channel: int):
         """
         Initialize the class instance
 
-        @param dir_path: path to the directory containing the TDMS files
-        @param first_channel: first channel to be extracted
-        @param last_channel: last channel to be extracted
+        Args:
+            dir_path (str): The path to the folder containing the TDMS file
+            first_channel (int): The first channel to be extracted
+            last_channel (int): The last channel to be extracted
         """
 
         self.dir_path = dir_path
@@ -33,9 +34,12 @@ class FindTrains:
         Extract the file properties and the measurement data
         as a dictionary and an array respectively
 
-        @param file_name: name of the TDMS file to extract properties from
+        Args:
+            None
 
-        @return: properties_dict
+        Returns:
+            properties (dict): The extracted properties
+
         """
 
         # Get a list of all TDMS files in the directory
@@ -67,19 +71,21 @@ class FindTrains:
 
         return properties
 
-    def extract_data(self, file_name=None, first_channel=None, last_channel=None,
-                     start_time=None, end_time=None, frequency=None):
+    def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
+                     start_time: int = None, end_time: int = None, frequency: int = None):
         """
         Extract the file properties and the measurement data as a dictionary and an array respectively.
 
-        @param file_name: name of the TDMS file to extract data from
-        @param first_channel: first channel to be extracted
-        @param last_channel: last channel to be extracted
-        @param start_time: start time of the data to be extracted
-        @param end_time: end time of the data to be extracted
-        @param frequency: sampling frequency of the data
+            Args:
+                file_name (str): The name of the file to extract the data from
+                first_channel (int): The first channel to be extracted
+                last_channel (int): The last channel to be extracted
+                start_time (int): The start time of the data to be extracted
+                end_time (int): The end time of the data to be extracted
+                frequency (int): The sampling frequency of the data
 
-        @return: data
+            Returns:
+                data (np.array): The extracted data
         """
 
         # Use instance's channels if first_channel or last_channel are not specified
@@ -109,15 +115,18 @@ class FindTrains:
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
         return data.T
 
-    def _calculate_cutoff_times(self, start_rate=0.2, end_rate=0.8):
+    def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """
         Helper function to calculate the start and end times
-        by removing the first and last 20% of the data
+        by removing the first and last 20% of the data (or any other percentage)
 
-        @param start_rate: start rate of the data to be extracted
-        @param end_rate: end rate of the data to be extracted
+        Args:
+            start_rate (float): The percentage to remove from the start time
+            end_rate (float): The percentage to remove from the end time
 
-        @return: start_time, end_time
+        Returns:
+            start_time (int): The start time index
+            end_time (int): The end time index
         """
 
         # Pull the measurement time from the properties
@@ -132,7 +141,13 @@ class FindTrains:
         Define the middle of the domain, the time window
         and the spatial window for the search
 
-        @return: scan_channel, start_time, end_time
+        Args:
+            None
+
+        Returns:
+            scan_channel (int): The middle of the interest domain
+            start_time (int): The start time of the search
+            end_time (int): The end time of the search
         """
 
         # Define the middle of the interest domain to scan there
@@ -143,14 +158,16 @@ class FindTrains:
 
         return scan_channel, start_time, end_time
 
-    def signal_averaging(self, plot=False):
+    def signal_averaging(self, plot: bool = False):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
 
-        @param plot: boolean to plot the mean signal
+        Args:
+            plot (bool): Plot the mean signal
 
-        @return: mean_signal
+        Returns:
+            mean_signal (np.array): The mean signal values
         """
 
         # Get the search parameters
@@ -188,14 +205,16 @@ class FindTrains:
         return mean_signal
 
 
-    def get_files_above_threshold(self, mean_signal, threshold):
+    def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value.
 
-        @param mean_signal: list of mean signal values for each file
-        @param threshold: threshold value to filter the files
+        Args:
+            mean_signal (np.ndarray): The mean signal values
+            threshold (float): The threshold value
 
-        @return: selected_files
+        Returns:
+            selected_files (list): The list of file names above the threshold
         """
 
         # Get the list of TDMS files in the directory
@@ -207,13 +226,15 @@ class FindTrains:
 
         return selected_files
 
-    def get_data(self, selected_files):
+    def get_data(self, selected_files: list):
         """
         Extract measurement data for selected files.
 
-        @param selected_files: list of file names to extract data from
+        Args:
+            selected_files (list): The list of selected files
 
-        @return: all_selected_data
+        Returns:
+            all_selected_data (dict): The dictionary of extracted data
         """
 
         # Initialize an empty dictionary to store the selected data
