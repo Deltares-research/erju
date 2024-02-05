@@ -3,8 +3,10 @@ import time
 
 from tqdm import tqdm
 
-from erju.find_trains_silixa import FindTrains
+
 from erju.plot_data import PlotData
+
+from erju.find_trains_base import BaseFindTrains
 
 # Define the path to the TDMS file
 dir_path = r'C:\Projects\erju\data'
@@ -19,17 +21,17 @@ threshold = 500
 start_timer = time.time()
 
 # Initialize the FindTrains class instance
-file_cul = FindTrains(dir_path, first_channel, last_channel)
+file_cul_instance = BaseFindTrains.create_instance(dir_path, first_channel, last_channel, 'nptdms')
 # Extract the properties of the TDMS file
-properties = file_cul.extract_properties()
+properties = file_cul_instance.extract_properties()
 
 # Get the average signal
-signal_mean = file_cul.signal_averaging(plot=False)
+signal_mean = file_cul_instance.signal_averaging(plot=False)
 
 # Find the file names above the threshold
-selected_files = file_cul.get_files_above_threshold(signal_mean, threshold=threshold)
+selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
 # From the selected files, extract the data
-all_data = file_cul.get_data(selected_files)
+all_data = file_cul_instance.get_data(selected_files)
 
 pbar = tqdm(total=len(selected_files))
 # Plot the data for all the files inside the selected files

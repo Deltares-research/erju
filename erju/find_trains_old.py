@@ -10,7 +10,7 @@ class FindTrains:
     that contain train measurements
     """
 
-    def __init__(self, dir_path: str, first_channel: int, last_channel: int) -> None:
+    def __init__(self, dir_path: str, first_channel: int, last_channel: int, iDAS_reader: str = None) -> None:
         """
         Initialize the class instance
 
@@ -18,6 +18,7 @@ class FindTrains:
             dir_path (str): path to the directory containing the TDMS files
             first_channel (int): first channel to be extracted
             last_channel (int): last channel to be extracted
+            iDAS_reader (str): name of the reader method to be used
 
         Returns:
             None

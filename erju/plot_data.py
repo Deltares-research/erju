@@ -7,35 +7,45 @@ import logging
 # Configure the logging module
 logging.basicConfig(level=logging.INFO)
 
-# class to plot the data that takes in the path and file names
+# Class to plot the data that takes in the path and file names
 class PlotData:
     """
-    Class to plot the data from the TDMS file
+    Class to plot the data from the TDMS file with different options
     """
 
-    def __init__(self, dir_path, file_name, all_data):
+    def __init__(self, dir_path: str, file_name: str, all_data: dict):
         """
         Initialize the class
-        @param dir_path: path to the TDMS file
-        @param selected_files: list of selected files
-        @param data: extracted data
+
+        Args:
+            dir_path (str): The path to the folder containing the TDMS file
+            file_name (str): The name of the file to be plotted
+            all_data (dict): The dictionary containing all the data
+        
+        Returns:
+            None
         """
         self.dir_path = dir_path
         self.file_name = file_name
         self.all_data = all_data
 
-        # Extract the numpy array for the specified file_name
+        # Extract the numpy array for the specified file_name from the all_data dictionary
         if file_name in all_data:
             self.selected_data = all_data[file_name]
         else:
             # Raise an error if the file_name is not in the dictionary
             raise ValueError(f'{file_name} is not in the dictionary')
 
-    def plot_single_channel(self, channel_index, save_figure=False):
+    def plot_single_channel(self, channel_index: int, save_figure: bool = False):
         """
         Plot a single channel as a line plot
-        @param channel_index: index of the channel to plot
-        @param save_figure: boolean to save the figure
+
+        Args:
+            channel_index (int): The index of the channel to be plotted
+            save_figure (bool): A flag to save the figure
+
+        Returns:
+            None
         """
         # Check if the specified channel_index is valid
         if channel_index < 0 or channel_index >= self.selected_data.shape[0]:
@@ -55,6 +65,7 @@ class PlotData:
         # Use a lambda function to display the time in seconds
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
 
+        # If save_figure is True, save the figure with a specific file name
         if save_figure:
             file_name_suffix = f'Figure_1D_Channel_{channel_index}'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
@@ -63,18 +74,17 @@ class PlotData:
             logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
         plt.close()
 
-        '''
-        from numpy.fft import fft
-        sp = fft(channel_data)
-        plt.plot(np.abs(sp.real))
-        plt.show()
-        '''
-
-    def plot_array_channels(self, save_figure=False):
+    def plot_array_channels(self, save_figure: bool = False):
         """
         Plot an array of channels as an image plot
-        @param save_figure: boolean to save the figure
+
+        Args:
+            save_figure (bool): A flag to save the figure
+
+        Returns:
+            None
         """
+        # Check if the selected_data is None
         if self.selected_data is None:
             logging.warning("No data to plot. Please call get_data first.")
             return
@@ -108,6 +118,7 @@ class PlotData:
         cbar = plt.colorbar(im, ax=ax)
         cbar.set_label('Intensity')
 
+        # If save_figure is True, save the figure with a specific file name
         if save_figure:
             file_name_suffix = 'Figure_2D'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
