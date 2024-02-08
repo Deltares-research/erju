@@ -13,7 +13,7 @@ save_to_path = r'C:\Projects\erju\test\test_output'
 
 # Define the first and last channel to be extracted
 first_channel = 0
-last_channel = 5000  # to note, the maximum number of channels in the current iDAS files is 7808
+last_channel = 8000  # to note, the maximum number of channels in the current iDAS files is 7808
 
 # Define the threshold for the signal detection
 threshold = 500
