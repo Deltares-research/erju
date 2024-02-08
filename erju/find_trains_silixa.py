@@ -36,6 +36,8 @@ class SilixaFindTrains(BaseFindTrains):
 
         # Get a list of all TDMS files in the directory
         tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
+        # Get the first file name
+        # We choose the first file because all files have the same properties, thus it doesn't matter
         file_name = tdms_files[0]
 
         # Construct the full file path

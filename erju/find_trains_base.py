@@ -210,3 +210,29 @@ class BaseFindTrains:
             all_selected_data[file_name] = data
 
         return all_selected_data
+
+    # Function to print in a txt file the name of the files which are above the threshold
+    def files_with_trains_as_txt(self, save_to_path: str, selected_files: list):
+        """
+        Print the name of the files which are above the threshold in a txt file
+
+        Args:
+            save_to_path (str): The path to save the txt file
+            selected_files (list): The list of selected files
+
+        Returns:
+            None
+        """
+        # Create the full file path
+        file_path = os.path.join(save_to_path, 'files_with_trains.txt')
+
+        # Open the txt file
+        with open(file_path, 'w') as f:
+            # Loop through the selected files and write the name of the files in the txt file
+            for file_name in selected_files:
+                f.write(file_name + '\n')
+
+
+        print(f'The file files_with_trains.txt has been created at {save_to_path}')
+
+        return None

@@ -13,19 +13,17 @@ class PlotData:
     Class to plot the data from the TDMS file with different options
     """
 
-    def __init__(self, dir_path: str, file_name: str, all_data: dict):
+    def __init__(self, file_name: str, all_data: dict):
         """
         Initialize the class
 
         Args:
-            dir_path (str): The path to the folder containing the TDMS file
             file_name (str): The name of the file to be plotted
             all_data (dict): The dictionary containing all the data
         
         Returns:
             None
         """
-        self.dir_path = dir_path
         self.file_name = file_name
         self.all_data = all_data
 
@@ -36,11 +34,12 @@ class PlotData:
             # Raise an error if the file_name is not in the dictionary
             raise ValueError(f'{file_name} is not in the dictionary')
 
-    def plot_single_channel(self, channel_index: int, save_figure: bool = False):
+    def plot_single_channel(self, channel_index: int, save_to_path: str = None, save_figure: bool = False):
         """
         Plot a single channel as a line plot
 
         Args:
+            save_to_path (str): The path to save the figure
             channel_index (int): The index of the channel to be plotted
             save_figure (bool): A flag to save the figure
 
@@ -69,16 +68,17 @@ class PlotData:
         if save_figure:
             file_name_suffix = f'Figure_1D_Channel_{channel_index}'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
             logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
         plt.close()
 
-    def plot_array_channels(self, save_figure: bool = False):
+    def plot_array_channels(self, save_to_path: str = None, save_figure: bool = False):
         """
         Plot an array of channels as an image plot
 
         Args:
+            save_to_path (str): The path to save the figure
             save_figure (bool): A flag to save the figure
 
         Returns:
@@ -122,7 +122,7 @@ class PlotData:
         if save_figure:
             file_name_suffix = 'Figure_2D'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
             plt.savefig(save_path, dpi=300)
             logging.info(f'2D figure for file {self.file_name} saved. File name: {full_file_name}')
         plt.close()
