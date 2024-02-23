@@ -30,16 +30,34 @@ file_cul_instance = BaseFindTrains.create_instance(dir_path, first_channel, last
 # Extract the properties of the TDMS file
 properties = file_cul_instance.extract_properties()
 
+# Get a list with all the names of the TDMS files
+file_names = file_cul_instance.get_file_list()
+
+
+
+
 # Get the average signal
 signal_mean = file_cul_instance.signal_averaging(plot=False)
 
 # Find the file names above the threshold
 selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
+
 # Save the name of the files with trains in a txt
-file_cul_instance.files_with_trains_as_txt(save_to_path, selected_files)
+#file_cul_instance.save_txt_with_file_names(save_to_path, file_names)
+file_cul_instance.save_txt_with_file_names(save_to_path, selected_files, file_names)
+
+
+# Test
+#big_data = file_cul_instance.get_data_with_window(file_names[21], window_before=30, window_after=30)
+# Plot the data
+file_cul_instance.plot_array_channels(file_to_plot=file_names[21], window_before=500, window_after=40,
+                                      resample=True, new_sampling_frequency=50,
+                                      save_to_path=save_to_path, save_figure=True)
+
+
 
 # From the selected files, extract the data
-all_data = file_cul_instance.get_data(selected_files)
+all_data = file_cul_instance.get_data_per_file(selected_files, resample=True, new_sampling_frequency=100)
 
 pbar = tqdm(total=len(selected_files))
 # Plot the data for all the files inside the selected files
@@ -53,6 +71,7 @@ for file_name in selected_files:
 pbar.close()
 #################################################################################
 
+"""
 # Plot a single channel
 # Choose a channel index
 file_index = 1
@@ -65,8 +84,9 @@ single_ch_plot = PlotData(selected_files[file_index], all_data)
 single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index, save_to_path=save_to_path, save_figure=True)
-
+"""
 
 # Stop the timer
 stop_timer = time.time()
 print('Elapsed time: ', stop_timer - start_timer, 'seconds')
+

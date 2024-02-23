@@ -2,10 +2,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy import signal
+
 
 class BaseFindTrains:
     """
-    Base class for finding trains
+    Base class for finding files with trains passing in the middle
+    of the channel array and extracting the data from the TDMS files
     """
 
     def __init__(self, dir_path: str, first_channel: int, last_channel: int):
@@ -170,7 +173,7 @@ class BaseFindTrains:
 
     def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
         """
-        Get the list of file names based on a threshold value.
+        Get the list of file names based on a threshold value
 
         Args:
             mean_signal (np.ndarray): The mean signal values
@@ -189,12 +192,18 @@ class BaseFindTrains:
 
         return selected_files
 
-    def get_data(self, selected_files: list):
+    def get_data_per_file(self, selected_files: list, resample: bool = False, new_n_channels=None,
+                          new_sampling_frequency=None):
         """
-        Extract measurement data for selected files.
+        Extract measurement data for selected files. This is done per file
+        using the same 30 seconds time window present in the file itself.
+        Data resampling can be turned on or off
 
         Args:
             selected_files (list): The list of selected files
+            resample (bool): Resample the data
+            new_n_channels (int, optional): The new number of channels
+            new_sampling_frequency (int, optional): The new sampling frequency
 
         Returns:
             all_selected_data (dict): The dictionary of extracted data
@@ -206,19 +215,93 @@ class BaseFindTrains:
         # Loop through the selected files and extract the data
         for file_name in selected_files:
             data = self.extract_data(file_name)
+
+            # Resample the data if resampling is True
+            if resample == True:
+                data = self.resample_data(data, new_n_channels, new_sampling_frequency)
+
             # Store the data in the dictionary
             all_selected_data[file_name] = data
 
         return all_selected_data
 
-    # Function to print in a txt file the name of the files which are above the threshold
-    def files_with_trains_as_txt(self, save_to_path: str, selected_files: list):
+    def get_data_with_window(self, file_name: str, window_before: int, window_after: int,
+                             resample: bool = False, new_n_channels=None, new_sampling_frequency=None):
+        """
+        Extract the measurement data from a selected file, but also include a time window
+        before and after the train passes. This is done by concatenating the data from the
+        files before and after the selected file, until the time window is filled.
+        It can also resample data if needed.
+
+        Args:
+            file_name (str): The name of the file to extract the data from
+            window_before (int): The time window (in seconds) before the train passes
+            window_after (int): The time window (in seconds) after the train passes
+            resample (bool): Resample the data
+            new_n_channels (int, optional): The new number of channels
+            new_sampling_frequency (int, optional): The new sampling frequency
+
+        Returns:
+            signal_data (np.ndarray): The resampled data
+        """
+
+        # Get the number of channels from the properties
+        n_channels = self.properties['MeasureLength[m]']
+
+        # If resampling is activated, get new shape of the data
+        if resample == True and new_n_channels is not None:
+            n_channels_resampled = new_n_channels
+        else:
+            n_channels_resampled = n_channels
+
+        # Create an empty np.array to store the concatenated data
+        signal_data = np.empty(shape=(n_channels_resampled, 0))
+
+        # Get the list of TDMS files in the directory
+        all_file_names = self.get_file_list()
+
+        # Find the number of files to concatenate to match the time window before and after (each file is 30 seconds)
+        n_files_before = int(np.ceil(window_before / 30))
+        n_files_after = int(np.ceil(window_after / 30))
+
+        # From all the file names, find the index of the selected file
+        file_index = all_file_names.index(file_name)
+
+        # Check if there are enough files before and after the selected file
+        if file_index < n_files_before or file_index + n_files_after >= len(all_file_names):
+            max_before = file_index * 30
+            max_after = (len(all_file_names) - file_index - 1) * 30
+            raise ValueError(f"Not enough files to cover the requested time window. "
+                             f"The maximum possible window_before is {max_before} seconds, "
+                             f"and the maximum possible window_after is {max_after} seconds.")
+
+        # Get the files before and after the selected file
+        file_names_before = all_file_names[file_index - n_files_before:file_index]
+        file_names_after = all_file_names[file_index + 1:file_index + n_files_after + 1]
+        selected_files = file_names_before + [file_name] + file_names_after
+
+        # Use the extract_data function to extract the data from the selected files
+        for file in selected_files:
+            # Extract the data one file at a time
+            data = self.extract_data(file)
+
+            # Resample the data if resampling is True
+            if resample == True:
+                data = self.resample_data(data, new_n_channels, new_sampling_frequency)
+
+            # Fill the signal_data array with the extracted data and concatenate for each file
+            signal_data = np.concatenate((signal_data, data), axis=1)
+
+        return signal_data
+
+    def save_txt_with_file_names(self, save_to_path: str, selected_files: list, file_names: list):
         """
         Print the name of the files which are above the threshold in a txt file
 
         Args:
             save_to_path (str): The path to save the txt file
             selected_files (list): The list of selected files
+            file_names (list): The list of all file names
 
         Returns:
             None
@@ -230,9 +313,115 @@ class BaseFindTrains:
         with open(file_path, 'w') as f:
             # Loop through the selected files and write the name of the files in the txt file
             for file_name in selected_files:
-                f.write(file_name + '\n')
-
+                index = file_names.index(file_name)
+                f.write(f'Index: {index}-> {file_name}\n')
 
         print(f'The file files_with_trains.txt has been created at {save_to_path}')
 
         return None
+
+    def get_file_list(self):
+        """
+        Get a list of unique file names inside the dir_path folder. For this
+        we look into one specific file format (.asc) and remove the extension.
+
+        Args:
+            None
+
+        Returns:
+            file_list (list): List of file names in the folder without extensions
+        """
+
+        # Get the list of files in the folder with .asc extension
+        self.tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
+
+        return self.tdms_files
+
+    def plot_array_channels(self, file_to_plot: str,  save_to_path: str = None, save_figure: bool = False,
+                            window_before: int = 30, window_after: int = 30,
+                            resample: bool = False, new_sampling_frequency: int = 100):
+        """
+        Plot an array of channels as an image plot, including a time window before and after the train passes.
+        The data can also be resampled if needed.
+
+        Args:
+            file_to_plot (str): The name of the file to plot
+            save_to_path (str): The path to save the figure
+            save_figure (bool): Save the figure as a jpg file
+            window_before (int): The time window (in seconds) before the train passes
+            window_after (int): The time window (in seconds) after the train passes
+            resample (bool): Resample the data
+            new_sampling_frequency (int): The new sampling frequency
+
+        Returns:
+            None
+        """
+        # If resample is True, resample the data
+        if resample:
+            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after,
+                                         resample=resample, new_sampling_frequency=new_sampling_frequency)
+        else:
+            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after)
+
+        # Create a figure and axes
+        fig, ax = plt.subplots(figsize=(10, 15))
+
+        # Transpose the data and take the absolute value
+        data = np.abs(data.T)
+
+        # Plot the data as an image plot
+        im = ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
+        ax.set_xlabel('Channel count')
+        ax.set_ylabel('Time [s]')
+
+        # Set the number of ticks based on the dimensions of the data
+        num_time_points = data.shape[0]
+        num_channels = data.shape[1]
+
+        # Set the x-ticks and their labels
+        x_ticks = np.linspace(0, num_channels - 1, num=min(10, num_channels))
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels([f'{int(x)}' for x in x_ticks])
+
+        # Set the y-ticks and their labels
+        y_ticks = np.linspace(0, num_time_points - 1, num=min(10, num_time_points))
+        ax.set_yticks(y_ticks)
+        ax.set_yticklabels([f'{int(y / 1000)}' for y in y_ticks])
+
+        # Show colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('Intensity')
+
+        # If save_figure is True, save the figure with a specific file name
+        if save_figure:
+            file_name_suffix = 'Figure_2D'
+            full_file_name = f'{file_name_suffix}_{file_to_plot}.jpg'
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
+            plt.savefig(save_path, dpi=300)
+        plt.close()
+
+    def resample_data(self, data: np.array, new_n_channels: int = None, new_sampling_frequency: int = None):
+        """
+        Resample the data to a new number of channels and/or a new sampling frequency using scipy.signal.resample
+
+        Args:
+            data (np.ndarray): The data to be resampled
+            new_n_channels (int): The new number of channels
+            new_sampling_frequency (int): The new sampling frequency
+
+        Returns:
+            resampled_data (np.ndarray): The resampled data
+        """
+        # Make a copy of the data to avoid modifying the original data
+        data_resampled = np.copy(data)
+
+        # Resample the channels if new_n_channels is specified
+        if new_n_channels is not None:
+            data_resampled = signal.resample(data_resampled, new_n_channels, axis=0)
+
+        # Resample the time if new_sampling_frequency is specified
+        if new_sampling_frequency is not None:
+            n_samples = int(data.shape[1] * (new_sampling_frequency / self.properties['SamplingFrequency[Hz]']))
+            data_resampled = signal.resample(data_resampled, n_samples, axis=1)
+
+        return data_resampled
