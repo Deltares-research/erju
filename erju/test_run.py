@@ -50,7 +50,7 @@ file_cul_instance.save_txt_with_file_names(save_to_path, selected_files, file_na
 # Test
 #big_data = file_cul_instance.get_data_with_window(file_names[21], window_before=30, window_after=30)
 # Plot the data
-file_cul_instance.plot_array_channels(file_to_plot=file_names[21], window_before=500, window_after=40,
+file_cul_instance.plot_array_channels(file_to_plot=file_names[21], window_before=30, window_after=30,
                                       resample=True, new_sampling_frequency=50,
                                       save_to_path=save_to_path, save_figure=True)
 
@@ -68,10 +68,10 @@ for file_name in selected_files:
     train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
     pbar.update(1)
 
-pbar.close()
+
 #################################################################################
 
-"""
+
 # Plot a single channel
 # Choose a channel index
 file_index = 1
@@ -84,7 +84,9 @@ single_ch_plot = PlotData(selected_files[file_index], all_data)
 single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index, save_to_path=save_to_path, save_figure=True)
-"""
+
+
+pbar.close()
 
 # Stop the timer
 stop_timer = time.time()
