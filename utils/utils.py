@@ -261,3 +261,7 @@ def all_strain(fp, channel0, channel1, fmin, fmax, filter_type='bandpass'):
         strain[:, col_num] = trace_strain
 
     return (strain, rawData_filt, rawData_sel)
+
+
+
+This is a test text
