@@ -5,7 +5,6 @@ import numpy as np
 from obspy import Trace, Stream, UTCDateTime
 import os
 
-
 def get_file_names(self):
     """
     Get a list of unique file names inside the dir_path folder. For this
@@ -38,7 +37,7 @@ def Convert_3d_to_2d_array(data_3D):
 
     RETURNS:
     -----------------------
-    data_2D a 2d array  
+    data_2D a 2d array
     """
     data_2D = data_3D.transpose(2, 0, 1).reshape(-1, data_3D.shape[1])
     return data_2D
@@ -48,8 +47,8 @@ def raw2strain(trace, n, L):
     """
     DESCRIPTION:
     -----------------------
-    Function for converting raw DAS data into strain data after applying all OptaSense parameters. 
-    This function is written based on: https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb. 
+    Function for converting raw DAS data into strain data after applying all OptaSense parameters.
+    This function is written based on: https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb.
 
     INPUT PARAMETERS:
     -----------------------
@@ -59,7 +58,7 @@ def raw2strain(trace, n, L):
 
     RETURNS:
     -----------------------
-    trace_strain  : 1d array containing a strain values 
+    trace_strain  : 1d array containing a strain values
 
     """
     # Remove the mean from the trace
@@ -129,7 +128,7 @@ def Obspy_to_Array(st):
 
     RETURNS:
     -----------------------
-    Array  : 2d-numpy array contaning a N number of traces 
+    Array  : 2d-numpy array contaning a N number of traces
     """
     size = np.shape(st)  # Defining the array dimenions in the st object
     Array = np.zeros((size[1], size[0]))  # Declaring the 2d array
@@ -148,7 +147,7 @@ def filtering(data, fs, fmin, fmax, filter_type='bandpass'):
 
     INPUT PARAMETERS:
     -----------------------
-    data  : 2d-numpy array contaning traces. 
+    data  : 2d-numpy array contaning traces.
     fs    : Sampling frequency in Hz.
     fmin  : Minimum frequency in Hz.
     fmax  : Maxmimum frequency in Hz.
@@ -157,7 +156,7 @@ def filtering(data, fs, fmin, fmax, filter_type='bandpass'):
 
     RETURNS:
     -----------------------
-    filt_data  : 2d-numpy array contaning band-pass filtered traces 
+    filt_data  : 2d-numpy array contaning band-pass filtered traces
     """
     st2filt = Array_to_ObsPy(data, fs)  # Converting data into an Obspy object
     st_f = st2filt.copy()
@@ -185,12 +184,12 @@ def OptaSense_Props(fp):
     """
     DESCRIPTION:
     -----------------------
-    Function for inspecting main properties of the OptaSense DAS data. This function is written based on:    
-    https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb. 
+    Function for inspecting main properties of the OptaSense DAS data. This function is written based on:
+    https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb.
 
     INPUT PARAMETERS:
     -----------------------
-    fp  : list with all file properties 
+    fp  : list with all file properties
 
     RETURNS:
     -----------------------
@@ -229,12 +228,12 @@ def all_strain(fp, channel0, channel1, fmin, fmax, filter_type='bandpass'):
     """
     DESCRIPTION:
     -----------------------
-    Function for extracting and filtering raw signals bounded by channels0 and channel1. This function is written based on:   
-    https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb. 
+    Function for extracting and filtering raw signals bounded by channels0 and channel1. This function is written based on:
+    https://github.com/ethanfwilliams/OOI_RCA_DAS_notebook/blob/main/OOI_RCA_OptaSense_DAS_intro.ipynb.
 
     INPUT PARAMETERS:
     -----------------------
-    fp       : List with all file properties 
+    fp       : List with all file properties
     channel0 : First channel
     channel1 : Last channel
 
@@ -261,7 +260,3 @@ def all_strain(fp, channel0, channel1, fmin, fmax, filter_type='bandpass'):
         strain[:, col_num] = trace_strain
 
     return (strain, rawData_filt, rawData_sel)
-
-
-
-This is a test text
