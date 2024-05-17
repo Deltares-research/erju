@@ -121,7 +121,7 @@ class BaseFindTrains:
         scan_channel = int(np.mean([self.first_channel, self.last_channel]))
 
         # Define the time window for the search
-        start_time, end_time = self._calculate_cutoff_times()
+        start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
 
         return scan_channel, start_time, end_time
 
@@ -159,7 +159,7 @@ class BaseFindTrains:
             plt.plot(mean_signal, label='Mean Signal')
             plt.xlabel('File Index')
             plt.ylabel('Mean Signal Value')
-            plt.title('Mean Signal Line Plot')
+            plt.title('Mean signal values for all files in the directory')
             plt.legend()
 
             # Save the figure
@@ -174,7 +174,7 @@ class BaseFindTrains:
     def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
-
+refund woul
         Args:
             mean_signal (np.ndarray): The mean signal values
             threshold (float): The threshold value
