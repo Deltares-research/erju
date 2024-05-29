@@ -260,3 +260,67 @@ def all_strain(fp, channel0, channel1, fmin, fmax, filter_type='bandpass'):
         strain[:, col_num] = trace_strain
 
     return (strain, rawData_filt, rawData_sel)
+
+
+def stalta(sta,lta,fs):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    nsta (int) : Length of short time average window in samples
+    nlta (int) : Length of long time average window in samples
+    RETURNS:
+    -----------------------
+    Characteristic function of classic STA/LTA
+    '''
+
+    return(int(sta*fs),int(lta*fs))
+    
+    
+def getON(signal,fs,ymin,ymax,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    data  : 1d-numpy array contaning traces. 
+    fs    : Sampling frequency in Hz.
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Nested List of trigger on and of times in samples
+
+    '''
+    # Characteristic function and trigger onsets
+    nsta, nlta = stalta(sta,lta,fs)
+    cft = recursive_sta_lta(signal,nsta,nlta)
+    on_of = trigger_onset(cft,ymax,ymin)
+    return on_of
+
+def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    filt_data01  : 1d-numpy array. 
+    filt_data02  : 1d-numpy array.
+    fs    : Sampling frequency in Hz.
+    sel_time : Window contaning the first signal from each record
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Shifted trace
+
+    '''
+    # Characteristic function and trigger onsets
+    on_of1  = getON(filt_data01[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of2  = getON(filt_data02[:sel_time],fs,ymin,ymax,sta,lta)
+    shift = np.min(on_of1) - np.min(on_of2)
+    return filt_data01[shift:]
