@@ -44,12 +44,12 @@ class BaseFindTrains:
         # If reader is 'silixa', use the SilixaFindTrains class
         if reader == 'silixa':
             # Import the SilixaFindTrains class here to avoid circular import
-            from erju.find_trains_silixa import SilixaFindTrains
+            from erju.FO.find_trains_silixa import SilixaFindTrains
             return SilixaFindTrains(dir_path, first_channel, last_channel)
         # If reader is 'nptdms', use the NptdmsFindTrains class
         elif reader == 'nptdms':
             # Import the NptdmsFindTrains class here to avoid circular import
-            from erju.find_trains_nptdms import NptdmsFindTrains
+            from erju.FO.find_trains_nptdms import NptdmsFindTrains
             return NptdmsFindTrains(dir_path, first_channel, last_channel)
         # If reader is not 'silixa' or 'nptdms', raise a ValueError
         else:
@@ -125,7 +125,7 @@ class BaseFindTrains:
 
         return scan_channel, start_time, end_time
 
-    def signal_averaging(self, plot: bool = False):
+    def signal_averaging(self, plot: bool = False, save_to_path: str = None):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
@@ -165,7 +165,7 @@ class BaseFindTrains:
             # Save the figure
             file_name_suffix = 'Mean_Signal_silixa'
             full_file_name = f'{file_name_suffix}.jpg'
-            save_path = os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
             print('Mean Signal figure saved')
 
@@ -396,7 +396,7 @@ refund woul
         if save_figure:
             file_name_suffix = 'Figure_2D'
             full_file_name = f'{file_name_suffix}_{file_to_plot}.jpg'
-            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
         plt.close()
 

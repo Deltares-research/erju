@@ -1,8 +1,7 @@
 import time
 
-from tqdm import tqdm
-from erju.plot_data import PlotData
-from erju.find_trains_base import BaseFindTrains
+from utils.plot_data import PlotData
+from erju.FO.find_trains_base import BaseFindTrains
 
 # Define the path to the TDMS file
 #dir_path = r'C:\Projects\erju\data'
@@ -34,7 +33,7 @@ properties = file_cul_instance.extract_properties()
 file_names = file_cul_instance.get_file_list()
 
 # Get the average signal
-signal_mean = file_cul_instance.signal_averaging(plot=True)
+signal_mean = file_cul_instance.signal_averaging(plot=True, save_to_path=save_to_path)
 
 # Find the file names above the threshold
 selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
