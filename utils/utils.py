@@ -2,6 +2,7 @@ import h5py
 import obspy
 from datetime import datetime
 import numpy as np
+import matplotlib.pyplot as plt
 from obspy import Trace, Stream, UTCDateTime
 from obspy.signal.trigger import recursive_sta_lta, trigger_onset
 import os
@@ -301,6 +302,45 @@ def getON(signal,fs,ymin,ymax,sta,lta):
     on_of = trigger_onset(cft,ymax,ymin)
     return on_of
 
+
+def getON_seg(signal,fs,ymin,ymax,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    signal  : 1d-numpy array contaning traces. 
+    fs    : Sampling frequency in Hz.
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Nested List of trigger on and of times in samples
+
+    '''
+    # Characteristic function and trigger onsets
+    nsta, nlta = stalta(sta,lta,fs)
+    cft = recursive_sta_lta(signal,nsta,nlta)
+    on_of = trigger_onset(cft,ymax,ymin)
+    return on_of, cft
+
+
+def plotONOF(signal,cft,on_of):
+
+    # Plotting the results
+    ax = plt.subplot(211)
+    plt.plot(signal, 'k')
+    ymin, ymax = ax.get_ylim()
+    plt.vlines(on_of[:, 0], ymin, ymax, color='r', linewidth=2)
+    plt.vlines(on_of[:, 1], ymin, ymax, color='b', linewidth=2)
+    plt.subplot(212, sharex=ax)
+    plt.plot(cft, 'k')
+    plt.hlines([3.5, 0.5], 0, len(cft), color=['r', 'b'], linestyle='--')
+    plt.axis('tight')
+    plt.show()
+
 def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
 
     '''
@@ -324,4 +364,13 @@ def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
     on_of1  = getON(filt_data01[:sel_time],fs,ymin,ymax,sta,lta)
     on_of2  = getON(filt_data02[:sel_time],fs,ymin,ymax,sta,lta)
     shift = np.min(on_of1) - np.min(on_of2)
-    return filt_data01[shift:]
+
+    if shift >= 0:
+        filt_data_corr1 = filt_data01[shift:]
+        filt_data_corr2 = filt_data02[:len(filt_data_corr1)]
+
+    else:
+        filt_data_corr2 = filt_data02[np.abs(shift):]
+        filt_data_corr1 = filt_data02[:len(filt_data_corr2)]
+
+    return filt_data_corr1,filt_data_corr2 
