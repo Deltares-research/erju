@@ -3,6 +3,7 @@ import obspy
 from datetime import datetime
 import numpy as np
 from obspy import Trace, Stream, UTCDateTime
+from obspy.signal.trigger import recursive_sta_lta, trigger_onset
 import os
 
 def get_file_names(self):
