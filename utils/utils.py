@@ -300,7 +300,7 @@ def getON(signal,fs,ymin,ymax,sta,lta):
     nsta, nlta = stalta(sta,lta,fs)
     cft = recursive_sta_lta(signal,nsta,nlta)
     on_of = trigger_onset(cft,ymax,ymin)
-    return on_of
+    return on_of, cft
 
 
 def getON_seg(signal,fs,ymin,ymax,sta,lta):
@@ -341,6 +341,7 @@ def plotONOF(signal,cft,on_of):
     plt.axis('tight')
     plt.show()
 
+
 def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
 
     '''
@@ -364,6 +365,9 @@ def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
 
 
     '''
+
+
+
     # Characteristic function and trigger onsets
     on_of1  = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
     on_of2  = getON(data2[:sel_time],fs,ymin,ymax,sta,lta)
