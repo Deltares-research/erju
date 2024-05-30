@@ -363,10 +363,7 @@ def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
     data_shifted1: 1d-numpy array.
     data_shifted2: 1d-numpy array.
 
-
     '''
-
-
 
     # Characteristic function and trigger onsets
     on_of1,_ = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
