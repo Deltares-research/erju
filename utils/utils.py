@@ -341,13 +341,13 @@ def plotONOF(signal,cft,on_of):
     plt.axis('tight')
     plt.show()
 
-def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
+def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
 
     '''
     INPUT PARAMETERS:
     -----------------------
-    filt_data01  : 1d-numpy array. 
-    filt_data02  : 1d-numpy array.
+    data1  : 1d-numpy array. 
+    data2  : 1d-numpy array.
     fs    : Sampling frequency in Hz.
     sel_time : Window contaning the first signal (train passage) from each record
     ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
@@ -359,22 +359,22 @@ def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
     -----------------------
     Shifted traces
 
-    filt_data_corr1: 1d-numpy array.
-    filt_data_corr2: 1d-numpy array.
+    data_shifted1: 1d-numpy array.
+    data_shifted2: 1d-numpy array.
 
 
     '''
     # Characteristic function and trigger onsets
-    on_of1  = getON(filt_data01[:sel_time],fs,ymin,ymax,sta,lta)
-    on_of2  = getON(filt_data02[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of1  = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of2  = getON(data2[:sel_time],fs,ymin,ymax,sta,lta)
     shift = np.min(on_of1) - np.min(on_of2)
 
     if shift >= 0:
-        filt_data_corr1 = filt_data01[shift:]
-        filt_data_corr2 = filt_data02[:len(filt_data_corr1)]
+        data_shifted1 = data1[shift:]
+        data_shifted2 = data2[:len(data_shifted1)]
 
     else:
-        filt_data_corr2 = filt_data02[np.abs(shift):]
-        filt_data_corr1 = filt_data02[:len(filt_data_corr2)]
+        data_shifted2 = data2[np.abs(shift):]
+        data_shifted1 = data1[:len(data_shifted2)]
 
-    return filt_data_corr1,filt_data_corr2 
+    return data_shifted1,data_shifted2
