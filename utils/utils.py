@@ -349,7 +349,7 @@ def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
     filt_data01  : 1d-numpy array. 
     filt_data02  : 1d-numpy array.
     fs    : Sampling frequency in Hz.
-    sel_time : Window contaning the first signal from each record
+    sel_time : Window contaning the first signal (train passage) from each record
     ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
     ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
     sta (float) : Length of short time average window in seconds
@@ -357,7 +357,11 @@ def getShift(filt_data01,filt_data02,sel_time,fs,ymax,ymin,sta,lta):
 
     RETURNS:
     -----------------------
-    Shifted trace
+    Shifted traces
+
+    filt_data_corr1: 1d-numpy array.
+    filt_data_corr2: 1d-numpy array.
+
 
     '''
     # Characteristic function and trigger onsets
