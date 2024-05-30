@@ -369,8 +369,8 @@ def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
 
 
     # Characteristic function and trigger onsets
-    on_of1  = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
-    on_of2  = getON(data2[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of1,_ = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of2,_ = getON(data2[:sel_time],fs,ymin,ymax,sta,lta)
     shift = np.min(on_of1) - np.min(on_of2)
 
     if shift >= 0:
