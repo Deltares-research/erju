@@ -2,7 +2,9 @@ import h5py
 import obspy
 from datetime import datetime
 import numpy as np
+import matplotlib.pyplot as plt
 from obspy import Trace, Stream, UTCDateTime
+from obspy.signal.trigger import recursive_sta_lta, trigger_onset
 import os
 
 def get_file_names(self):
@@ -260,3 +262,120 @@ def all_strain(fp, channel0, channel1, fmin, fmax, filter_type='bandpass'):
         strain[:, col_num] = trace_strain
 
     return (strain, rawData_filt, rawData_sel)
+
+
+def stalta(sta,lta,fs):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    nsta (int) : Length of short time average window in samples
+    nlta (int) : Length of long time average window in samples
+    RETURNS:
+    -----------------------
+    Characteristic function of classic STA/LTA
+    '''
+
+    return(int(sta*fs),int(lta*fs))
+    
+    
+def getON(signal,fs,ymin,ymax,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    data  : 1d-numpy array contaning traces. 
+    fs    : Sampling frequency in Hz.
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Nested List of trigger on and of times in samples
+
+    '''
+    # Characteristic function and trigger onsets
+    nsta, nlta = stalta(sta,lta,fs)
+    cft = recursive_sta_lta(signal,nsta,nlta)
+    on_of = trigger_onset(cft,ymax,ymin)
+    return on_of, cft
+
+
+def getON_seg(signal,fs,ymin,ymax,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    signal  : 1d-numpy array contaning traces. 
+    fs    : Sampling frequency in Hz.
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Nested List of trigger on and of times in samples
+
+    '''
+    # Characteristic function and trigger onsets
+    nsta, nlta = stalta(sta,lta,fs)
+    cft = recursive_sta_lta(signal,nsta,nlta)
+    on_of = trigger_onset(cft,ymax,ymin)
+    return on_of, cft
+
+
+def plotONOF(signal,cft,on_of):
+
+    # Plotting the results
+    ax = plt.subplot(211)
+    plt.plot(signal, 'k')
+    ymin, ymax = ax.get_ylim()
+    plt.vlines(on_of[:, 0], ymin, ymax, color='r', linewidth=2)
+    plt.vlines(on_of[:, 1], ymin, ymax, color='b', linewidth=2)
+    plt.subplot(212, sharex=ax)
+    plt.plot(cft, 'k')
+    plt.hlines([3.5, 0.5], 0, len(cft), color=['r', 'b'], linestyle='--')
+    plt.axis('tight')
+    plt.show()
+
+
+def getShift(data1,data2,sel_time,fs,ymax,ymin,sta,lta):
+
+    '''
+    INPUT PARAMETERS:
+    -----------------------
+    data1  : 1d-numpy array. 
+    data2  : 1d-numpy array.
+    fs    : Sampling frequency in Hz.
+    sel_time : Window contaning the first signal (train passage) from each record
+    ymin  : Value below which trigger (of characteristic function) is deactivated (lower threshold)
+    ymax  : Value above which trigger (of characteristic function) is activated (higher threshold)
+    sta (float) : Length of short time average window in seconds
+    lta (float) : Length of long time average window in seconds
+
+    RETURNS:
+    -----------------------
+    Shifted traces
+
+    data_shifted1: 1d-numpy array.
+    data_shifted2: 1d-numpy array.
+
+    '''
+
+    # Characteristic function and trigger onsets
+    on_of1,_ = getON(data1[:sel_time],fs,ymin,ymax,sta,lta)
+    on_of2,_ = getON(data2[:sel_time],fs,ymin,ymax,sta,lta)
+    shift = np.min(on_of1) - np.min(on_of2)
+
+    if shift >= 0:
+        data_shifted1 = data1[shift:]
+        data_shifted2 = data2[:len(data_shifted1)]
+
+    else:
+        data_shifted2 = data2[np.abs(shift):]
+        data_shifted1 = data1[:len(data_shifted2)]
+
+    return data_shifted1,data_shifted2
