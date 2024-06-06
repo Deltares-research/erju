@@ -9,7 +9,7 @@ class AccelDataTimeWindows():
     This class creates the windows of time in which a train passing by is detected.
     It uses the data from the accelerometers to create the windows. Since we want the same
     time window for all sensors, the windows are created with one location and used to
-    extract the data from all other sensors.
+    extract the data from all other sensors. Outputs are the indices and times of the windows.
     """
 
     def __init__(self, accel_data_path: str, window_size: int = 10, event_separation_internal: int = 5,
@@ -35,6 +35,7 @@ class AccelDataTimeWindows():
         """
         Get a list of unique file names inside the dir_path folder. For this
         we look into one specific file format (.asc) and remove the extension.
+        This will output a list of ALL the file names in the folder.
 
         Args:
             None
@@ -51,9 +52,13 @@ class AccelDataTimeWindows():
 
     def extract_accel_data_from_file(self, file_name: str, no_cols: int = 3) -> pd.DataFrame:
         """
-        Read the data from the .asc file and create a dataframe with the data. The data
+        Read the data from a (single) .asc file and create a dataframe with the data. The data
         is read from the file and the time is created from the start time and the time
         increment. The date is extracted from the settings file.
+        NOTE: this is done PER FILE, you have to choose which file to use. Also, the number of
+        columns is set to 3 because we use the first 3 columns of data from the file which
+        correspond to location 1. We know this beforehand by looking at the data and this
+        will probably will be needed to be adjusted for other locations or file types.
 
         Args:
             file_name (str): The name of the file without extension
@@ -207,6 +212,8 @@ file_names = time_windows.get_file_names()
 # Extract the settings for the first file
 settings = time_windows.extract_settings(file_names[0])
 # Create a dataframe with the data from the first location, specifying the number of columns
+# (in this case 3, because we use the first 3 columns of data from the file) and get the data
+# from the first file in the list
 accel_data_df = time_windows.extract_accel_data_from_file(file_names[0], no_cols=3)
 
 # Find the indices and times where the combined signal crosses the threshold
