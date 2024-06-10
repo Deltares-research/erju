@@ -8,14 +8,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from obspy import Trace
 # adding modules to the system path
-sys.path.insert(0, r'C:\Users\obandohe\OneDrive - Stichting Deltares\GIT_PROJECTS\erju')
-from utils.utils import Array_to_ObsPy, filtering, getShift, stalta, getON, plotONOF
+sys.path.insert(0, r'C:\Projects\erju')
+from utils import Array_to_ObsPy,filtering, getShift, stalta, getON, plotONOF
 
 #%%##############################---LOADING SIGNALS----###################################
 
 # Reading csv file with pair of signals (e.g. DAS and accelerometer)
-df = pd.read_csv(r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES_PROJECTS\2024\12_RAIL4EARTH\csv_file_test\test_data.csv')
+df = pd.read_csv(r'D:\csv_file_test\test_data.csv')
 df.head()
+
 
 # Extracting sampling frequency and signals
 # Extracting sampling frequency and signals
@@ -56,10 +57,11 @@ ax0.set_xlabel('Samples')
 ax1.set_xlabel('Samples')
 fig.tight_layout()
 # %% save shifted signals as csv file
+plt.show()
 
 df_results = pd.DataFrame({'sensor1':data_corr1,'sensor2':data_corr2,'fs':fs})
 df_results.head(5)
 
-df_results.to_csv(r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES_PROJECTS\2024\12_RAIL4EARTH\csv_file_test\signals_shifted.csv',index=False)
+#df_results.to_csv(r'C:\Users\obandohe\OneDrive - Stichting Deltares\Documents\DELTARES_PROJECTS\2024\12_RAIL4EARTH\csv_file_test\signals_shifted.csv',index=False)
 
 # %%

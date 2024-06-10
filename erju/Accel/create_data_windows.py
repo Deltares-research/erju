@@ -2,6 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from obspy.signal.trigger import recursive_sta_lta, trigger_onset
+import matplotlib.pyplot as plt
 
 
 class AccelDataTimeWindows():
@@ -12,21 +14,21 @@ class AccelDataTimeWindows():
     extract the data from all other sensors. Outputs are the indices and times of the windows.
     """
 
-    def __init__(self, accel_data_path: str, window_size: int = 10, event_separation_internal: int = 5,
+    def __init__(self, accel_data_path: str, window_size_extension: int = 10, event_separation_internal: int = 5,
                  threshold: float = 0.02):
         """
         Initialize the AccelDataTimeWindows class
 
         Args:
             accel_data_path (str): The path to the folder containing the accelerometer data.
-            window_size (int): The size of the window in seconds. Default is 10 seconds.
+            window_size_extension (int): The size of the window extension in seconds. Default is 10 seconds.
             event_separation_internal (int): The separation between events in seconds. Default is 5 seconds.
             threshold (float): The threshold signal value to detect the train passing by. Default is 0.02.
         """
 
         self.accel_data_path = accel_data_path
         self.accel_file_names = None  # The list of file names in the folder without extensions
-        self.window_size = window_size * 1000  # measurements at 1000 Hz, we need to multiply by 1000 for seconds
+        self.window_size_extension = window_size_extension * 1000  # measurements at 1000 Hz, we need to multiply by 1000 for seconds
         self.event_separation_internal = event_separation_internal * 1000  # measure at 1000 Hz
         self.threshold = threshold  # The threshold signal value to detect the train passing by
         self.settings = {}  # The dictionary containing the settings for each file
@@ -184,8 +186,8 @@ class AccelDataTimeWindows():
             # Create a window around the start and end points by adding the window_size
             # both before and after the start and end points. We also make sure that the
             # window does not go outside the signal data (that's why we use max and min)
-            start_index = max(0, start_point - self.window_size)
-            end_index = min(len(accel_data) - 1, end_point + self.window_size)
+            start_index = max(0, start_point - self.window_size_extension)
+            end_index = min(len(accel_data) - 1, end_point + self.window_size_extension)
 
             # Get the corresponding times
             start_time = accel_data["T(ms)"].iloc[start_index]
@@ -197,15 +199,122 @@ class AccelDataTimeWindows():
 
         return windows_indices, windows_times
 
+    def detect_events_with_sta_lta(self, accel_data, nsta, nlta, trigger_on, trigger_off):
+        """
+        Detect events using the STA/LTA method and create windows around these events.
+
+        Args:
+            accel_data (pd.DataFrame): The dataframe containing the data from the location_name
+            nsta (int): The number of samples in the STA window
+            nlta (int): The number of samples in the LTA window
+            trigger_on (float): The trigger on threshold
+            trigger_off (float): The trigger off threshold
+
+        Returns:
+            windows_indices (list): A list of tuples containing the start and end indices of each window
+            windows_times (list): A list of tuples containing the start and end times of each window
+        """
+        # Combine the accelerometer signals
+        combined_signal = accel_data.iloc[:, 1:].sum(axis=1).values
+
+        # Compute the STA/LTA ratio
+        sta_lta_ratio = recursive_sta_lta(combined_signal, nsta, nlta)
+
+        # Detect events using the trigger_onset function from ObsPy
+        events = trigger_onset(sta_lta_ratio, trigger_on, trigger_off)
+
+        # Create the windows around the detected events
+        windows_indices = []
+        windows_times = []
+
+        # For each event, create a window around it
+        for event in events:
+            # Extend the window by the window_size_extension at the start and end
+            start_index = max(0, event[0] - self.window_size_extension)
+            end_index = min(len(accel_data) - 1, event[1] + self.window_size_extension)
+            # Compute the corresponding times for the start and end indices
+            start_time = accel_data["T(ms)"].iloc[start_index]
+            end_time = accel_data["T(ms)"].iloc[end_index]
+            # Append the window to the lists
+            windows_indices.append((start_index, end_index))
+            windows_times.append((start_time, end_time))
+
+        return windows_indices, windows_times
+
+    def plot_signal_and_sta_lta(self, accel_data, windows_indices, nsta=None, nlta=None, trigger_on=None,
+                                trigger_off=None):
+        """
+        Plot the signal, STA/LTA ratio, and detected event windows with shaded areas.
+
+        Args:
+            accel_data (pd.DataFrame): The dataframe containing the data from the location_name
+            windows_indices (list): A list of tuples containing the start and end indices of each window
+            nsta (int): The number of samples in the STA window
+            nlta (int): The number of samples in the LTA window
+            trigger_on (float): The trigger on threshold
+            trigger_off (float): The trigger off threshold
+        """
+        # Combine the accelerometer signals
+        combined_signal = accel_data.iloc[:, 1:].sum(axis=1).values
+        time_values = accel_data.iloc[:, 0]
+
+        if nsta and nlta and trigger_on and trigger_off:
+            # Compute the STA/LTA ratio if parameters are provided
+            sta_lta_ratio = recursive_sta_lta(combined_signal, nsta, nlta)
+        else:
+            sta_lta_ratio = None
+
+        # Plot the results
+        plt.figure(figsize=(15, 8))
+
+        # Plot the original seismic data
+        plt.subplot(2, 1, 1)
+        plt.plot(time_values, combined_signal, label='Seismic Data', color='black')
+        plt.xlabel('Time')
+        plt.ylabel('Amplitude')
+        plt.title('Raw vibration signal')
+        plt.legend()
+
+        if sta_lta_ratio is not None:
+            # Plot the STA/LTA ratio
+            plt.subplot(2, 1, 2)
+            plt.plot(time_values[:len(sta_lta_ratio)], sta_lta_ratio, label='STA/LTA Ratio', color='blue')
+            plt.axhline(y=trigger_on, color='r', linestyle='--', label='Trigger On Threshold')
+            plt.axhline(y=trigger_off, color='b', linestyle='--', label='Trigger Off Threshold')
+
+        # Highlight detected events in both subplots
+        for start_index, end_index in windows_indices:
+            plt.subplot(2, 1, 1)
+            plt.axvspan(time_values[start_index], time_values[end_index], color='green', alpha=0.3)
+            if sta_lta_ratio is not None:
+                plt.subplot(2, 1, 2)
+                plt.axvspan(time_values[start_index], time_values[end_index], color='green', alpha=0.3)
+
+        if sta_lta_ratio is not None:
+            plt.xlabel('Time')
+            plt.ylabel('STA/LTA Ratio')
+            plt.title('STA/LTA Ratio and Detected Events')
+            plt.legend()
+
+        plt.tight_layout()
+        plt.show()
 
 # TRY TO RUN THE CODE #################################################################################################
 
 # Define the path to the folder containing the accelerometer data
 accel_data_path = r'D:\accel_trans\culemborg_data'
+window_size_extension = 10  # seconds
+event_separation_internal = 5  # seconds
+threshold = 0.02
+trigger_on = 7
+trigger_off = 1
+
 
 # Create an instance of the AccelDataTimeWindows class
-time_windows = AccelDataTimeWindows(accel_data_path=accel_data_path, window_size=10, event_separation_internal=5,
-                                    threshold=0.02)
+time_windows = AccelDataTimeWindows(accel_data_path=accel_data_path,
+                                    window_size_extension=window_size_extension,
+                                    event_separation_internal=event_separation_internal,
+                                    threshold=threshold)
 
 # Get the list of file names in the folder
 file_names = time_windows.get_file_names()
@@ -218,6 +327,27 @@ accel_data_df = time_windows.extract_accel_data_from_file(file_names[0], no_cols
 
 # Find the indices and times where the combined signal crosses the threshold
 windows_indices, windows_times = time_windows.create_windows_indices_and_times(accel_data_df)
+
+# Detect events using STA/LTA method
+nsta = int(0.5 * 1000)  # 0.5 seconds window for STA
+nlta = int(5 * 1000)  # 10 seconds window for LTA
+windows_indices_sta_lta, windows_times_sta_lta = time_windows.detect_events_with_sta_lta(accel_data_df, nsta, nlta,
+                                                                                         trigger_on=trigger_on,
+                                                                                         trigger_off=trigger_off)
+# Print the results with both methods
+print('For the old method:')
 print('number of windows:', len(windows_indices))
 print('windows indices:', windows_indices)
 print('windows times:', windows_times)
+print('For the STA/LTA method:')
+print('number of windows:', len(windows_indices_sta_lta))
+print('windows indices:', windows_indices_sta_lta)
+print('windows times:', windows_times_sta_lta)
+
+
+# Plot the signal and STA/LTA ratio with detected events using threshold method
+time_windows.plot_signal_and_sta_lta(accel_data_df, windows_indices)
+
+# Plot the signal and STA/LTA ratio with detected events using STA/LTA method
+time_windows.plot_signal_and_sta_lta(accel_data_df, windows_indices_sta_lta, nsta, nlta, trigger_on=trigger_on,
+                                     trigger_off=trigger_off)

@@ -26,6 +26,7 @@ start_timer = time.time()
 
 # Initialize the FindTrains class instance
 file_cul_instance = BaseFindTrains.create_instance(dir_path, first_channel, last_channel, reader_type)
+
 # Extract the properties of the TDMS file
 properties = file_cul_instance.extract_properties()
 
@@ -43,6 +44,11 @@ file_cul_instance.save_txt_with_file_names(save_to_path, selected_files, file_na
 
 # From the selected files, extract the data
 all_data = file_cul_instance.get_data_per_file(selected_files, resample=True, new_sampling_frequency=100)
+
+# Stop the timer
+stop_timer = time.time()
+print('Elapsed time: ', stop_timer - start_timer, 'seconds')
+
 
 ########################################################################################################################
 # PLOTTING THE DATA
@@ -70,7 +76,4 @@ single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index, save_to_path=save_to_path, save_figure=True)
 
-# Stop the timer
-stop_timer = time.time()
-print('Elapsed time: ', stop_timer - start_timer, 'seconds')
 

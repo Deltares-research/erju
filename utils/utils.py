@@ -282,6 +282,8 @@ def stalta(sta,lta,fs):
 def getON(signal,fs,ymin,ymax,sta,lta):
 
     '''
+    Para calcular los tiempos inicial de cada se;al
+
     INPUT PARAMETERS:
     -----------------------
     data  : 1d-numpy array contaning traces. 
@@ -337,7 +339,7 @@ def plotONOF(signal,cft,on_of):
     plt.vlines(on_of[:, 1], ymin, ymax, color='b', linewidth=2)
     plt.subplot(212, sharex=ax)
     plt.plot(cft, 'k')
-    plt.hlines([3.5, 0.5], 0, len(cft), color=['r', 'b'], linestyle='--')
+    plt.hlines([7, 0.5], 0, len(cft), color=['r', 'b'], linestyle='--')
     plt.axis('tight')
     plt.show()
 
