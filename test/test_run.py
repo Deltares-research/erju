@@ -1,7 +1,10 @@
 import time
 
-from utils.plot_data import PlotData
+from utils.plot_FO_data import PlotData
 from erju.FO.find_trains_base import BaseFindTrains
+
+
+##### USER INPUT #######################################################################################################
 
 # Define the path to the TDMS file
 #dir_path = r'C:\Projects\erju\data'
@@ -21,6 +24,7 @@ threshold = 500
 reader_type = 'silixa'
 
 ########################################################################################################################
+
 # Start the timer
 start_timer = time.time()
 
