@@ -57,6 +57,7 @@ print('Elapsed time: ', stop_timer - start_timer, 'seconds')
 ########################################################################################################################
 # PLOTTING THE DATA
 
+
 # Plot the data file by file in the 30 seconds window
 for file_name in selected_files:
     # Create the plotting instance
@@ -64,8 +65,13 @@ for file_name in selected_files:
     # Plot the data
     train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
 
+
+data = file_cul_instance.get_data_with_window(selected_files[1], window_before=30, window_after=30, resample=True, new_sampling_frequency=100)
+extended_plot = PlotData(selected_files[1], all_data)
+extended_plot.plot_2d_buffer(save_to_path=save_to_path, save_figure=True, data=data)
+
 # Plot files together to follow a given train
-file_cul_instance.plot_array_channels(file_to_plot=file_names[8], window_before=30, window_after=30, resample=True,
+file_cul_instance.plot_array_channels(file_to_plot=selected_files[4], window_before=30, window_after=30, resample=True,
                                       new_sampling_frequency=50, save_to_path=save_to_path, save_figure=True)
 
 # Plot a single channel
