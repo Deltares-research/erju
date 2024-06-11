@@ -1,6 +1,0 @@
-Index: 7-> iDAS_continous_measurements_30s_UTC_20201120_094827.969.tdms
-Index: 13-> iDAS_continous_measurements_30s_UTC_20201120_095127.969.tdms
-Index: 21-> iDAS_continous_measurements_30s_UTC_20201120_095527.968.tdms
-Index: 35-> iDAS_continous_measurements_30s_UTC_20201120_100227.967.tdms
-Index: 51-> iDAS_continous_measurements_30s_UTC_20201120_101139.174.tdms
-Index: 52-> iDAS_continous_measurements_30s_UTC_20201120_101209.174.tdms
