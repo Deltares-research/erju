@@ -4,9 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import logging
 
-# Configure the logging module
-logging.basicConfig(level=logging.INFO)
-
 # Class to plot the data that takes in the path and file names
 class PlotData:
     """
