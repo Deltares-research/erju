@@ -14,21 +14,21 @@ class AccelDataTimeWindows():
     extract the data from all other sensors. Outputs are the indices and times of the windows.
     """
 
-    def __init__(self, accel_data_path: str, window_size_extension: int = 10, event_separation_internal: int = 5,
+    def __init__(self, accel_data_path: str, window_buffer: int = 10, event_separation_internal: int = 5,
                  threshold: float = 0.02):
         """
         Initialize the AccelDataTimeWindows class
 
         Args:
             accel_data_path (str): The path to the folder containing the accelerometer data.
-            window_size_extension (int): The size of the window extension in seconds. Default is 10 seconds.
+            window_buffer (int): The size of the window extension in seconds. Default is 10 seconds.
             event_separation_internal (int): The separation between events in seconds. Default is 5 seconds.
             threshold (float): The threshold signal value to detect the train passing by. Default is 0.02.
         """
 
         self.accel_data_path = accel_data_path
         self.accel_file_names = None  # The list of file names in the folder without extensions
-        self.window_size_extension = window_size_extension * 1000  # measurements at 1000 Hz, we need to multiply by 1000 for seconds
+        self.window_buffer = window_buffer * 1000  # measurements at 1000 Hz, we need to multiply by 1000 for seconds
         self.event_separation_internal = event_separation_internal * 1000  # measure at 1000 Hz
         self.threshold = threshold  # The threshold signal value to detect the train passing by
         self.settings = {}  # The dictionary containing the settings for each file
@@ -149,7 +149,7 @@ class AccelDataTimeWindows():
 
         return self.settings
 
-    def create_windows_indices_and_times(self, accel_data):
+    def create_windows_indices_and_times(self, accel_data: pd.DataFrame):
         """
         Create the windows of time in which a train passing by is detected.
         To do this, the threshold signal value is used to detect the train.
@@ -186,8 +186,8 @@ class AccelDataTimeWindows():
             # Create a window around the start and end points by adding the window_size
             # both before and after the start and end points. We also make sure that the
             # window does not go outside the signal data (that's why we use max and min)
-            start_index = max(0, start_point - self.window_size_extension)
-            end_index = min(len(accel_data) - 1, end_point + self.window_size_extension)
+            start_index = max(0, start_point - self.window_buffer)
+            end_index = min(len(accel_data) - 1, end_point + self.window_buffer)
 
             # Get the corresponding times
             start_time = accel_data["T(ms)"].iloc[start_index]
@@ -199,9 +199,13 @@ class AccelDataTimeWindows():
 
         return windows_indices, windows_times
 
-    def detect_events_with_sta_lta(self, accel_data, nsta, nlta, trigger_on, trigger_off):
+    def detect_events_with_sta_lta(self, accel_data: pd.DataFrame, nsta: int, nlta: int,
+                                   trigger_on: float, trigger_off: float):
         """
-        Detect events using the STA/LTA method and create windows around these events.
+        Detect events using the STA/LTA method and create windows around these events. This method
+        uses the recursive_sta_lta function from ObsPy to compute the STA/LTA ratio and the trigger_onset
+        function to detect the events. A buffer is added to the start and end of each event to create the
+        windows. The windows are then returned as indices and times.
 
         Args:
             accel_data (pd.DataFrame): The dataframe containing the data from the location_name
@@ -230,8 +234,8 @@ class AccelDataTimeWindows():
         # For each event, create a window around it
         for event in events:
             # Extend the window by the window_size_extension at the start and end
-            start_index = max(0, event[0] - self.window_size_extension)
-            end_index = min(len(accel_data) - 1, event[1] + self.window_size_extension)
+            start_index = max(0, event[0] - self.window_buffer)
+            end_index = min(len(accel_data) - 1, event[1] + self.window_buffer)
             # Compute the corresponding times for the start and end indices
             start_time = accel_data["T(ms)"].iloc[start_index]
             end_time = accel_data["T(ms)"].iloc[end_index]
@@ -241,8 +245,8 @@ class AccelDataTimeWindows():
 
         return windows_indices, windows_times
 
-    def plot_signal_and_sta_lta(self, accel_data, windows_indices, nsta=None, nlta=None, trigger_on=None,
-                                trigger_off=None):
+    def plot_accel_signal_and_windows(self, accel_data: pd.DataFrame, windows_indices: list, nsta: int = None,
+                                      nlta: int = None, trigger_on: float = None, trigger_off: float = None):
         """
         Plot the signal, STA/LTA ratio, and detected event windows with shaded areas.
 
@@ -299,6 +303,8 @@ class AccelDataTimeWindows():
         plt.tight_layout()
         plt.show()
 
+
+
 # TRY TO RUN THE CODE #################################################################################################
 
 # Define the path to the folder containing the accelerometer data
@@ -309,17 +315,18 @@ threshold = 0.02
 trigger_on = 7
 trigger_off = 1
 
-
 # Create an instance of the AccelDataTimeWindows class
 time_windows = AccelDataTimeWindows(accel_data_path=accel_data_path,
-                                    window_size_extension=window_size_extension,
+                                    window_buffer=window_size_extension,
                                     event_separation_internal=event_separation_internal,
                                     threshold=threshold)
 
 # Get the list of file names in the folder
 file_names = time_windows.get_file_names()
+
 # Extract the settings for the first file
 settings = time_windows.extract_settings(file_names[0])
+
 # Create a dataframe with the data from the first location, specifying the number of columns
 # (in this case 3, because we use the first 3 columns of data from the file) and get the data
 # from the first file in the list
@@ -331,7 +338,9 @@ windows_indices, windows_times = time_windows.create_windows_indices_and_times(a
 # Detect events using STA/LTA method
 nsta = int(0.5 * 1000)  # 0.5 seconds window for STA
 nlta = int(5 * 1000)  # 10 seconds window for LTA
-windows_indices_sta_lta, windows_times_sta_lta = time_windows.detect_events_with_sta_lta(accel_data_df, nsta, nlta,
+windows_indices_sta_lta, windows_times_sta_lta = time_windows.detect_events_with_sta_lta(accel_data_df,
+                                                                                         nsta,
+                                                                                         nlta,
                                                                                          trigger_on=trigger_on,
                                                                                          trigger_off=trigger_off)
 # Print the results with both methods
@@ -346,8 +355,9 @@ print('windows times:', windows_times_sta_lta)
 
 
 # Plot the signal and STA/LTA ratio with detected events using threshold method
-time_windows.plot_signal_and_sta_lta(accel_data_df, windows_indices)
+time_windows.plot_accel_signal_and_windows(accel_data_df, windows_indices)
 
 # Plot the signal and STA/LTA ratio with detected events using STA/LTA method
-time_windows.plot_signal_and_sta_lta(accel_data_df, windows_indices_sta_lta, nsta, nlta, trigger_on=trigger_on,
-                                     trigger_off=trigger_off)
+time_windows.plot_accel_signal_and_windows(accel_data_df, windows_indices_sta_lta,
+                                           nsta, nlta, trigger_on=trigger_on, trigger_off=trigger_off)
+
