@@ -337,68 +337,6 @@ refund woul
 
         return self.tdms_files
 
-    def plot_array_channels(self, file_to_plot: str,  save_to_path: str = None, save_figure: bool = False,
-                            window_before: int = 30, window_after: int = 30,
-                            resample: bool = False, new_sampling_frequency: int = 100):
-        """
-        Plot an array of channels as an image plot, including a time window before and after the train passes.
-        The data can also be resampled if needed.
-
-        Args:
-            file_to_plot (str): The name of the file to plot
-            save_to_path (str): The path to save the figure
-            save_figure (bool): Save the figure as a jpg file
-            window_before (int): The time window (in seconds) before the train passes
-            window_after (int): The time window (in seconds) after the train passes
-            resample (bool): Resample the data
-            new_sampling_frequency (int): The new sampling frequency
-
-        Returns:
-            None
-        """
-        # If resample is True, resample the data
-        if resample:
-            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after,
-                                         resample=resample, new_sampling_frequency=new_sampling_frequency)
-        else:
-            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after)
-
-        # Create a figure and axes
-        fig, ax = plt.subplots(figsize=(10, 15))
-
-        # Transpose the data and take the absolute value
-        data = np.abs(data.T)
-
-        # Plot the data as an image plot
-        im = ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30)
-        ax.set_xlabel('Channel count')
-        ax.set_ylabel('Time [s]')
-
-        # Set the number of ticks based on the dimensions of the data
-        num_time_points = data.shape[0]
-        num_channels = data.shape[1]
-
-        # Set the x-ticks and their labels
-        x_ticks = np.linspace(0, num_channels - 1, num=min(10, num_channels))
-        ax.set_xticks(x_ticks)
-        ax.set_xticklabels([f'{int(x)}' for x in x_ticks])
-
-        # Set the y-ticks and their labels
-        y_ticks = np.linspace(0, num_time_points - 1, num=min(10, num_time_points))
-        ax.set_yticks(y_ticks)
-        ax.set_yticklabels([f'{int(y / 1000)}' for y in y_ticks])
-
-        # Show colorbar
-        cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label('Intensity')
-
-        # If save_figure is True, save the figure with a specific file name
-        if save_figure:
-            file_name_suffix = 'Figure_2D'
-            full_file_name = f'{file_name_suffix}_{file_to_plot}.jpg'
-            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
-            plt.savefig(save_path, dpi=300)
-        plt.close()
 
     def resample_data(self, data: np.array, new_n_channels: int = None, new_sampling_frequency: int = None):
         """
