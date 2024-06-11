@@ -3,6 +3,7 @@ import time
 from utils.plot_FO_data import PlotData
 from erju.FO.find_trains_base import BaseFindTrains
 
+from utils.utils import get_files_in_dir
 
 ##### USER INPUT #######################################################################################################
 
@@ -35,13 +36,16 @@ file_cul_instance = BaseFindTrains.create_instance(dir_path, first_channel, last
 properties = file_cul_instance.extract_properties()
 
 # Get a list with all the names of the TDMS files
-file_names = file_cul_instance.get_file_list()
+file_names = get_files_in_dir(folder_path=dir_path, file_format='.tdms')
 
 # Get the average signal
 signal_mean = file_cul_instance.signal_averaging(plot=True, save_to_path=save_to_path)
 
 # Find the file names above the threshold
 selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
+
+print('Selected files: ', selected_files)
+print('File names: ', file_names)
 
 # Save the name of the files with trains in a txt
 file_cul_instance.save_txt_with_file_names(save_to_path, selected_files, file_names)

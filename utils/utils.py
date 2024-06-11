@@ -1,22 +1,26 @@
 
 import os
 
-def get_file_names(self):
+
+def get_files_in_dir(folder_path: str, file_format: str):
     """
-    Get a list of unique file names inside the dir_path folder. For this
-    we look into one specific file format (.asc) and remove the extension.
+    Get a list of unique file names inside the given folder path that match the given file format.
 
     Args:
-        None
+        folder_path (str): The path to the folder containing the files.
+        file_format (str): The file format to filter by (e.g., ".tdms").
 
     Returns:
-        file_list (list): List of file names in the folder without extensions
+        file_list (list): List of file names in the folder that match the given format with extensions.
     """
+    # Validate the inputs
+    if not os.path.isdir(folder_path):
+        raise ValueError("The provided path is not a valid directory.")
+    if not file_format.startswith('.'):
+        raise ValueError("The file format should start with a dot (e.g., '.txt').")
 
-    # Get the list of files in the folder with .asc extension
-    ascii_file_names = [f for f in os.listdir(self.dir_path) if f.endswith('.asc')]
-    # From the ascii_file_names list, remove the .asc extension
-    self.file_names = [f.split('.')[0] for f in ascii_file_names]
+    # Get the list of files in the folder with the specified extension
+    file_list = [f for f in os.listdir(folder_path) if f.endswith(file_format)]
 
-    return self.file_names
+    return file_list
 

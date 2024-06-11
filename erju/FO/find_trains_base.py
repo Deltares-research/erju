@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 
 from scipy import signal
 
+from utils.utils import get_files_in_dir
+
 
 class BaseFindTrains:
     """
@@ -174,7 +176,7 @@ class BaseFindTrains:
     def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
-refund woul
+
         Args:
             mean_signal (np.ndarray): The mean signal values
             threshold (float): The threshold value
@@ -258,7 +260,7 @@ refund woul
         signal_data = np.empty(shape=(n_channels_resampled, 0))
 
         # Get the list of TDMS files in the directory
-        all_file_names = self.get_file_list()
+        all_file_names = get_files_in_dir(folder_path=self.dir_path, file_format='.tdms')
 
         # Find the number of files to concatenate to match the time window before and after (each file is 30 seconds)
         n_files_before = int(np.ceil(window_before / 30))
