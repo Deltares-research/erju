@@ -48,7 +48,8 @@ print('Selected files: ', selected_files)
 print('File names: ', file_names)
 
 # Save the name of the files with trains in a txt
-file_cul_instance.save_txt_with_file_names(save_to_path, selected_files, file_names)
+file_cul_instance.save_txt_with_file_names(save_to_path=save_to_path, selected_files=selected_files,
+                                           file_names=file_names, include_indexes=True)
 
 # From the selected files, extract the data
 all_data = file_cul_instance.get_data_per_file(selected_files, resample=True, new_sampling_frequency=100)

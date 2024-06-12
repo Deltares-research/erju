@@ -296,7 +296,8 @@ class BaseFindTrains:
 
         return signal_data
 
-    def save_txt_with_file_names(self, save_to_path: str, selected_files: list, file_names: list):
+    def save_txt_with_file_names(self, save_to_path: str, selected_files: list, file_names: list,
+                                 include_indexes: bool = True):
         """
         Print the name of the files which are above the threshold in a txt file
 
@@ -304,6 +305,7 @@ class BaseFindTrains:
             save_to_path (str): The path to save the txt file
             selected_files (list): The list of selected files
             file_names (list): The list of all file names
+            include_indexes (bool): Whether to include the indexes of the files in the txt file
 
         Returns:
             None
@@ -315,29 +317,16 @@ class BaseFindTrains:
         with open(file_path, 'w') as f:
             # Loop through the selected files and write the name of the files in the txt file
             for file_name in selected_files:
-                index = file_names.index(file_name)
-                f.write(f'Index: {index}-> {file_name}\n')
+                if include_indexes:
+                    index = file_names.index(file_name)
+                    f.write(f'Index: {index} -> {file_name}\n')
+                else:
+                    f.write(f'{file_name}\n')
 
         print(f'The file files_with_trains.txt has been created at {save_to_path}')
 
         return None
 
-    def get_file_list(self):
-        """
-        Get a list of unique file names inside the dir_path folder. For this
-        we look into one specific file format (.asc) and remove the extension.
-
-        Args:
-            None
-
-        Returns:
-            file_list (list): List of file names in the folder without extensions
-        """
-
-        # Get the list of files in the folder with .asc extension
-        self.tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
-
-        return self.tdms_files
 
     def plot_array_channels(self, file_to_plot: str,  save_to_path: str = None, save_figure: bool = False,
                             window_before: int = 30, window_after: int = 30,

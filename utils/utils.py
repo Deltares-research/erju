@@ -26,3 +26,4 @@ def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = 
         file_list = [os.path.splitext(f)[0] for f in file_list]
 
     return file_list
+
