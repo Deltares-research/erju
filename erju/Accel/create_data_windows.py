@@ -1,9 +1,12 @@
 import os
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
 from datetime import datetime, timedelta
 from obspy.signal.trigger import recursive_sta_lta, trigger_onset
-import matplotlib.pyplot as plt
+from utils.utils import get_files_in_dir
+
 
 
 class AccelDataTimeWindows():
@@ -33,24 +36,6 @@ class AccelDataTimeWindows():
         self.threshold = threshold  # The threshold signal value to detect the train passing by
         self.settings = {}  # The dictionary containing the settings for each file
 
-    def get_file_names(self):
-        """
-        Get a list of unique file names inside the dir_path folder. For this
-        we look into one specific file format (.asc) and remove the extension.
-        This will output a list of ALL the file names in the folder.
-
-        Args:
-            None
-
-        Returns:
-            file_list (list): List of file names in the folder without extensions
-        """
-        # Get the list of files in the folder with .asc extension
-        ascii_file_names = [f for f in os.listdir(self.accel_data_path) if f.endswith('.asc')]
-        # From the ascii_file_names list, remove the .asc extension
-        self.accel_file_names = [f.split('.')[0] for f in ascii_file_names]
-
-        return self.accel_file_names
 
     def extract_accel_data_from_file(self, file_name: str, no_cols: int = 3) -> pd.DataFrame:
         """
@@ -322,7 +307,7 @@ time_windows = AccelDataTimeWindows(accel_data_path=accel_data_path,
                                     threshold=threshold)
 
 # Get the list of file names in the folder
-file_names = time_windows.get_file_names()
+file_names = get_files_in_dir(folder_path=accel_data_path, file_format='.asc', keep_extension=False)
 
 # Extract the settings for the first file
 settings = time_windows.extract_settings(file_names[0])
