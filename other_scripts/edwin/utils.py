@@ -162,6 +162,24 @@ def filtering(data, fs, fmin, fmax, filter_type='bandpass'):
     return filt_data
 
 
+def open_OptaSense_file(file_path):
+    """
+    DESCRIPTION:
+    -----------------------
+    Function for opening OptaSense DAS data files.
+
+    INPUT PARAMETERS:
+    -----------------------
+    file_path  : Path to the OptaSense DAS data file
+
+    RETURNS:
+    -----------------------
+    fp  : List with all file properties
+    """
+    fp = h5py.File(file_path, 'r')  # Open the OptaSense DAS data file
+    return fp
+
+
 def OptaSense_Props(fp):
     """
     DESCRIPTION:

@@ -1,4 +1,6 @@
 import os
+import re
+from datetime import datetime
 
 def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = True):
     """
@@ -27,3 +29,37 @@ def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = 
 
     return file_list
 
+def extract_timestamp_from_name(file_names):
+    """
+    Extract timestamps from the given list of file names. This works for .tdms files which have
+    the following format [iDAS_continous_measurements_30s_UTC_20201111_121152.869.tdms]. Here the
+    last part of the file name is the timestamp, as in this case [121152.869], and the date is
+    after the UTC part [20201111]. This will need to be adapted if the file names have a different
+    format.
+
+    Args:
+        file_names (list): List of file names.
+
+    Returns:
+        timestamps (list): List of extracted timestamps.
+    """
+    # Initialize the list to store the timestamps
+    timestamps = []
+    # Iterate over the file names
+    for name in file_names:
+        # Use regular expression to extract the date and timestamp from the file name
+        # The pattern matches 'UTC_' followed by 8 digits for the date and then the time with 6 digits, a dot, and fractional seconds
+        match = re.search(r'UTC_(\d{8})_(\d{6}\.\d+)\.tdms$', name)
+        # If a match is found, extract the date and timestamp
+        if match:
+            # Extract the date string
+            date_str = match.group(1)
+            # Extract the timestamp string
+            time_str = match.group(2)
+            # Combine the date and timestamp strings
+            timestamp_str = f"{date_str}_{time_str}"
+            # Convert the combined string to a datetime object
+            timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S.%f')
+            timestamps.append(timestamp)
+
+    return timestamps

@@ -17,19 +17,21 @@ class AccelDataTimeWindows():
     extract the data from all other sensors. Outputs are the indices and times of the windows.
     """
 
-    def __init__(self, accel_data_path: str, window_buffer: int = 10, event_separation_internal: int = 5,
-                 threshold: float = 0.02):
+    def __init__(self, accel_data_path: str, logbook_path: str, window_buffer: int = 10,
+                 event_separation_internal: int = 5, threshold: float = 0.02):
         """
         Initialize the AccelDataTimeWindows class
 
         Args:
             accel_data_path (str): The path to the folder containing the accelerometer data.
+            logbook_path (str): The path to the logbook file containing the train passing times.
             window_buffer (int): The size of the window extension in seconds. Default is 10 seconds.
             event_separation_internal (int): The separation between events in seconds. Default is 5 seconds.
             threshold (float): The threshold signal value to detect the train passing by. Default is 0.02.
         """
 
         self.accel_data_path = accel_data_path
+        self.logbook_path = logbook_path
         self.accel_file_names = None  # The list of file names in the folder without extensions
         self.window_buffer = window_buffer * 1000  # measurements at 1000 Hz, we need to multiply by 1000 for seconds
         self.event_separation_internal = event_separation_internal * 1000  # measure at 1000 Hz
@@ -57,7 +59,7 @@ class AccelDataTimeWindows():
         self.extract_settings(file_name)
 
         # Debug print to check settings
-        #print(f"Settings for {file_name}: {self.settings}")
+        print(f"Settings: {self.settings}")
 
         # Create the file path by adding the file name and the .asc extension
         file_path = os.path.join(self.accel_data_path, file_name + '.asc')
@@ -96,6 +98,7 @@ class AccelDataTimeWindows():
             lambda dt: datetime.combine(last_modified_date, dt.time()))
 
         return accel_data
+
 
     def extract_settings(self, file_name: str) -> dict:
         """
@@ -238,6 +241,11 @@ class AccelDataTimeWindows():
             windows_indices.append((start_index, end_index))
             windows_times.append((start_time, end_time))
 
+
+        print(f"Windows indices: {windows_indices}")
+        print(f"Windows times: {windows_times}")
+        print(f"Length of windows: {len(windows_indices)}")
+
         return windows_indices, windows_times
 
 
@@ -300,4 +308,59 @@ class AccelDataTimeWindows():
         plt.show()
 
 
+
+    def filter_windows_with_logbook(self, window_indices: list, window_times: list, time_buffer: int = 5):
+        """
+        Compare the windows created with the sta/lta method with the records from the accelerometer
+        measurements logbook. If the windows are within the time range of the records, keep them.
+        Otherwise, discard them. Because the logbook is not always accurate, we can add a buffer
+        to the start and end of the records to keep the windows that are close to the records.
+
+        Args:
+            time_buffer (int): The buffer to add to the start and end of the records. Default is 5 seconds.
+        """
+        # Read the logbook file into a DataFrame
+        logbook = pd.read_excel(self.logbook_path)
+
+        # Drop the rows with missing 'Time' values
+        logbook = logbook.dropna(subset=['time'])
+
+        # Convert 'day' to a timestamp format
+        logbook['day'] = pd.to_datetime(logbook['day'], format='%d-%m-%Y')
+        # Convert 'time' to a timedelta format (HH:MM:SS)
+        logbook['time'] = pd.to_timedelta(logbook['time'].astype(str))
+        # Combine 'day' and 'time' into a single datetime column
+        logbook['datetime'] = logbook['day'] + logbook['time']
+
+        # Convert the time_buffer to the correct units, taking into account the sampling frequency of 1000 Hz
+        time_buffer = time_buffer * 1000
+        # Extend the logbook times by the time_buffer before and after the actual time
+        logbook['logbook_start_time'] = logbook['datetime'] - timedelta(milliseconds=time_buffer)
+        logbook['logbook_end_time'] = logbook['datetime'] + timedelta(milliseconds=time_buffer)
+
+        # Create a list for the filtered window times and indices
+        filtered_windows_indices, filtered_windows_times = [], []
+
+        # For each window, check if it falls within the logbook times
+        for window_index, window_time in zip(window_indices, window_times):
+            # Get the start and end times of the window
+            start_time, end_time = window_time
+
+            # Check if the extended logbook times fall within the window
+            for logbook_start, logbook_end in zip(logbook['logbook_start_time'], logbook['logbook_end_time']):
+                # Generate all times within the extended logbook time range
+                extended_logbook_times = pd.date_range(start=logbook_start, end=logbook_end, freq='S')
+                # Check if any of the extended logbook times fall within the window
+                if any((start_time <= time <= end_time) for time in extended_logbook_times):
+                    # If the window falls within the logbook times, add it to the filtered list
+                    filtered_windows_indices.append(window_index)
+                    # Add the window time to the filtered list
+                    filtered_windows_times.append(window_time)
+                    break
+
+        print(f"Filtered windows indices: {filtered_windows_indices}")
+        print(f"Filtered windows times: {filtered_windows_times}")
+        print(f"Length of filtered windows: {len(filtered_windows_indices)}")
+
+        return  filtered_windows_indices, filtered_windows_times
 
