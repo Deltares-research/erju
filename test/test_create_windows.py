@@ -9,7 +9,7 @@ class TestAccelAnalysis(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.accel_data_path = r'D:\accel_trans\culemborg_data'
-        cls.logbook_path = r'C:\Projects\erju\data\logbook_times_trains_fixed.xlsx'
+        cls.logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
         cls.window_size_extension = 10  # seconds
         cls.event_separation_internal = 5  # seconds
         cls.threshold = 0.02
@@ -24,7 +24,7 @@ class TestAccelAnalysis(unittest.TestCase):
         cls.file_names = get_files_in_dir(folder_path=cls.accel_data_path, file_format='.asc', keep_extension=False)
 
     def test_accel_analysis(self):
-        accel_data_df = self.time_windows.extract_accel_data_from_file(self.file_names[15], no_cols=3)
+        accel_data_df = self.time_windows.extract_accel_data_from_file(self.file_names[2], no_cols=3)
         self.assertIsInstance(accel_data_df, pd.DataFrame)
         self.assertEqual(accel_data_df.shape[1], 3)
 
@@ -52,7 +52,7 @@ class TestAccelAnalysis(unittest.TestCase):
         # Display the plots
         plt.show()
 
-        filtered_window_indices, filteres_window_times = self.time_windows.filter_windows_with_logbook(time_buffer=5,
+        filtered_window_indices, filteres_window_times = self.time_windows.filter_windows_with_logbook(time_buffer=15,
                                                       window_indices=windows_indices_sta_lta,
                                                       window_times=windows_times_sta_lta)
 

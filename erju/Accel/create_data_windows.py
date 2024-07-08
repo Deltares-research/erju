@@ -244,7 +244,7 @@ class AccelDataTimeWindows():
 
         print(f"Windows indices: {windows_indices}")
         print(f"Windows times: {windows_times}")
-        print(f"Length of windows: {len(windows_indices)}")
+        print(f"Number of windows: {len(windows_indices)}")
 
         return windows_indices, windows_times
 
@@ -307,23 +307,24 @@ class AccelDataTimeWindows():
         plt.tight_layout()
         plt.show()
 
-
-
     def filter_windows_with_logbook(self, window_indices: list, window_times: list, time_buffer: int = 5):
         """
         Compare the windows created with the sta/lta method with the records from the accelerometer
         measurements logbook. If the windows are within the time range of the records, keep them.
         Otherwise, discard them. Because the logbook is not always accurate, we can add a buffer
-        to the start and end of the records to keep the windows that are close to the records.
+        to the start and end of the windows to keep the windows that are close to the records.
 
         Args:
-            time_buffer (int): The buffer to add to the start and end of the records. Default is 5 seconds.
+            time_buffer (int): The buffer to add to the start and end of the windows. Default is 5 seconds.
         """
         # Read the logbook file into a DataFrame
         logbook = pd.read_excel(self.logbook_path)
 
         # Drop the rows with missing 'Time' values
         logbook = logbook.dropna(subset=['time'])
+
+        # Drop the rows with 'type' values that are not 's' or 'd'
+        logbook = logbook[logbook['type'].isin(['s', 'd'])]
 
         # Convert 'day' to a timestamp format
         logbook['day'] = pd.to_datetime(logbook['day'], format='%d-%m-%Y')
@@ -332,35 +333,57 @@ class AccelDataTimeWindows():
         # Combine 'day' and 'time' into a single datetime column
         logbook['datetime'] = logbook['day'] + logbook['time']
 
-        # Convert the time_buffer to the correct units, taking into account the sampling frequency of 1000 Hz
-        time_buffer = time_buffer * 1000
-        # Extend the logbook times by the time_buffer before and after the actual time
-        logbook['logbook_start_time'] = logbook['datetime'] - timedelta(milliseconds=time_buffer)
-        logbook['logbook_end_time'] = logbook['datetime'] + timedelta(milliseconds=time_buffer)
+        # Convert the time_buffer to a timedelta
+        time_buffer = timedelta(seconds=time_buffer)
 
         # Create a list for the filtered window times and indices
         filtered_windows_indices, filtered_windows_times = [], []
+
+        # Create a list to keep track of used logbook times
+        used_logbook_times = []
 
         # For each window, check if it falls within the logbook times
         for window_index, window_time in zip(window_indices, window_times):
             # Get the start and end times of the window
             start_time, end_time = window_time
+            # Extend the start and end times by the buffer
+            extended_start_time = start_time - time_buffer
+            extended_end_time = end_time + time_buffer
 
-            # Check if the extended logbook times fall within the window
-            for logbook_start, logbook_end in zip(logbook['logbook_start_time'], logbook['logbook_end_time']):
-                # Generate all times within the extended logbook time range
-                extended_logbook_times = pd.date_range(start=logbook_start, end=logbook_end, freq='S')
-                # Check if any of the extended logbook times fall within the window
-                if any((start_time <= time <= end_time) for time in extended_logbook_times):
-                    # If the window falls within the logbook times, add it to the filtered list
-                    filtered_windows_indices.append(window_index)
-                    # Add the window time to the filtered list
-                    filtered_windows_times.append(window_time)
-                    break
+            best_logbook_time = None
+            best_midpoint_difference = None
+
+            # Check if any logbook times fall within the extended window times
+            for logbook_time in logbook['datetime']:
+                if logbook_time in used_logbook_times:
+                    continue
+                if extended_start_time <= logbook_time <= extended_end_time:
+                    # Calculate the midpoint of the extended window
+                    extended_midpoint = extended_start_time + (extended_end_time - extended_start_time) / 2
+                    # Calculate the difference between the logbook time and the midpoint
+                    midpoint_difference = abs((logbook_time - extended_midpoint).total_seconds())
+                    # If this is the best (smallest) midpoint difference found so far, update the best logbook time
+                    if best_midpoint_difference is None or midpoint_difference < best_midpoint_difference:
+                        best_midpoint_difference = midpoint_difference
+                        best_logbook_time = logbook_time
+
+            if best_logbook_time is not None:
+                # If a best logbook time is found, use it to filter the window
+                filtered_windows_indices.append(window_index)
+                filtered_windows_times.append(window_time)
+                # Add the best logbook time to the used list
+                used_logbook_times.append(best_logbook_time)
+                # Print the matching extended window time
+                print(
+                    f"Window {window_index} with original time {window_time} matches logbook time {best_logbook_time} within extended window ({extended_start_time}, {extended_end_time})")
+            else:
+                print(f"No time fits the window {window_time}")
 
         print(f"Filtered windows indices: {filtered_windows_indices}")
         print(f"Filtered windows times: {filtered_windows_times}")
         print(f"Length of filtered windows: {len(filtered_windows_indices)}")
 
-        return  filtered_windows_indices, filtered_windows_times
+        return filtered_windows_indices, filtered_windows_times
+
+
 

@@ -14,7 +14,7 @@ class CreateDatabase:
     signals, with as many elements as sensors we have.
     """
 
-    def __init__(self, fo_data_path: str, acc_data_path: str):
+    def __init__(self, fo_data_path: str, acc_data_path: str, logbook_path: str):
         """
         Initialize the class instance to perform the database creation.
         Key elements are the paths to the FO and accelerometer data files and
@@ -26,6 +26,7 @@ class CreateDatabase:
         """
         self.fo_data_path = fo_data_path
         self.acc_data_path = acc_data_path
+        self.logbook_path = logbook_path
         self.window_indices = None
         self.window_times = None
         self.database = None
@@ -48,6 +49,7 @@ class CreateDatabase:
         """
         # Create an instance of the AccelDataTimeWindows class
         accel_windows = AccelDataTimeWindows(accel_data_path=self.acc_data_path,
+                                             logbook_path=self.logbook_path,
                                              window_buffer=window_buffer,
                                              threshold=threshold)
 
@@ -57,7 +59,7 @@ class CreateDatabase:
         # Create a dataframe with the data from the first location, specifying the number of columns
         # (in this case 3, because we use the first 3 columns of data from the file) and get the data
         # from the first file in the list
-        accel_data_df = accel_windows.extract_accel_data_from_file(file_name=file_names[17], no_cols=3)
+        accel_data_df = accel_windows.extract_accel_data_from_file(file_name=file_names[0], no_cols=3)
 
         # Detect the events using the STA/LTA method
         nsta = int(nsta * 1000) # convert to seconds with a fz of 1000 Hz
@@ -73,8 +75,7 @@ class CreateDatabase:
 
     def from_windows_get_times(self):
         """
-        Using the time windows from the accelerometer data, read the accelerometer and FO data and
-        extract the data for the time windows. Put all the extracted data in a dataframe.
+        Using the windows found with from_accel_get_windows, create a database with the start and end times.
         """
 
         # Create an empty dataframe to store the data
@@ -136,7 +137,8 @@ class CreateDatabase:
 
 # Create an instance of the CreateDatabase class
 db = CreateDatabase(fo_data_path=r'D:\RAIL4EARTH_PROJECT\DAS_DATA',
-                    acc_data_path=r'D:\accel_trans\culemborg_data')
+                    acc_data_path=r'D:\accel_trans\culemborg_data',
+                    logbook_path=r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx')
 
 # Get the time windows from the accelerometer data
 window_indices, window_times = db.from_accel_get_windows(window_buffer=10, threshold=0.02, nsta=0.5,
