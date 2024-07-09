@@ -307,23 +307,31 @@ class AccelDataTimeWindows():
         plt.tight_layout()
         plt.show()
 
+
     def filter_windows_with_logbook(self, window_indices: list, window_times: list, time_buffer: int = 5):
         """
         Compare the windows created with the sta/lta method with the records from the accelerometer
-        measurements logbook. If the windows are within the time range of the records, keep them.
-        Otherwise, discard them. Because the logbook is not always accurate, we can add a buffer
-        to the start and end of the windows to keep the windows that are close to the records.
+        measurements logbook. If there is a train passing by within the window, keep the sta/lta window.
+        The train passing is recorded in the logbook. We first clean the logbook by removing rows without
+        times and from traintypes other than 's' or 'd'. We also extend the window times by adding a buffer
+        to account for user input errors when recording the logbook. We only allow for one window event per
+        logbook time. If multiple windows are associated with the same logbook time, we keep the one with the
+        closest start time to the logbook time.
 
         Args:
-            time_buffer (int): The buffer to add to the start and end of the windows. Default is 5 seconds.
+            window_indices (list): A list of tuples containing the start and end indices of each window
+            window_times (list): A list of tuples containing the start and end times of each window
+            time_buffer (int): The buffer to add to the window times. Default is 5 seconds.
+
+        Returns:
+            filtered_windows_indices (list): A list of tuples containing the start and end indices of each window
+            filtered_windows_times (list): A list of tuples containing the start and end times of each window
         """
         # Read the logbook file into a DataFrame
         logbook = pd.read_excel(self.logbook_path)
 
-        # Drop the rows with missing 'Time' values
+        # Prepare the logbook by dropping rows without times and from traintypes other than 's' or 'd'
         logbook = logbook.dropna(subset=['time'])
-
-        # Drop the rows with 'type' values that are not 's' or 'd'
         logbook = logbook[logbook['type'].isin(['s', 'd'])]
 
         # Convert 'day' to a timestamp format
@@ -339,51 +347,69 @@ class AccelDataTimeWindows():
         # Create a list for the filtered window times and indices
         filtered_windows_indices, filtered_windows_times = [], []
 
-        # Create a list to keep track of used logbook times
+        # Create a list to keep track of used logbook times and their corresponding windows
         used_logbook_times = []
 
-        # For each window, check if it falls within the logbook times
+        # Loop through the windows and check if they fall within the logbook times
         for window_index, window_time in zip(window_indices, window_times):
             # Get the start and end times of the window
             start_time, end_time = window_time
-            # Extend the start and end times by the buffer
+            # Compute the extended start and end times by adding the buffer
             extended_start_time = start_time - time_buffer
             extended_end_time = end_time + time_buffer
 
-            best_logbook_time = None
-            best_midpoint_difference = None
-
-            # Check if any logbook times fall within the extended window times
+            # Loop through the logbook times and find if any time fits inside the window
             for logbook_time in logbook['datetime']:
-                if logbook_time in used_logbook_times:
-                    continue
+                # Check if the logbook time is within the extended window times
                 if extended_start_time <= logbook_time <= extended_end_time:
-                    # Calculate the midpoint of the extended window
-                    extended_midpoint = extended_start_time + (extended_end_time - extended_start_time) / 2
-                    # Calculate the difference between the logbook time and the midpoint
-                    midpoint_difference = abs((logbook_time - extended_midpoint).total_seconds())
-                    # If this is the best (smallest) midpoint difference found so far, update the best logbook time
-                    if best_midpoint_difference is None or midpoint_difference < best_midpoint_difference:
-                        best_midpoint_difference = midpoint_difference
-                        best_logbook_time = logbook_time
-
-            if best_logbook_time is not None:
-                # If a best logbook time is found, use it to filter the window
-                filtered_windows_indices.append(window_index)
-                filtered_windows_times.append(window_time)
-                # Add the best logbook time to the used list
-                used_logbook_times.append(best_logbook_time)
-                # Print the matching extended window time
-                print(
-                    f"Window {window_index} with original time {window_time} matches logbook time {best_logbook_time} within extended window ({extended_start_time}, {extended_end_time})")
+                    # If a logbook time is found, add the window to the filtered list
+                    filtered_windows_indices.append(window_index)
+                    filtered_windows_times.append(window_time)
+                    # Also add the logbook time, window index, and window time to the used logbook times list
+                    used_logbook_times.append((logbook_time, window_index, window_time))
+                    print(
+                        f"{window_time} matches logbook time {logbook_time} within extended window {extended_start_time}, {extended_end_time}")
+                    break
             else:
+                # If no logbook time fits the window, print a message
                 print(f"No time fits the window {window_time}")
 
-        print(f"Filtered windows indices: {filtered_windows_indices}")
-        print(f"Filtered windows times: {filtered_windows_times}")
-        print(f"Length of filtered windows: {len(filtered_windows_indices)}")
+        # Check for repeated times in the used logbook times list
+        # Create a dictionary to store the used logbook times and their corresponding windows
+        used_logbook_dict = {}
+        # Loop through the used logbook times and add them to the dictionary
+        for logbook_time, window_index, window_time in used_logbook_times:
+            # If the logbook time is not in the dictionary, add it
+            if logbook_time not in used_logbook_dict:
+                # Create a list to store the windows associated with this logbook time
+                used_logbook_dict[logbook_time] = []
+            # Add the window index and time to the list
+            used_logbook_dict[logbook_time].append((window_index, window_time))
 
-        return filtered_windows_indices, filtered_windows_times
+        # Create lists to store the filtered windows without repeated logbook times
+        final_filtered_windows_indices, final_filtered_windows_times = [], []
 
+        # Loop through the used logbook dictionary and filter the windows
+        for logbook_time, windows in used_logbook_dict.items():
+            # If only one window is associated with this logbook time, keep it
+            if len(windows) == 1:
+                # Add the window index and time to the final filtered lists
+                final_filtered_windows_indices.append(windows[0][0])
+                final_filtered_windows_times.append(windows[0][1])
+            # If multiple windows are associated with this logbook time, find the one with the closest start time
+            else:
+                # Find the window with the closest start time to the logbook time
+                closest_window = min(windows, key=lambda x: abs((x[1][0] - logbook_time).total_seconds()))
+                # Add the window index and time to the final filtered lists
+                final_filtered_windows_indices.append(closest_window[0])
+                final_filtered_windows_times.append(closest_window[1])
+                # Print a message about the repeated logbook time
+                print(
+                    f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
 
+        # Print the final filtered windows indices and times
+        #print(f"Filtered windows indices: {final_filtered_windows_indices}")
+        #print(f"Filtered windows times: {final_filtered_windows_times}")
+        #print(f"Length of filtered windows: {len(final_filtered_windows_indices)}")
 
+        return final_filtered_windows_indices, final_filtered_windows_times

@@ -13,7 +13,7 @@ class TestAccelAnalysis(unittest.TestCase):
         cls.window_size_extension = 10  # seconds
         cls.event_separation_internal = 5  # seconds
         cls.threshold = 0.02
-        cls.trigger_on = 2
+        cls.trigger_on = 1.5
         cls.trigger_off = 1
 
         cls.time_windows = AccelDataTimeWindows(accel_data_path=cls.accel_data_path,
@@ -24,7 +24,7 @@ class TestAccelAnalysis(unittest.TestCase):
         cls.file_names = get_files_in_dir(folder_path=cls.accel_data_path, file_format='.asc', keep_extension=False)
 
     def test_accel_analysis(self):
-        accel_data_df = self.time_windows.extract_accel_data_from_file(self.file_names[2], no_cols=3)
+        accel_data_df = self.time_windows.extract_accel_data_from_file(self.file_names[19], no_cols=3)
         self.assertIsInstance(accel_data_df, pd.DataFrame)
         self.assertEqual(accel_data_df.shape[1], 3)
 
@@ -33,7 +33,7 @@ class TestAccelAnalysis(unittest.TestCase):
         self.assertGreater(len(windows_times), 0)
 
         nsta = int(1 * 1000)
-        nlta = int(20 * 1000)
+        nlta = int(8 * 1000)
         windows_indices_sta_lta, windows_times_sta_lta = self.time_windows.detect_events_with_sta_lta(accel_data_df,
                                                                                                       nsta, nlta,
                                                                                                       self.trigger_on,
