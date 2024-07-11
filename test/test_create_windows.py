@@ -1,6 +1,6 @@
 import unittest
 from erju.Accel.create_data_windows import AccelDataTimeWindows
-from utils.utils import get_files_in_dir
+from utils.utils import get_files_in_dir, join_fo_channel_per_day
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -60,6 +60,12 @@ class TestAccelAnalysis(unittest.TestCase):
         self.time_windows.plot_accel_signal_and_windows(accel_data_df, filtered_window_indices,
                                                         nsta, nlta, trigger_on=self.trigger_on,
                                                         trigger_off=self.trigger_off)
+
+        # FO data path
+        self.fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
+        # join the FO channel data per day for the given channel number
+        fo_data = join_fo_channel_per_day(folder_path=self.fo_data_path, channel_no=4270)
+        print(fo_data)
 
 
 if __name__ == '__main__':

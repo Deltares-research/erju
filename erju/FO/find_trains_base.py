@@ -145,12 +145,17 @@ class BaseFindTrains:
         # Adjust the scan_channel to be relative to the first_channel
         relative_scan_channel = scan_channel - self.first_channel
 
+        # Get the tdms files in the directory
+        tdms_files = get_files_in_dir(folder_path=self.dir_path, file_format='.tdms')
+        # Build the complete path to the files
+        tdms_files = [os.path.join(self.dir_path, file) for file in tdms_files]
+
         mean_signal = []
         # Loop through all the TDMS files in the directory
-        for file_name in os.listdir(self.dir_path):
+        for file in tdms_files:
             # Get the mean signal for each file in the relative scan channel
             # and using the start_index and end_index, and get them in a list
-            data = self.extract_data(file_name, relative_scan_channel, relative_scan_channel + 1, start_time, end_time)
+            data = self.extract_data(file, relative_scan_channel, relative_scan_channel + 1, start_time, end_time)
             mean_signal.append(np.mean(np.abs(data)))
         # Convert the list to a numpy array
         mean_signal = np.array(mean_signal)
@@ -216,6 +221,7 @@ class BaseFindTrains:
 
         # Loop through the selected files and extract the data
         for file_name in selected_files:
+            print(f'Extracting data from {file_name} in get_data_per_file')
             data = self.extract_data(file_name)
 
             # Resample the data if resampling is True

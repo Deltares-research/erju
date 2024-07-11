@@ -96,6 +96,7 @@ class SilixaFindTrains(BaseFindTrains):
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
+        print('Extracting the data from file:', file_path, 'in extract_data')
 
         # Create the TDMS instance
         tdms_instance = TdmsReader(file_path)

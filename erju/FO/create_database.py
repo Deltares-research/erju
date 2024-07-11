@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from datetime import datetime
 
@@ -132,30 +133,84 @@ class CreateDatabase:
         return self.database
 
 
+    def join_fo_channel_per_day(self, folder_path: str, channel_no: int = 4270):
+        '''
+        Join the FO channel data per day for the given channel number.
+
+        Args:
+            channel_no (int): The channel number to join.
+            folder_path (str): The path to the folder containing the files.
+
+        Returns:
+            combined_data (pd.DataFrame): The combined data for the given channel number.
+        '''
+        # Get the list of file names in the folder
+        file_names = get_files_in_dir(folder_path=folder_path, file_format='.tdms')
+        # Extract the timestamps from the file names
+        timestamps = extract_timestamp_from_name(file_names)
+
+        # Get the unique dates in the timestamps
+        unique_dates = set([ts.date() for ts in timestamps])
+
+        # For each unique date, get the files that match the date
+        file_dict = {}
+        for date in unique_dates:
+            # Get the files that match the date
+            matching_files = [file for file in file_names if date.strftime('%Y%m%d') in file]
+            # Order the files by time in the file name
+            matching_files.sort()
+
+            print('Matching files:', matching_files)
+
+            # Create an empty list to store the data
+            data = []
+            # Loop through the matching files
+            for file in matching_files:
+                full_file_path = os.path.join(folder_path, file)
+                print(f'Processing file: {full_file_path}')  # Debug print
+                # Create an instance of the BaseFindTrains class
+                base_find_trains = BaseFindTrains.create_instance(dir_path=folder_path, first_channel=channel_no,
+                                                                  last_channel=channel_no + 1, reader='silixa')
+                # Get the properties of the TDMS file
+                base_find_trains.extract_properties()
+                # Extract the data from the file and append it to the list
+                data_from_file = base_find_trains.get_data_per_file(full_file_path)
+                print(f'Extracted data from file: {full_file_path}')  # Debug print
+                data.append(data_from_file)
+
+            # Combine the data into a single variable and store it in the dictionary per day
+            file_dict[date] = data
+
+        return file_dict
+
 
 ##### TEST THE CODE ###################################################################################################
 
-# Create an instance of the CreateDatabase class
-db = CreateDatabase(fo_data_path=r'D:\RAIL4EARTH_PROJECT\DAS_DATA',
-                    acc_data_path=r'D:\accel_trans\culemborg_data',
-                    logbook_path=r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx')
+# Define the path to the fo data
+#fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
+fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
 
-# Get the time windows from the accelerometer data
-window_indices, window_times = db.from_accel_get_windows(window_buffer=10, threshold=0.02, nsta=0.5,
-                                                         nlta=5.0, trigger_on=7, trigger_off=1)
+# Get all the tdms file names
+file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
+print('File names: ', file_names)
 
-# Get the database from the time windows
-db.from_windows_get_times()
-db.from_windows_get_fo_signal()
+# Extract the timestamps from the file names
+timestamps = extract_timestamp_from_name(file_names)
 
-print(db.database.head())
+# Order the file names chronographically
+timestamps, file_names = zip(*sorted(zip(timestamps, file_names)))
+print('Ordered file names:', file_names)
 
-# Save the database to a CSV file in the test folder
-# test folder
-test_folder_path = r'C:\Projects\erju\test'
-db.database.to_csv(test_folder_path + r'\database.csv', index=False)
+# Get the data of the first file
+first_file = file_names[0]
 
+# Initialize the FindTrains class instance
+file_instance = BaseFindTrains.create_instance(dir_path=fo_data_path, first_channel=4270, last_channel=4271, reader='silixa')
+# Extract the properties of the TDMS file
+properties = file_instance.extract_properties()
 
-
+# From the selected files, extract the data
+all_data = file_instance.get_data_per_file(file_names)
+print('All data:', all_data)
 
 

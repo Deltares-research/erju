@@ -29,7 +29,8 @@ def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = 
 
     return file_list
 
-def extract_timestamp_from_name(file_names):
+
+def extract_timestamp_from_name(file_names: list):
     """
     Extract timestamps from the given list of file names. This works for .tdms files which have
     the following format [iDAS_continous_measurements_30s_UTC_20201111_121152.869.tdms]. Here the
@@ -56,10 +57,12 @@ def extract_timestamp_from_name(file_names):
             date_str = match.group(1)
             # Extract the timestamp string
             time_str = match.group(2)
-            # Combine the date and timestamp strings
+            # Combine the date and timestamp stringsl
             timestamp_str = f"{date_str}_{time_str}"
             # Convert the combined string to a datetime object
             timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S.%f')
             timestamps.append(timestamp)
 
     return timestamps
+
+
