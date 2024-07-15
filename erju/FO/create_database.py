@@ -1,10 +1,12 @@
-import os
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from datetime import datetime
 
 from erju.Accel.create_data_windows import AccelDataTimeWindows
 from erju.FO.find_trains_base import BaseFindTrains
 from utils.utils import get_files_in_dir, extract_timestamp_from_name
+from collections import defaultdict
 
 class CreateDatabase:
     """
@@ -133,7 +135,7 @@ class CreateDatabase:
         return self.database
 
 
-    def join_fo_channel_per_day(self, folder_path: str, channel_no: int = 4270):
+    def join_fo_channel_per_day(self, channel_no: int = 4270):
         '''
         Join the FO channel data per day for the given channel number.
 
@@ -145,9 +147,14 @@ class CreateDatabase:
             combined_data (pd.DataFrame): The combined data for the given channel number.
         '''
         # Get the list of file names in the folder
-        file_names = get_files_in_dir(folder_path=folder_path, file_format='.tdms')
+        file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+
         # Extract the timestamps from the file names
         timestamps = extract_timestamp_from_name(file_names)
+
+        # Order the file names chronographically
+        timestamps, file_names = zip(*sorted(zip(timestamps, file_names)))
+        print('Ordered file names:', file_names)
 
         # Get the unique dates in the timestamps
         unique_dates = set([ts.date() for ts in timestamps])
@@ -166,16 +173,14 @@ class CreateDatabase:
             data = []
             # Loop through the matching files
             for file in matching_files:
-                full_file_path = os.path.join(folder_path, file)
-                print(f'Processing file: {full_file_path}')  # Debug print
                 # Create an instance of the BaseFindTrains class
-                base_find_trains = BaseFindTrains.create_instance(dir_path=folder_path, first_channel=channel_no,
-                                                                  last_channel=channel_no + 1, reader='silixa')
+                base_find_trains = BaseFindTrains.create_instance(dir_path=self.fo_data_path, first_channel=channel_no, last_channel=channel_no + 1, reader='silixa')
+
                 # Get the properties of the TDMS file
                 base_find_trains.extract_properties()
                 # Extract the data from the file and append it to the list
-                data_from_file = base_find_trains.get_data_per_file(full_file_path)
-                print(f'Extracted data from file: {full_file_path}')  # Debug print
+                data_from_file = base_find_trains.get_data_per_file(file)
+                print(f'Extracted data from file: {file}')  # Debug print
                 data.append(data_from_file)
 
             # Combine the data into a single variable and store it in the dictionary per day
@@ -183,8 +188,126 @@ class CreateDatabase:
 
         return file_dict
 
+    from collections import defaultdict
+    import numpy as np
+
+    def join_fo(self, channel_no: int = 4270):
+        # Get all the tdms file names
+        file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+
+        # Extract the timestamps from the file names
+        timestamps = extract_timestamp_from_name(file_names)
+
+        # Order the file names chronologically
+        timestamps, file_names = zip(*sorted(zip(timestamps, file_names)))
+
+        # Initialize the FindTrains class instance to get the data
+        file_instance = BaseFindTrains.create_instance(
+            dir_path=self.fo_data_path,
+            first_channel=channel_no,
+            last_channel=channel_no,
+            reader='silixa'
+        )
+
+        # Extract the properties of the TDMS file
+        file_instance.extract_properties()
+
+        # Group file names by day
+        files_by_day = defaultdict(list)
+        for timestamp, file_name in zip(timestamps, file_names):
+            date = timestamp.date()
+            files_by_day[date].append(file_name)
+
+        # Initialize the dictionary to store the data
+        all_data_by_day = {}
+
+        # Extract and concatenate data for each day
+        for day, day_file_names in files_by_day.items():
+            print(f'Processing files for {day}:', day_file_names)
+
+            # Initialize an empty list to store the data for the day
+            daily_data = []
+
+            # Loop through the file names for the day and extract the data
+            for file_name in day_file_names:
+                print(f'Processing file: {file_name}')
+                data_dict = file_instance.get_data_per_file([file_name])
+
+                # Assuming data_dict is a dictionary where values are numpy arrays
+                for key, data in data_dict.items():
+                    daily_data.append(data)
+
+            # Concatenate all data arrays for the day into a single time series
+            if daily_data:
+                all_data_by_day[day] = np.concatenate(daily_data, axis=1)
+                print(f'All data for {day}:', all_data_by_day[day])
+
+        # Return the dictionary with all concatenated data per day
+        return all_data_by_day
+
+
+def plot_timeseries(data_by_day, date_str):
+    """
+    Plots the time series for a given day based on the input string in YYYYMMDD format.
+
+    Parameters:
+    data_by_day (dict): A dictionary with dates as keys and concatenated time series as values.
+    date_str (str): The date string in YYYYMMDD format to plot the time series for.
+    """
+    # Convert the date string to a datetime.date object
+    try:
+        selected_date = datetime.strptime(date_str, '%Y%m%d').date()
+    except ValueError:
+        print("Invalid date format. Please use YYYYMMDD format.")
+        return
+
+    # Check if the date exists in the data
+    if selected_date in data_by_day:
+        time_series_data = data_by_day[selected_date]
+
+        # Debug: Print the type and contents of time_series_data
+        print(f"Data for {selected_date}:")
+        print(type(time_series_data))
+        print(time_series_data)
+
+        # Ensure the data is not empty and is a numpy array
+        if isinstance(time_series_data, np.ndarray) and time_series_data.size > 0:
+            # Check if the data is 2D and has only one row
+            if time_series_data.ndim == 2 and time_series_data.shape[0] == 1:
+                time_series_data = time_series_data[0]  # Take the first (and only) row
+
+            # Plot the time series data
+            plt.figure(figsize=(15, 3))
+            plt.plot(time_series_data)
+            plt.title(f'Time Series for {selected_date}')
+            plt.xlabel('Time')
+            plt.ylabel('Measurement')
+            plt.grid(True)
+            plt.show()
+        else:
+            print(f"No valid data available for {selected_date}")
+    else:
+        print(f"No data available for {selected_date}")
+
+
+# Example usage:
+# Assuming all_data_by_day is the dictionary returned from join_fo function
+# plot_timeseries(all_data_by_day, '20201122')  # Plot the time series for the specified date
+
+
+# Example usage:
+# Assuming all_data_by_day is the dictionary returned from join_fo function
+# plot_timeseries(all_data_by_day, '20201122')  # Plot the time series for the specified date
+
+
+# Example usage:
+# Assuming all_data_by_day is the dictionary returned from join_fo function
+# plot_timeseries(all_data_by_day, '20201122')  # Plot the time series for the specified date
+
 
 ##### TEST THE CODE ###################################################################################################
+'''
+
 
 # Define the path to the fo data
 #fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
@@ -212,5 +335,14 @@ properties = file_instance.extract_properties()
 # From the selected files, extract the data
 all_data = file_instance.get_data_per_file(file_names)
 print('All data:', all_data)
+'''
+fo_data_path = r'C:\Projects\erju\data'
+# Create database instance
+create_db = CreateDatabase(fo_data_path=fo_data_path, acc_data_path=None, logbook_path=None)
+
+fo_test = create_db.join_fo(channel_no=4270)
+
+print(fo_test)
 
 
+plot_timeseries(data_by_day=fo_test, date_str='20201111')

@@ -16,7 +16,7 @@ class SilixaFindTrains(BaseFindTrains):
         Args:
             dir_path (str): The path to the folder containing the TDMS file
             first_channel (int): The first channel to be extracted
-            last_channel (int): The last channel to be extracted
+            last_channel (int): The last channel to be extracted. ** If you want just 1 channel, set first_channel = last_channel
         """
         # Call the __init__ method of the BaseFindTrains class
         super().__init__(dir_path, first_channel, last_channel)
@@ -73,7 +73,7 @@ class SilixaFindTrains(BaseFindTrains):
         Args:
             file_name (str): The name of the file to extract the data from
             first_channel (int): The first channel to be extracted
-            last_channel (int): The last channel to be extracted
+            last_channel (int): The last channel to be extracted ** If you want just 1 channel, set first_channel = last_channel
             start_time (int): The start time of the data to be extracted
             end_time (int): The end time of the data to be extracted
             frequency (int): The sampling frequency of the data
@@ -96,7 +96,7 @@ class SilixaFindTrains(BaseFindTrains):
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
-        print('Extracting the data from file:', file_path, 'in extract_data')
+        #print('Extracting the data from file:', file_path, 'in extract_data')
 
         # Create the TDMS instance
         tdms_instance = TdmsReader(file_path)

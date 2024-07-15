@@ -221,7 +221,7 @@ class BaseFindTrains:
 
         # Loop through the selected files and extract the data
         for file_name in selected_files:
-            print(f'Extracting data from {file_name} in get_data_per_file')
+            #print(f'Extracting data from {file_name} in get_data_per_file')
             data = self.extract_data(file_name)
 
             # Resample the data if resampling is True
