@@ -191,7 +191,17 @@ class CreateDatabase:
     from collections import defaultdict
     import numpy as np
 
-    def join_fo(self, channel_no: int = 4270):
+    def join_fo_channel_per_day(self, channel_no: int = 4270):
+        """
+        Reads all the FO data files in the folder and joins the data for the given channel number per day.
+        It makes sure that the data is concatenated in chronological order.
+
+        Args:
+            channel_no (int): The channel number to join.
+
+        Returns:
+            all_data_by_day (dict): A dictionary with dates as keys and concatenated time series as values.
+        """
         # Get all the tdms file names
         file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
 
@@ -212,8 +222,9 @@ class CreateDatabase:
         # Extract the properties of the TDMS file
         file_instance.extract_properties()
 
-        # Group file names by day
+        # Group file names by day using a defaultdict which initializes an empty list for each new key
         files_by_day = defaultdict(list)
+        #
         for timestamp, file_name in zip(timestamps, file_names):
             date = timestamp.date()
             files_by_day[date].append(file_name)
@@ -340,7 +351,7 @@ fo_data_path = r'C:\Projects\erju\data'
 # Create database instance
 create_db = CreateDatabase(fo_data_path=fo_data_path, acc_data_path=None, logbook_path=None)
 
-fo_test = create_db.join_fo(channel_no=4270)
+fo_test = create_db.join_fo_channel_per_day(channel_no=4270)
 
 print(fo_test)
 
