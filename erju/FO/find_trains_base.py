@@ -70,6 +70,19 @@ class BaseFindTrains:
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
 
+    def extract_properties_per_file(self, file_name: str):
+        """
+        Extract the file properties as a dictionary for a given file in the directory.
+
+        Args:
+            file_name (str): The name of the file to extract the properties from
+
+        Returns:
+            properties (dict): The extracted properties
+        """
+        # If the file_name is None, raise a ValueError, else the reader method will be called
+        raise NotImplementedError('Subclass must implement abstract method')
+
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
         """

@@ -23,8 +23,9 @@ class SilixaFindTrains(BaseFindTrains):
 
     def extract_properties(self):
         """
-        Extract the file properties and the measurement data
-        as a dictionary and an array respectively
+        Extract the file properties as a dictionary. In this function this is done only
+        for the first file in the directory, because all files have ~ALMOST the same properties.
+        If you need specific properties for each file, you can use the extract_properties_per_file function.
 
         Args:
             None
@@ -38,6 +39,7 @@ class SilixaFindTrains(BaseFindTrains):
         tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
         # Get the first file name
         # We choose the first file because all files have the same properties, thus it doesn't matter
+        #TODO: Now it matters, I need to use the initial time of each file...
         file_name = tdms_files[0]
 
         # Construct the full file path
@@ -64,6 +66,32 @@ class SilixaFindTrains(BaseFindTrains):
         self.properties = properties
 
         return properties
+
+    def extract_properties_per_file(self, file_name: str):
+        """
+        Extract the file properties as a dictionary for a given file. Note that this function is different
+        from the extract_properties function, because it does not add the additional manually calculated properties.
+        Those are only added in the extract_properties function.
+
+        Args:
+            file_name (str): The name of the file to extract the properties from
+
+        Returns:
+            properties (dict): The extracted properties
+        """
+        # From the file name build the full file path
+        file_path = os.path.join(self.dir_path, file_name)
+
+        # Create the TDMS instance
+        tdms_instance = TdmsReader(file_path)
+        # Get the properties of the TDMS file
+        properties = tdms_instance.get_properties()
+
+        return properties
+
+
+
+
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
