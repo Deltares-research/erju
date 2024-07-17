@@ -57,6 +57,7 @@ class BaseFindTrains:
         else:
             raise ValueError(f'Invalid reader: {reader}')
 
+
     def extract_properties(self, file_name: str = None):
         """
         Extract the file properties and the measurement data as a dictionary and an array respectively
@@ -69,6 +70,7 @@ class BaseFindTrains:
         """
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
+
 
     def extract_properties_per_file(self, file_name: str):
         """
@@ -83,6 +85,7 @@ class BaseFindTrains:
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
 
+
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
         """
@@ -96,6 +99,7 @@ class BaseFindTrains:
         """
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
+
 
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """
@@ -118,6 +122,7 @@ class BaseFindTrains:
         end_time = round(measurement_time * end_rate)
         return start_time, end_time
 
+
     def search_params(self):
         """
         Define the middle of the domain, the time window
@@ -139,6 +144,7 @@ class BaseFindTrains:
         start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
 
         return scan_channel, start_time, end_time
+
 
     def signal_averaging(self, plot: bool = False, save_to_path: str = None):
         """
@@ -191,6 +197,7 @@ class BaseFindTrains:
 
         return mean_signal
 
+
     def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
@@ -211,6 +218,7 @@ class BaseFindTrains:
             tdms_files, mean_signal) if mean_value >= threshold]
 
         return selected_files
+
 
     def get_data_per_file(self, selected_files: list, resample: bool = False, new_n_channels=None,
                           new_sampling_frequency=None):
@@ -245,6 +253,7 @@ class BaseFindTrains:
             all_selected_data[file_name] = data
 
         return all_selected_data
+
 
     def get_data_with_window(self, file_name: str, window_before: int, window_after: int,
                              resample: bool = False, new_n_channels=None, new_sampling_frequency=None):
@@ -314,6 +323,7 @@ class BaseFindTrains:
             signal_data = np.concatenate((signal_data, data), axis=1)
 
         return signal_data
+
 
     def save_txt_with_file_names(self, save_to_path: str, selected_files: list, file_names: list,
                                  include_indexes: bool = True):
@@ -411,6 +421,7 @@ class BaseFindTrains:
             save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
         plt.close()
+
 
     def resample_data(self, data: np.array, new_n_channels: int = None, new_sampling_frequency: int = None):
         """

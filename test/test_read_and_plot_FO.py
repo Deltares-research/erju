@@ -8,8 +8,8 @@ from utils.utils import get_files_in_dir
 ##### USER INPUT #######################################################################################################
 
 # Define the path to the TDMS file
-#dir_path = r'C:\Projects\erju\data'
-dir_path = r'D:\FO_culemborg_20112020\subset'
+dir_path = r'C:\Projects\erju\data\just1'
+#dir_path = r'D:\FO_culemborg_20112020\subset'
 
 # Define the path to save the figures
 save_to_path = r'C:\Projects\erju\test\test_output'
@@ -52,7 +52,7 @@ file_cul_instance.save_txt_with_file_names(save_to_path=save_to_path, selected_f
                                            file_names=file_names, include_indexes=True)
 
 # From the selected files, extract the data
-all_data = file_cul_instance.get_data_per_file(selected_files, resample=True, new_sampling_frequency=100)
+all_data = file_cul_instance.get_data_per_file(file_names)
 
 # Stop the timer
 stop_timer = time.time()
