@@ -1,14 +1,13 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 from datetime import timedelta
 
-from erju.Accel.create_data_windows import AccelDataTimeWindows
-from erju.FO.find_trains_base import BaseFindTrains
+from erju.create_accel_windows import AccelDataTimeWindows
+from erju.find_trains_base import BaseFindTrains
 from utils.utils import get_files_in_dir, extract_timestamp_from_name
-from collections import defaultdict
 from matplotlib.dates import DateFormatter
+
 
 class CreateDatabase:
     """
@@ -67,13 +66,13 @@ class CreateDatabase:
         accel_data_df = accel_windows.extract_accel_data_from_file(file_name=file_names[0], no_cols=3)
 
         # Detect the events using the STA/LTA method
-        nsta = int(nsta * 1000) # convert to seconds with a fz of 1000 Hz
-        nlta = int(nlta * 1000) # convert to seconds with a fz of 1000 Hz
+        nsta = int(nsta * 1000)  # convert to seconds with a fz of 1000 Hz
+        nlta = int(nlta * 1000)  # convert to seconds with a fz of 1000 Hz
         self.window_indices, self.window_times = accel_windows.detect_events_with_sta_lta(accel_data=accel_data_df,
-                                                                                nsta=nsta,
-                                                                                nlta=nlta,
-                                                                                trigger_on=trigger_on,
-                                                                                trigger_off=trigger_off)
+                                                                                          nsta=nsta,
+                                                                                          nlta=nlta,
+                                                                                          trigger_on=trigger_on,
+                                                                                          trigger_off=trigger_off)
 
         # Return
         return self.window_indices, self.window_times
@@ -99,7 +98,6 @@ class CreateDatabase:
         self.database['dt'] = self.database['end_time'] - self.database['start_time']
 
         return self.database
-
 
     def from_windows_get_fo_signal(self):
         """
@@ -135,6 +133,85 @@ class CreateDatabase:
             self.database.at[index, 'files'] = ', '.join(matching_files)
 
         return self.database
+
+    def from_acc_windows_get_fo_files(self, file_name: str, nsta: int = 1, nlta: int = 8):
+        """
+        This function open a given accelerometer file .asc and extract the data from it. Then it uses the sta/lta
+        method to calculate the event time windows (filtered with the logbook) and then for each time window
+        it finds the corresponding FO files that match the time window. To account for missmatch in the times
+        between accel and fo, a buffer of 35 seconds is added before and after the start and end time of the window.
+
+        Args:
+            file_name (str): The name of the accelerometer file to extract the data from.
+            nsta (int): The length of the average short time average window in seconds.
+            nlta (int): The length of the average long time average window in seconds.
+
+        Returns:
+            file_names_per_window (list): A list of lists containing the file names for each time window.
+            accel_windows_times (list): A list of tuples containing the start and end times of the time windows.
+        """
+        # With the accelerometer data path, create the AccelDataTimeWindows instance
+        accel_windows = AccelDataTimeWindows(accel_data_path=self.acc_data_path,
+                                             logbook_path=self.logbook_path)
+
+        # Extract the accelerometer data from the file with default number of columns (3)
+        accel_data = accel_windows.extract_accel_data_from_file(file_name=file_name)
+
+
+        # Scale the nsta and nlta to seconds
+        nsta = int(nsta * 1000)  # convert to seconds with a fz of 1000 Hz
+        nlta = int(nlta * 1000)  # convert to seconds with a fz of 1000 Hz
+        # Create the windows indices and times with the sta/lta method
+        accel_windows_indices, accel_windows_times = accel_windows.detect_events_with_sta_lta(accel_data=accel_data,
+                                                                                  nsta=nsta,
+                                                                                  nlta=nlta,
+                                                                                  trigger_on=1.5,
+                                                                                  trigger_off=1)
+
+        # Filter the accelerometer windows with the logbook
+        accel_windows_indices, accel_windows_times = accel_windows.filter_windows_with_logbook(time_buffer=15,
+                                                                                                    window_indices=accel_windows_indices,
+                                                                                                    window_times=accel_windows_times)
+
+        # Get the list of all the file names in format .tdms in the fo folder
+        fo_file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+
+        # Extract the timestamps from the file names
+        fo_timestamps = extract_timestamp_from_name(fo_file_names)
+
+        # Initialize an empty list to store the file names for each time window
+        file_names_per_window = []
+
+        # Loop through the windows and find the files that match the time window
+        for window_index, window_time in enumerate(accel_windows_times):
+            # Get the start and end time of the window
+            start_time = window_time[0]
+            end_time = window_time[1]
+            # Add a buffer before and after the start and end time
+            # We use 35 seconds to be a bit over a fo file length
+            start_time = start_time - timedelta(seconds=35)
+            end_time = end_time + timedelta(seconds=35)
+
+            # Initialize a list to hold the files that match the time window
+            matching_files = []
+
+            # Loop through the timestamps and find the ones that fit within the start and end time
+            for i, timestamp in enumerate(fo_timestamps):
+                # Ensure the timestamp is a pandas Timestamp object
+                if isinstance(timestamp, datetime):
+                    timestamp = pd.Timestamp(timestamp)
+
+
+                if start_time <= timestamp <= end_time:
+                    # Get the file name
+                    file_name = fo_file_names[i]
+                    # Append the file name to the list of matching files
+                    matching_files.append(file_name)
+
+            # Append the matching files to the list of file names per window
+            file_names_per_window.append(matching_files)
+
+        return file_names_per_window, accel_windows_times
 
 
     def get_fo_data(self, channel_no: int = 4270):
@@ -200,9 +277,6 @@ class CreateDatabase:
         return data_df
 
 
-
-
-
 def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
     """
     Plots the data for a given date.
@@ -236,49 +310,29 @@ def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
 
     plt.show()
 
+
 # Example usage:
 # Assuming data_df is your DataFrame and you want to plot data for '2023-07-15'
 # plot_data_for_date(data_df, '2023-07-15')
 
 
-
 ##### TEST THE CODE ###################################################################################################
-'''
-
-
-# Define the path to the fo data
-#fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
-fo_data_path = r'D:\RAIL4EARTH_PROJECT\DAS_DATA'
-
-# Get all the tdms file names
-file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
-print('File names: ', file_names)
-
-# Extract the timestamps from the file names
-timestamps = extract_timestamp_from_name(file_names)
-
-# Order the file names chronographically
-timestamps, file_names = zip(*sorted(zip(timestamps, file_names)))
-print('Ordered file names:', file_names)
-
-# Get the data of the first file
-first_file = file_names[0]
-
-# Initialize the FindTrains class instance
-file_instance = BaseFindTrains.create_instance(dir_path=fo_data_path, first_channel=4270, last_channel=4271, reader='silixa')
-# Extract the properties of the TDMS file
-properties = file_instance.extract_properties()
-
-# From the selected files, extract the data
-all_data = file_instance.get_data_per_file(file_names)
-print('All data:', all_data)
-'''
-
-
-fo_data_path = r'C:\Projects\erju\data'
+# Define the paths to the FO and accelerometer data
+fo_data_path = r'C:\Projects\erju\data\fo_data'
+acc_data_path = r'C:\Projects\erju\data\accel_data'
+logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
 
 # Create an instance of the CreateDatabase class
-database = CreateDatabase(fo_data_path=fo_data_path, acc_data_path=None, logbook_path=None)
+database = CreateDatabase(fo_data_path=fo_data_path,
+                          acc_data_path=acc_data_path,
+                          logbook_path=logbook_path)
+
+# Get the accelerometer file names in the folder
+accel_file_names = get_files_in_dir(folder_path=acc_data_path, file_format='.asc', keep_extension=False)
+
+# Get the fo file names per accelerometer data window
+file_names_per_window, accel_window_times = database.from_accel_windows_get_file_names(file_name=accel_file_names[1])
+
 # Get the data for channel 4270
 data = database.get_fo_data(channel_no=4270)
 
@@ -288,4 +342,3 @@ plot_data_for_date(data_df=data, date_str='2020-11-22')
 plot_data_for_date(data_df=data, date_str='2020-11-20')
 # Plot the data
 plot_data_for_date(data_df=data, date_str='2020-11-11')
-

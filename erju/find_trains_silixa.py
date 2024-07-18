@@ -2,7 +2,7 @@ import os
 import numpy as np
 
 from utils.TDMS_Read import TdmsReader
-from erju.FO.find_trains_base import BaseFindTrains
+from erju.find_trains_base import BaseFindTrains
 
 class SilixaFindTrains(BaseFindTrains):
     """

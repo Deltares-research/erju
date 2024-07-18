@@ -46,12 +46,12 @@ class BaseFindTrains:
         # If reader is 'silixa', use the SilixaFindTrains class
         if reader == 'silixa':
             # Import the SilixaFindTrains class here to avoid circular import
-            from erju.FO.find_trains_silixa import SilixaFindTrains
+            from erju.find_trains_silixa import SilixaFindTrains
             return SilixaFindTrains(dir_path, first_channel, last_channel)
         # If reader is 'nptdms', use the NptdmsFindTrains class
         elif reader == 'nptdms':
             # Import the NptdmsFindTrains class here to avoid circular import
-            from erju.FO.find_trains_nptdms import NptdmsFindTrains
+            from erju.find_trains_nptdms import NptdmsFindTrains
             return NptdmsFindTrains(dir_path, first_channel, last_channel)
         # If reader is not 'silixa' or 'nptdms', raise a ValueError
         else:

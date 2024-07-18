@@ -1,7 +1,7 @@
 import time
 
 from utils.plot_FO_data import PlotData
-from erju.FO.find_trains_base import BaseFindTrains
+from erju.find_trains_base import BaseFindTrains
 
 from utils.utils import get_files_in_dir
 

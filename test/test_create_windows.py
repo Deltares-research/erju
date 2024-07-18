@@ -1,5 +1,5 @@
 import unittest
-from erju.Accel.create_data_windows import AccelDataTimeWindows
+from erju.create_accel_windows import AccelDataTimeWindows
 from utils.utils import get_files_in_dir, join_fo_channel_per_day
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -52,7 +52,7 @@ class TestAccelAnalysis(unittest.TestCase):
         # Display the plots
         plt.show()
 
-        filtered_window_indices, filteres_window_times = self.time_windows.filter_windows_with_logbook(time_buffer=15,
+        filtered_window_indices, filtered_window_times = self.time_windows.filter_windows_with_logbook(time_buffer=15,
                                                       window_indices=windows_indices_sta_lta,
                                                       window_times=windows_times_sta_lta)
 
