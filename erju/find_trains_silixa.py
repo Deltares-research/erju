@@ -45,7 +45,7 @@ class SilixaFindTrains(BaseFindTrains):
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
-        print('Extracting the properties...')
+        #print('Extracting the properties...')
         tdms_instance = TdmsReader(file_path)
         # Get the properties of the TDMS file
         properties = tdms_instance.get_properties()

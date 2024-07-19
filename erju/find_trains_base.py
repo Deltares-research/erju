@@ -120,6 +120,7 @@ class BaseFindTrains:
         # Calculate the start and end times
         start_time = round(measurement_time * start_rate)
         end_time = round(measurement_time * end_rate)
+
         return start_time, end_time
 
 

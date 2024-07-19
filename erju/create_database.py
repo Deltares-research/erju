@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -34,6 +35,7 @@ class CreateDatabase:
         self.window_indices = None
         self.window_times = None
         self.database = None
+
 
     def from_accel_get_windows(self, window_buffer: int = 10, threshold: float = 0.02, nsta: float = 0.5,
                                nlta: float = 5.0, trigger_on: float = 7, trigger_off: float = 1):
@@ -77,6 +79,7 @@ class CreateDatabase:
         # Return
         return self.window_indices, self.window_times
 
+
     def from_windows_get_times(self):
         """
         Using the windows found with from_accel_get_windows, create a database with the start and end times.
@@ -98,6 +101,7 @@ class CreateDatabase:
         self.database['dt'] = self.database['end_time'] - self.database['start_time']
 
         return self.database
+
 
     def from_windows_get_fo_signal(self):
         """
@@ -134,7 +138,20 @@ class CreateDatabase:
 
         return self.database
 
-    def from_acc_windows_get_fo_files(self, file_name: str, nsta: int = 1, nlta: int = 8):
+
+
+
+
+
+
+    # The previous 3 functions look like I dont use anymore. Keep them there in case I do need them later.
+    # From here on out, I will use the following functions to create the database.
+
+
+
+
+
+    def get_window_times_and_fo_files(self, file_name: str, nsta: int = 1, nlta: int = 8):
         """
         This function open a given accelerometer file .asc and extract the data from it. Then it uses the sta/lta
         method to calculate the event time windows (filtered with the logbook) and then for each time window
@@ -157,10 +174,10 @@ class CreateDatabase:
         # Extract the accelerometer data from the file with default number of columns (3)
         accel_data = accel_windows.extract_accel_data_from_file(file_name=file_name)
 
-
         # Scale the nsta and nlta to seconds
         nsta = int(nsta * 1000)  # convert to seconds with a fz of 1000 Hz
         nlta = int(nlta * 1000)  # convert to seconds with a fz of 1000 Hz
+
         # Create the windows indices and times with the sta/lta method
         accel_windows_indices, accel_windows_times = accel_windows.detect_events_with_sta_lta(accel_data=accel_data,
                                                                                   nsta=nsta,
@@ -192,21 +209,11 @@ class CreateDatabase:
             start_time = start_time - timedelta(seconds=35)
             end_time = end_time + timedelta(seconds=35)
 
-            # Initialize a list to hold the files that match the time window
-            matching_files = []
-
-            # Loop through the timestamps and find the ones that fit within the start and end time
-            for i, timestamp in enumerate(fo_timestamps):
-                # Ensure the timestamp is a pandas Timestamp object
-                if isinstance(timestamp, datetime):
-                    timestamp = pd.Timestamp(timestamp)
-
-
-                if start_time <= timestamp <= end_time:
-                    # Get the file name
-                    file_name = fo_file_names[i]
-                    # Append the file name to the list of matching files
-                    matching_files.append(file_name)
+            # Find matching files within the time window
+            matching_files = [
+                fo_file_names[i] for i, timestamp in enumerate(fo_timestamps)
+                if start_time <= timestamp <= end_time
+            ]
 
             # Append the matching files to the list of file names per window
             file_names_per_window.append(matching_files)
@@ -214,7 +221,7 @@ class CreateDatabase:
         return file_names_per_window, accel_windows_times
 
 
-    def get_fo_data(self, channel_no: int = 4270):
+    def extract_and_join_fo_data(self, fo_file_names:str, channel_no: int = 4270):
         """
         This function uses the BaseFindTrains class to extract the data from the FO files.
         It uses the get_data_per_file method to extract the data from each file and store it in a
@@ -226,7 +233,8 @@ class CreateDatabase:
         """
         # The FO data path is already defined in the CreateDatabase class instance
         # Get the list of file names in the FO data path
-        file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+        #file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+        file_names = fo_file_names
 
         # Create an instance of the BaseFindTrains class to extract the data
         file_instance = BaseFindTrains.create_instance(dir_path=self.fo_data_path,
@@ -245,7 +253,7 @@ class CreateDatabase:
 
         # Loop through the files and extract the data
         for file in file_names:
-            print(f'Processing file: {file}')
+            #print(f'Processing file: {file}')
 
             # Extract the data from the file
             signal_data_dict = file_instance.get_data_per_file([file])
@@ -275,6 +283,59 @@ class CreateDatabase:
         data_df = pd.concat(dataframes, ignore_index=True)
 
         return data_df
+
+
+    def create_database(self, channel_no: int = 4270):
+        """
+        This function creates a DataFrame with the data from the FO signals
+        and time windows extracted from accelerometer files.
+        """
+        # Create an empty list to collect all data rows
+        all_data = []
+
+        # Get the name of all the accelerometer files in the accelerometer folder
+        accel_file_names = get_files_in_dir(folder_path=self.acc_data_path, file_format='.asc', keep_extension=False)
+
+        # Loop through the accelerometer files one at a time and get the time windows to later extract the FO data
+        for accel_file in accel_file_names:
+            # Get the time windows and the FO files for each time window
+            file_names_per_window, accel_window_times = self.get_window_times_and_fo_files(file_name=accel_file)
+
+            # Loop through the accel window times, join the FO data and extract the signal according to the time window
+            for i, window in enumerate(accel_window_times):
+                # Check if file_names_per_window is empty
+                if not file_names_per_window[i]:
+                    print(f"No FO data available for window {i}")
+                    continue
+
+                # Join the selected list of FO data
+                fo_data_df = self.extract_and_join_fo_data(fo_file_names=file_names_per_window[i],
+                                                           channel_no=channel_no)
+                # Get the start and end time of the window
+                start_time = window[0]
+                end_time = window[1]
+
+                # Extract rows within the time window
+                window_data = fo_data_df[(fo_data_df['time'] >= start_time) & (fo_data_df['time'] <= end_time)].copy()
+
+                if window_data.empty:
+                    print(f"No FO data within the time window for {accel_file} window {i}")
+                    continue
+
+                # Add initial time and end time columns to the dataframe
+                window_data['initial_time'] = start_time
+                window_data['end_time'] = end_time
+                window_data['accel_file'] = accel_file
+                window_data['window_index'] = i
+
+                # Append data to the list
+                all_data.append(window_data)
+
+        # Combine all data into a single DataFrame
+        combined_df = pd.concat(all_data, ignore_index=True)
+
+        # Return the DataFrame
+        return combined_df
 
 
 def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
@@ -327,18 +388,22 @@ database = CreateDatabase(fo_data_path=fo_data_path,
                           acc_data_path=acc_data_path,
                           logbook_path=logbook_path)
 
+df = database.create_database(channel_no=4270)
+print(df)
+
+
 # Get the accelerometer file names in the folder
-accel_file_names = get_files_in_dir(folder_path=acc_data_path, file_format='.asc', keep_extension=False)
+#accel_file_names = get_files_in_dir(folder_path=acc_data_path, file_format='.asc', keep_extension=False)
 
 # Get the fo file names per accelerometer data window
-file_names_per_window, accel_window_times = database.from_accel_windows_get_file_names(file_name=accel_file_names[1])
+#file_names_per_window, accel_window_times = database.get_window_times_and_fo_files(file_name=accel_file_names[1])
 
 # Get the data for channel 4270
-data = database.get_fo_data(channel_no=4270)
+#data = database.extract_and_join_fo_data(channel_no=4270)
 
 # Plot the data
-plot_data_for_date(data_df=data, date_str='2020-11-22')
+#plot_data_for_date(data_df=data, date_str='2020-11-22')
 # Plot the data
-plot_data_for_date(data_df=data, date_str='2020-11-20')
+#plot_data_for_date(data_df=data, date_str='2020-11-20')
 # Plot the data
-plot_data_for_date(data_df=data, date_str='2020-11-11')
+#plot_data_for_date(data_df=data, date_str='2020-11-11')
