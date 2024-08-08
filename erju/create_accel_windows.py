@@ -397,8 +397,7 @@ class AccelDataTimeWindows():
                 closest_window = min(windows, key=lambda x: abs((x[1][0] - logbook_time).total_seconds()))
                 final_filtered_windows_indices.append(closest_window[0])
                 final_filtered_windows_times.append(closest_window[1])
-                print(
-                    f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
+                #print(f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
 
         # Print the number of windows after filtering
         print(f"Number of windows before filtering: {len(window_indices)}")

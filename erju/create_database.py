@@ -381,7 +381,7 @@ class CreateDatabase:
         # Loop through the accelerometer files one at a time
         for accel_file in accel_file_names:
             # Print the current file being processed
-            print(f"Processing file: {accel_file} ................................................................")
+            print(f"Processing file: {accel_file} ....................................................................")
 
             # Get accelerometer time windows and indices for a specific file
             accel_window_indices, accel_window_times = self.extract_accel_windows(file_name=accel_file)
