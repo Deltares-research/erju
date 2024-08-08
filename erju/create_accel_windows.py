@@ -58,9 +58,6 @@ class AccelDataTimeWindows():
         # Extract the settings for this file and store them in self.settings
         self.extract_settings(file_name)
 
-        # Debug print to check settings
-        print(f"Settings: {self.settings}")
-
         # Create the file path by adding the file name and the .asc extension
         file_path = os.path.join(self.accel_data_path, file_name + '.asc')
 
@@ -142,7 +139,7 @@ class AccelDataTimeWindows():
 
         # Store the settings for this file in the settings dictionary
         self.settings["set_" + file_name] = file_settings
-        print(f"Settings for {file_name} stored successfully")
+        #print(f"Settings for {file_name} stored successfully")
 
         return self.settings
 
@@ -216,6 +213,7 @@ class AccelDataTimeWindows():
             windows_indices (list): A list of tuples containing the start and end indices of each window
             windows_times (list): A list of tuples containing the start and end times of each window
         """
+
         # Combine the accelerometer signals
         combined_signal = accel_data.iloc[:, 1:].sum(axis=1).values
 
@@ -242,9 +240,9 @@ class AccelDataTimeWindows():
             windows_times.append((start_time, end_time))
 
 
-        print(f"Windows indices: {windows_indices}")
-        print(f"Windows times: {windows_times}")
-        print(f"Number of windows: {len(windows_indices)}")
+        #print(f"Windows indices: {windows_indices}")
+        #print(f"Windows times: {windows_times}")
+        #print(f"Number of windows with sta/lta: {len(windows_indices)}")
 
         return windows_indices, windows_times
 
@@ -350,66 +348,60 @@ class AccelDataTimeWindows():
         # Create a list to keep track of used logbook times and their corresponding windows
         used_logbook_times = []
 
+        # Initialize a counter for the number of windows processed
+        total_windows_processed = 0
+
         # Loop through the windows and check if they fall within the logbook times
         for window_index, window_time in zip(window_indices, window_times):
+            # Increment the counter for each window processed
+            total_windows_processed += 1
+
             # Get the start and end times of the window
             start_time, end_time = window_time
             # Compute the extended start and end times by adding the buffer
             extended_start_time = start_time - time_buffer
             extended_end_time = end_time + time_buffer
 
-            # Loop through the logbook times and find if any time fits inside the window
+            # Check if any logbook time fits inside the extended window times
+            matched = False
             for logbook_time in logbook['datetime']:
-                # Check if the logbook time is within the extended window times
                 if extended_start_time <= logbook_time <= extended_end_time:
                     # If a logbook time is found, add the window to the filtered list
                     filtered_windows_indices.append(window_index)
                     filtered_windows_times.append(window_time)
                     # Also add the logbook time, window index, and window time to the used logbook times list
                     used_logbook_times.append((logbook_time, window_index, window_time))
-                    print(
-                        f"{window_time} matches logbook time {logbook_time} within extended window {extended_start_time}, {extended_end_time}")
+                    matched = True
                     break
+
+            if matched:
+                print(f"Match: YES --> {total_windows_processed}/{len(window_indices)}")
             else:
-                # If no logbook time fits the window, print a message
-                print(f"No time fits the window {window_time}")
+                print(f"Match: NO --> {total_windows_processed}/{len(window_indices)}")
 
         # Check for repeated times in the used logbook times list
-        # Create a dictionary to store the used logbook times and their corresponding windows
         used_logbook_dict = {}
-        # Loop through the used logbook times and add them to the dictionary
         for logbook_time, window_index, window_time in used_logbook_times:
-            # If the logbook time is not in the dictionary, add it
             if logbook_time not in used_logbook_dict:
-                # Create a list to store the windows associated with this logbook time
                 used_logbook_dict[logbook_time] = []
-            # Add the window index and time to the list
             used_logbook_dict[logbook_time].append((window_index, window_time))
 
         # Create lists to store the filtered windows without repeated logbook times
         final_filtered_windows_indices, final_filtered_windows_times = [], []
 
-        # Loop through the used logbook dictionary and filter the windows
         for logbook_time, windows in used_logbook_dict.items():
-            # If only one window is associated with this logbook time, keep it
             if len(windows) == 1:
-                # Add the window index and time to the final filtered lists
                 final_filtered_windows_indices.append(windows[0][0])
                 final_filtered_windows_times.append(windows[0][1])
-            # If multiple windows are associated with this logbook time, find the one with the closest start time
             else:
-                # Find the window with the closest start time to the logbook time
                 closest_window = min(windows, key=lambda x: abs((x[1][0] - logbook_time).total_seconds()))
-                # Add the window index and time to the final filtered lists
                 final_filtered_windows_indices.append(closest_window[0])
                 final_filtered_windows_times.append(closest_window[1])
-                # Print a message about the repeated logbook time
                 print(
                     f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
 
-        # Print the final filtered windows indices and times
-        #print(f"Filtered windows indices: {final_filtered_windows_indices}")
-        #print(f"Filtered windows times: {final_filtered_windows_times}")
-        #print(f"Length of filtered windows: {len(final_filtered_windows_indices)}")
+        # Print the number of windows after filtering
+        print(f"Number of windows before filtering: {len(window_indices)}")
+        print(f"Number of windows after filtering: {len(final_filtered_windows_indices)}")
 
         return final_filtered_windows_indices, final_filtered_windows_times

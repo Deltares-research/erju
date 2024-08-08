@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 from datetime import timedelta
+import pickle
 
 from erju.create_accel_windows import AccelDataTimeWindows
 from erju.find_trains_base import BaseFindTrains
@@ -148,15 +149,9 @@ class CreateDatabase:
     # From here on out, I will use the following functions to create the database.
 
 
-
-
-
-    def get_window_times_and_fo_files(self, file_name: str, nsta: int = 1, nlta: int = 8):
+    def extract_accel_windows(self, file_name: str, nsta: int = 1, nlta: int = 8):
         """
-        This function open a given accelerometer file .asc and extract the data from it. Then it uses the sta/lta
-        method to calculate the event time windows (filtered with the logbook) and then for each time window
-        it finds the corresponding FO files that match the time window. To account for missmatch in the times
-        between accel and fo, a buffer of 35 seconds is added before and after the start and end time of the window.
+        Extracts time windows and indices from the accelerometer data using the STA/LTA method.
 
         Args:
             file_name (str): The name of the accelerometer file to extract the data from.
@@ -164,8 +159,8 @@ class CreateDatabase:
             nlta (int): The length of the average long time average window in seconds.
 
         Returns:
-            file_names_per_window (list): A list of lists containing the file names for each time window.
-            accel_windows_times (list): A list of tuples containing the start and end times of the time windows.
+            accel_windows_indices (list): Indices of detected events.
+            accel_windows_times (list): Start and end times of detected events.
         """
         # With the accelerometer data path, create the AccelDataTimeWindows instance
         accel_windows = AccelDataTimeWindows(accel_data_path=self.acc_data_path,
@@ -174,40 +169,53 @@ class CreateDatabase:
         # Extract the accelerometer data from the file with default number of columns (3)
         accel_data = accel_windows.extract_accel_data_from_file(file_name=file_name)
 
-        # Scale the nsta and nlta to seconds
-        nsta = int(nsta * 1000)  # convert to seconds with a fz of 1000 Hz
-        nlta = int(nlta * 1000)  # convert to seconds with a fz of 1000 Hz
+        # Scale the nsta and nlta to milliseconds
+        nsta = int(nsta * 1000)  # convert to milliseconds
+        nlta = int(nlta * 1000)  # convert to milliseconds
 
-        # Create the windows indices and times with the sta/lta method
-        accel_windows_indices, accel_windows_times = accel_windows.detect_events_with_sta_lta(accel_data=accel_data,
-                                                                                  nsta=nsta,
-                                                                                  nlta=nlta,
-                                                                                  trigger_on=1.5,
-                                                                                  trigger_off=1)
+        # Create the accelerometer windows indices and times with the STA/LTA method
+        accel_windows_indices, accel_windows_times = accel_windows.detect_events_with_sta_lta(
+            accel_data=accel_data,
+            nsta=nsta,
+            nlta=nlta,
+            trigger_on=1.5,
+            trigger_off=1
+        )
 
         # Filter the accelerometer windows with the logbook
-        accel_windows_indices, accel_windows_times = accel_windows.filter_windows_with_logbook(time_buffer=15,
-                                                                                                    window_indices=accel_windows_indices,
-                                                                                                    window_times=accel_windows_times)
+        accel_windows_indices, accel_windows_times = accel_windows.filter_windows_with_logbook(
+            time_buffer=15,
+            window_indices=accel_windows_indices,
+            window_times=accel_windows_times
+        )
 
-        # Get the list of all the file names in format .tdms in the fo folder
+        return accel_windows_indices, accel_windows_times
+
+    def find_matching_fo_files(self, accel_windows_times, buffer_seconds=35):
+        """
+        Finds the FO files that match the given time windows with a specified buffer.
+
+        Args:
+            accel_windows_times (list): Start and end times of detected events.
+            buffer_seconds (int): Buffer time in seconds before and after each window.
+
+        Returns:
+            fo_file_names_per_window (list): List of lists containing file names for each time window.
+        """
+        # Get the list of all the file names in the FO folder
         fo_file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
 
         # Extract the timestamps from the file names
         fo_timestamps = extract_timestamp_from_name(fo_file_names)
 
         # Initialize an empty list to store the file names for each time window
-        file_names_per_window = []
+        fo_file_names_per_window = []
 
         # Loop through the windows and find the files that match the time window
-        for window_index, window_time in enumerate(accel_windows_times):
+        for window_time in accel_windows_times:
             # Get the start and end time of the window
-            start_time = window_time[0]
-            end_time = window_time[1]
-            # Add a buffer before and after the start and end time
-            # We use 35 seconds to be a bit over a fo file length
-            start_time = start_time - timedelta(seconds=35)
-            end_time = end_time + timedelta(seconds=35)
+            start_time = window_time[0] - timedelta(seconds=buffer_seconds)
+            end_time = window_time[1] + timedelta(seconds=buffer_seconds)
 
             # Find matching files within the time window
             matching_files = [
@@ -216,10 +224,9 @@ class CreateDatabase:
             ]
 
             # Append the matching files to the list of file names per window
-            file_names_per_window.append(matching_files)
+            fo_file_names_per_window.append(matching_files)
 
-        return file_names_per_window, accel_windows_times
-
+        return fo_file_names_per_window
 
     def extract_and_join_fo_data(self, fo_file_names:str, channel_no: int = 4270):
         """
@@ -228,8 +235,11 @@ class CreateDatabase:
         dataframe with columns TIME and SIGNAL.
 
         Args:
-        channel_no (int): The channel number to extract the data for. If you just want to extract data from one channel,
-        use the same channel number for first_channel and last_channel when creating the BaseFindTrains instance.
+            fo_file_names (list): The list of file names to extract the data from.
+            channel_no (int): The channel number to extract the data from.
+
+        Returns:
+            data_df (pd.DataFrame): The DataFrame containing the time and signal data.
         """
         # The FO data path is already defined in the CreateDatabase class instance
         # Get the list of file names in the FO data path
@@ -241,6 +251,7 @@ class CreateDatabase:
                                                        first_channel=channel_no,
                                                        last_channel=channel_no,
                                                        reader='silixa')
+
         # Get the properties in general for the instance
         file_instance.extract_properties()
         sampling_frequency = file_instance.properties['SamplingFrequency[Hz]']
@@ -289,6 +300,12 @@ class CreateDatabase:
         """
         This function creates a DataFrame with the data from the FO signals
         and time windows extracted from accelerometer files.
+
+        Args:
+            channel_no (int): The channel number of interest from which all fo data is extracted.
+
+        Returns:
+            combined_df (pd.DataFrame): The DataFrame containing the aggregated data.
         """
         # Create an empty list to collect all data rows
         all_data = []
@@ -299,17 +316,18 @@ class CreateDatabase:
         # Loop through the accelerometer files one at a time and get the time windows to later extract the FO data
         for accel_file in accel_file_names:
             # Get the time windows and the FO files for each time window
-            file_names_per_window, accel_window_times = self.get_window_times_and_fo_files(file_name=accel_file)
+            accel_window_indices, accel_window_times = self.extract_accel_windows(file_name=accel_file)
+            fo_file_names_per_window = self.find_matching_fo_files(accel_window_times)
 
             # Loop through the accel window times, join the FO data and extract the signal according to the time window
             for i, window in enumerate(accel_window_times):
-                # Check if file_names_per_window is empty
-                if not file_names_per_window[i]:
+                # Check if fo_file_names_per_window is empty
+                if not fo_file_names_per_window[i]:
                     print(f"No FO data available for window {i}")
                     continue
 
                 # Join the selected list of FO data
-                fo_data_df = self.extract_and_join_fo_data(fo_file_names=file_names_per_window[i],
+                fo_data_df = self.extract_and_join_fo_data(fo_file_names=fo_file_names_per_window[i],
                                                            channel_no=channel_no)
                 # Get the start and end time of the window
                 start_time = window[0]
@@ -322,20 +340,100 @@ class CreateDatabase:
                     print(f"No FO data within the time window for {accel_file} window {i}")
                     continue
 
-                # Add initial time and end time columns to the dataframe
-                window_data['initial_time'] = start_time
-                window_data['end_time'] = end_time
-                window_data['accel_file'] = accel_file
-                window_data['window_index'] = i
+                # Convert the FO data for the window into a single cell (e.g., list of dictionaries)
+                # Optionally, you can also convert to a string representation if needed
+                aggregated_fo_data = window_data.to_dict(orient='records')
 
-                # Append data to the list
-                all_data.append(window_data)
+                # Create a new DataFrame for the aggregated data
+                aggregated_df = pd.DataFrame({
+                    'initial_time': [start_time],
+                    'end_time': [end_time],
+                    'accel_file': [accel_file],
+                    'window_index': [i],
+                    'fo_data': [aggregated_fo_data]
+                })
+
+                # Append the aggregated DataFrame to the list
+                all_data.append(aggregated_df)
 
         # Combine all data into a single DataFrame
         combined_df = pd.concat(all_data, ignore_index=True)
 
         # Return the DataFrame
         return combined_df
+
+
+    def create_pickle_database(self, channel_no: int = 4270):
+        """
+        This function takes as input the channel number of interest, and creates a pickle database from the
+        accelerometer time windows and the fo signal data corresponding to the time windows. The pickle database
+        files are saved in a day by day basis.
+
+        Args:
+            channel_no (int): The channel number of interest from which all fo data is extracted.
+        """
+
+        # From the accelerometer data, get the name of all the files in the folder
+        accel_file_names = get_files_in_dir(folder_path=self.acc_data_path, file_format='.asc', keep_extension=False)
+        # Initialize a counter for file numbering
+        file_counter = 1
+
+        # Loop through the accelerometer files one at a time
+        for accel_file in accel_file_names:
+            # Print the current file being processed
+            print(f"Processing file: {accel_file} ................................................................")
+
+            # Get accelerometer time windows and indices for a specific file
+            accel_window_indices, accel_window_times = self.extract_accel_windows(file_name=accel_file)
+            # Find the matching FO file names for each time window
+            fo_file_names_per_window = self.find_matching_fo_files(accel_window_times)
+
+            # Loop through each time window, join the FO from the selected files, crop the signal to the
+            # exact time of the accelerometer window and extract the FO signal.
+            for i, accel_window in enumerate(accel_window_times):
+                # Check if fo_file_names_per_window is empty
+                if not fo_file_names_per_window[i]:
+                    print(f"No FO data available for window {i+1}/{len(accel_window_times)}")
+                    continue
+
+                # Join the selected list of FO files into a single signal dataframe
+                fo_data_df = self.extract_and_join_fo_data(fo_file_names=fo_file_names_per_window[i],
+                                                           channel_no=channel_no)
+
+                # Trim the FO signal data to match exactly the accelerometer time window
+                start_time = accel_window[0]
+                end_time = accel_window[1]
+
+                # Extract from the FO signal data only the data that is within the time window
+                fo_data_in_window = fo_data_df[(fo_data_df['time'] >= start_time) &
+                                               (fo_data_df['time'] <= end_time)].copy()
+
+                # Create a dictionary with the data to save in the pickle file
+                data_dict = {
+                    'date': start_time.date(),
+                    'accel_file': accel_file,
+                    'window_index': i,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'accel_data': accel_window,
+                    'fo_data': fo_data_in_window  # Add FO data to the dictionary
+                }
+
+                # Sanitize the start_time to create a valid file name
+                safe_start_time = start_time.strftime('%Y%m%d_%H%M%S%f')  # Format to safe filename
+                pickle_file_name = f'{file_counter}_{safe_start_time}.pkl'
+
+                # Increment the file counter
+                file_counter += 1
+
+                # Save the data dictionary as a pickle file
+                with open(pickle_file_name, 'wb') as file:
+                    pickle.dump(data_dict, file)
+
+                # Print the file name that was saved
+                print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
+
+
 
 
 def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
@@ -388,22 +486,9 @@ database = CreateDatabase(fo_data_path=fo_data_path,
                           acc_data_path=acc_data_path,
                           logbook_path=logbook_path)
 
-df = database.create_database(channel_no=4270)
-print(df)
+#df = database.create_database(channel_no=4270)
+#print(df)
 
+# Create a pickle database
+database.create_pickle_database(channel_no=4270)
 
-# Get the accelerometer file names in the folder
-#accel_file_names = get_files_in_dir(folder_path=acc_data_path, file_format='.asc', keep_extension=False)
-
-# Get the fo file names per accelerometer data window
-#file_names_per_window, accel_window_times = database.get_window_times_and_fo_files(file_name=accel_file_names[1])
-
-# Get the data for channel 4270
-#data = database.extract_and_join_fo_data(channel_no=4270)
-
-# Plot the data
-#plot_data_for_date(data_df=data, date_str='2020-11-22')
-# Plot the data
-#plot_data_for_date(data_df=data, date_str='2020-11-20')
-# Plot the data
-#plot_data_for_date(data_df=data, date_str='2020-11-11')
