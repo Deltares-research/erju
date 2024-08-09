@@ -2,9 +2,9 @@ import os
 import numpy as np
 
 from nptdms import TdmsFile as td
-from erju.find_trains_base import BaseFindTrains
+from erju.process_FO_base import BaseFOdata
 
-class NptdmsFindTrains(BaseFindTrains):
+class NptdmsFOdata(BaseFOdata):
     """
     Class for finding trains using the nptdms library
     """

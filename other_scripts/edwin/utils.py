@@ -374,3 +374,15 @@ def getShift(data1, data2, sel_time, fs, ymax, ymin, sta, lta):
         data_shifted1 = data1[:len(data_shifted2)]
 
     return data_shifted1, data_shifted2
+
+
+#######################################################################################################################
+# MY DRAFT CODE TO OPEN OPTASENSE FILES
+
+# Path to the optasense file
+optasense_path1 = r'C:\Projects\erju\data\optasense\Short_GL_Data_2022-07-06T054723Z 1.h5'
+optasense_path2 = r'D:\RAIL4EARTH_PROJECT\Short_GL_Data_2022-07-06T054723Z.h5'
+
+# Open the optasense file
+file = open_OptaSense_file(optasense_path2)
+print(file.keys())

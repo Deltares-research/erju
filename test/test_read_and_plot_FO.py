@@ -1,7 +1,7 @@
 import time
 
 from utils.plot_FO_data import PlotData
-from erju.find_trains_base import BaseFindTrains
+from erju.process_FO_base import BaseFOdata
 
 from utils.utils import get_files_in_dir
 
@@ -30,7 +30,7 @@ reader_type = 'silixa'
 start_timer = time.time()
 
 # Initialize the FindTrains class instance
-file_cul_instance = BaseFindTrains.create_instance(dir_path, first_channel, last_channel, reader_type)
+file_cul_instance = BaseFOdata.create_instance(dir_path, first_channel, last_channel, reader_type)
 
 # Extract the properties of the TDMS file
 properties = file_cul_instance.extract_properties()

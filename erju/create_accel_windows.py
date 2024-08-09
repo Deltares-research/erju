@@ -143,6 +143,7 @@ class AccelDataTimeWindows():
 
         return self.settings
 
+
     def create_windows_indices_and_times(self, accel_data: pd.DataFrame):
         """
         Create the windows of time in which a train passing by is detected.
@@ -374,10 +375,10 @@ class AccelDataTimeWindows():
                     matched = True
                     break
 
-            if matched:
-                print(f"Match: YES --> {total_windows_processed}/{len(window_indices)}")
-            else:
-                print(f"Match: NO --> {total_windows_processed}/{len(window_indices)}")
+            #if matched:
+                #print(f"Match: YES --> {total_windows_processed}/{len(window_indices)}")
+            #else:
+                #print(f"Match: NO --> {total_windows_processed}/{len(window_indices)}")
 
         # Check for repeated times in the used logbook times list
         used_logbook_dict = {}

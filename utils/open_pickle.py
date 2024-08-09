@@ -33,5 +33,5 @@ def observe_pickle_contents(file_path):
 
 
 # Example usage
-pickle_file_path = r'C:/Projects/erju/erju/1_20201111_121755160000.pkl'  # Replace with your pickle file path
+pickle_file_path = r'C:\Projects\erju\data\database\2_20201111_123200124000.pkl'  # Replace with your pickle file path
 observe_pickle_contents(pickle_file_path)

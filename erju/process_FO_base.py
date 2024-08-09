@@ -7,7 +7,7 @@ from scipy import signal
 from utils.utils import get_files_in_dir
 
 
-class BaseFindTrains:
+class BaseFOdata:
     """
     Base class for finding files with trains passing in the middle
     of the channel array and extracting the data from the TDMS files
@@ -46,13 +46,13 @@ class BaseFindTrains:
         # If reader is 'silixa', use the SilixaFindTrains class
         if reader == 'silixa':
             # Import the SilixaFindTrains class here to avoid circular import
-            from erju.find_trains_silixa import SilixaFindTrains
-            return SilixaFindTrains(dir_path, first_channel, last_channel)
+            from erju.process_FO_silixa import SilixaFOdata
+            return SilixaFOdata(dir_path, first_channel, last_channel)
         # If reader is 'nptdms', use the NptdmsFindTrains class
         elif reader == 'nptdms':
             # Import the NptdmsFindTrains class here to avoid circular import
-            from erju.find_trains_nptdms import NptdmsFindTrains
-            return NptdmsFindTrains(dir_path, first_channel, last_channel)
+            from erju.process_FO_nptdms import NptdmsFOdata
+            return NptdmsFOdata(dir_path, first_channel, last_channel)
         # If reader is not 'silixa' or 'nptdms', raise a ValueError
         else:
             raise ValueError(f'Invalid reader: {reader}')

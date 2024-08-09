@@ -178,3 +178,40 @@ class PlotData:
             save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
         plt.close()
+
+
+
+
+# I made this for the database plotting
+def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
+    """
+    Plots the data for a given date.
+
+    Args:
+    data_df (pd.DataFrame): The DataFrame containing the time and signal data.
+    date_str (str): The date string in the format 'YYYY-MM-DD' to filter the data.
+    """
+    # Convert the date string to a datetime object
+    date = pd.to_datetime(date_str)
+
+    # Filter the DataFrame for the given date
+    filtered_df = data_df[(data_df['time'].dt.date == date.date())]
+
+    if filtered_df.empty:
+        print(f"No data available for the date {date_str}")
+        return
+
+    # Plot the data
+    plt.figure(figsize=(10, 6))
+    plt.plot(filtered_df['time'], filtered_df['signal'], label='Signal')
+    plt.xlabel('Time')
+    plt.ylabel('Signal')
+    plt.title(f'Signal Data for {date_str}')
+    plt.legend()
+    plt.grid(True)
+
+    # Set the x-axis to show time only
+    date_format = DateFormatter('%H:%M')
+    plt.gca().xaxis.set_major_formatter(date_format)
+
+    plt.show()

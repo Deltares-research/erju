@@ -2,9 +2,9 @@ import os
 import numpy as np
 
 from utils.TDMS_Read import TdmsReader
-from erju.find_trains_base import BaseFindTrains
+from erju.process_FO_base import BaseFOdata
 
-class SilixaFindTrains(BaseFindTrains):
+class SilixaFOdata(BaseFOdata):
     """
     Class for finding trains using the Silixa library
     """
