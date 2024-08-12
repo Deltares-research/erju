@@ -57,7 +57,10 @@ print('The spatial sampling interval is ',fp['Acquisition'].attrs['SpatialSampli
 # Inside the "Acquisition" group, there are 2 subgroups: "Custom" and "Raw[0]"
 # Lets explore the subgroups
 print("Inside the Custom group: ", list(fp['Acquisition']['Custom'].attrs.keys()))
-print ("Inside the Raw[0] group: ", list(fp['Acquisition']['Raw[0]'].attrs.keys()))
+print("Inside the Raw[0] group: ", list(fp['Acquisition']['Raw[0]'].attrs.keys()))
+print("Inside the Raw[0]/Custom group: ", list(fp['Acquisition']['Raw[0]']['Custom'].attrs.keys()))
+print("Inside the Raw[0]/RawData group: ", list(fp['Acquisition']['Raw[0]']['RawData'].attrs.keys()))
+print("Inside the Raw[0]/RawDataTime group: ", list(fp['Acquisition']['Raw[0]']['RawDataTime'].attrs.keys()))
 
 # Custom does not have more subgroups, but Raw[0] has sevel sub-subgroups.
 # "Custom" (not the same as above), "RawDataTime", and "RawData".

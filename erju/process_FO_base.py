@@ -48,12 +48,20 @@ class BaseFOdata:
             # Import the SilixaFindTrains class here to avoid circular import
             from erju.process_FO_silixa import SilixaFOdata
             return SilixaFOdata(dir_path, first_channel, last_channel)
+
         # If reader is 'nptdms', use the NptdmsFindTrains class
         elif reader == 'nptdms':
             # Import the NptdmsFindTrains class here to avoid circular import
             from erju.process_FO_nptdms import NptdmsFOdata
             return NptdmsFOdata(dir_path, first_channel, last_channel)
-        # If reader is not 'silixa' or 'nptdms', raise a ValueError
+
+        # If reader is 'optasense', use the OptasenseFindTrains class
+        elif reader == 'optasense':
+            # Import the OptasenseFindTrains class here to avoid circular import
+            from erju.process_FO_optasense import OptasenseFOdata
+            return OptasenseFOdata(dir_path, first_channel, last_channel)
+
+        # If reader is none of the above, raise a ValueError
         else:
             raise ValueError(f'Invalid reader: {reader}')
 
