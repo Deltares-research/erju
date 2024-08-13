@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import logging
 import pandas as pd
+from datetime import datetime
 
 # Class to plot the data that takes in the path and file names
 class PlotData:
@@ -33,18 +34,6 @@ class PlotData:
             # Raise an error if the file_name is not in the dictionary
             raise ValueError(f'{file_name} is not in the dictionary')
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    import os
-    import logging
-
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    import os
-    import logging
-    from datetime import datetime
 
     def plot_single_channel(self, channel_index: int, start_time: datetime, end_time: datetime,
                             save_to_path: str = None, save_figure: bool = False):
@@ -105,11 +94,14 @@ class PlotData:
         plt.close()
 
 
-    def plot_array_channels(self, save_to_path: str = None, save_figure: bool = False):
+    def plot_array_channels(self, start_time: datetime, end_time: datetime, save_to_path: str = None,
+                            save_figure: bool = False):
         """
-        Plot an array of channels as an image plot
+        Plot an array of channels as an image plot with time scale
 
         Args:
+            start_time (datetime): The start time of the measurement
+            end_time (datetime): The end time of the measurement
             save_to_path (str): The path to save the figure
             save_figure (bool): A flag to save the figure
 
@@ -120,6 +112,17 @@ class PlotData:
         if self.selected_data is None:
             logging.warning("No data to plot. Please call get_data first.")
             return
+
+        # Convert datetime objects to timestamps (seconds since the epoch)
+        start_timestamp = start_time.timestamp()
+        end_timestamp = end_time.timestamp()
+
+        # Calculate the total duration and create a time vector
+        num_time_points = self.selected_data.shape[1]
+        time_vector = np.linspace(start_timestamp, end_timestamp, num_time_points)
+
+        # Convert the time vector from timestamps to a more readable format (seconds since start_time)
+        time_vector -= start_timestamp
 
         # Create a figure and axes
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -134,7 +137,6 @@ class PlotData:
 
         # Set the number of ticks based on the dimensions of the data
         num_channels = self.selected_data.shape[0]
-        num_time_points = self.selected_data.shape[1]
 
         # Set the x-ticks and their labels
         x_ticks = np.linspace(0, num_channels - 1, num=min(10, num_channels))
@@ -144,7 +146,7 @@ class PlotData:
         # Set the y-ticks and their labels
         y_ticks = np.linspace(0, num_time_points - 1, num=min(6, num_time_points))
         ax.set_yticks(y_ticks)
-        ax.set_yticklabels([f'{int(y / 1000)}' for y in y_ticks])
+        ax.set_yticklabels([f'{int(time_vector[int(y)]):,}' for y in y_ticks])
 
         # Show colorbar
         cbar = plt.colorbar(im, ax=ax)
@@ -154,11 +156,13 @@ class PlotData:
         if save_figure:
             file_name_suffix = 'Figure_2D'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test',
+                                                                                                     'test_output',
+                                                                                                     full_file_name)
             plt.savefig(save_path, dpi=300)
             logging.info(f'2D figure for file {self.file_name} saved. File name: {full_file_name}')
-        plt.close()
 
+        plt.close()
 
     def plot_2d_buffer(self,  save_to_path: str = None, save_figure: bool = False, data = None):
         """

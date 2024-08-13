@@ -68,16 +68,31 @@ for file_name in selected_files:
     # Create the plotting instance
     train_22_cul_plots = PlotData(file_name, all_data)
     # Plot the data
-    train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
+    train_22_cul_plots.plot_array_channels(start_time=properties['FileStartTime'],
+                                           end_time=properties['FileEndTime'],
+                                           save_to_path=save_to_path,
+                                           save_figure=True)
 
 
-data = file_cul_instance.get_data_with_window(selected_files[0], window_before=30, window_after=30, resample=True, new_sampling_frequency=100)
+data = file_cul_instance.get_data_with_window(selected_files[0],
+                                              window_before=30,
+                                              window_after=30,
+                                              resample=True,
+                                              new_sampling_frequency=100)
+
+
 extended_plot = PlotData(selected_files[0], all_data)
 extended_plot.plot_2d_buffer(save_to_path=save_to_path, save_figure=True, data=data)
 
+
 # Plot files together to follow a given train
-file_cul_instance.plot_array_channels(file_to_plot=selected_files[0], window_before=30, window_after=30, resample=True,
-                                      new_sampling_frequency=50, save_to_path=save_to_path, save_figure=True)
+file_cul_instance.plot_array_channels(file_to_plot=selected_files[0],
+                                      window_before=30,
+                                      window_after=30,
+                                      resample=True,
+                                      new_sampling_frequency=50,
+                                      save_to_path=save_to_path,
+                                      save_figure=True)
 
 # Plot a single channel
 file_index = 0          # File index to plot
@@ -87,8 +102,15 @@ channel_index = 3800    # Channel from the file to plot
 single_ch_plot = PlotData(selected_files[file_index], all_data)
 
 # plot an array of channels
-single_ch_plot.plot_array_channels(save_figure=True)
+single_ch_plot.plot_array_channels(start_time=properties['FileStartTime'],
+                                   end_time=properties['FileEndTime'],
+                                   save_to_path=save_to_path,
+                                   save_figure=True)
 # Plot the data
-single_ch_plot.plot_single_channel(channel_index=channel_index, save_to_path=save_to_path, save_figure=True)
+single_ch_plot.plot_single_channel(channel_index=channel_index,
+                                   start_time=properties['FileStartTime'],
+                                   end_time=properties['FileEndTime'],
+                                   save_to_path=save_to_path,
+                                   save_figure=True)
 
 

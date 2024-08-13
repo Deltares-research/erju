@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from datetime import datetime, timedelta
 
 from utils.TDMS_Read import TdmsReader
 from erju.process_FO_base import BaseFOdata
@@ -62,6 +63,15 @@ class SilixaFOdata(BaseFOdata):
                                  properties['SpatialResolution[m]'] * \
                                  properties['Fibre Length Multiplier'] + \
                                  properties['Zero Offset (m)']
+        # Add the 'TimeInterval' key to the dictionary by calculating it from the 'SamplingFrequency[Hz]'
+        properties['TimeInterval'] = 1 / properties['SamplingFrequency[Hz]']
+        # Add the 'MeasurementDuration' key to the dictionary by calculating it from the 'n_samples_per_channel'
+        properties['MeasurementDuration'] = properties['TimeInterval'] * n_samples_per_channel
+        # Add the 'FileStartTime' ket to the dictionary from the 'GPSTimeStamp'
+        properties['FileStartTime'] = properties['GPSTimeStamp']
+        # Add the 'FileEndTime' key to the dictionary by calculating with the measurement duration
+        time_delta = timedelta(seconds=properties['MeasurementDuration'])
+        properties['FileEndTime'] = properties['FileStartTime'] + time_delta
 
         self.properties = properties
 

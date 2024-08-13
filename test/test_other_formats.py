@@ -53,7 +53,10 @@ for file in file_names:
     # Create the plotting instance
     train_22_cul_plots = PlotData(file_name=file, all_data=data)
     # Plot the data
-    train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
+    train_22_cul_plots.plot_array_channels(start_time=properties['FileStartTime'],
+                                           end_time=properties['FileEndTime'],
+                                           save_to_path=save_to_path,
+                                           save_figure=True)
 
 
 # Plot a single channel
@@ -64,8 +67,6 @@ channel_index = 2000    # Channel from the file to plot
 # Create the instance for a given file index
 single_ch_plot = PlotData(file_name=file_names[file_index], all_data=data)
 
-# plot an array of channels
-#single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index,
                                    start_time=properties['FileStartTime'],
