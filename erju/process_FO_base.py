@@ -109,6 +109,8 @@ class BaseFOdata:
         raise NotImplementedError('Subclass must implement abstract method')
 
 
+
+
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """
         Helper function to calculate the start and end times

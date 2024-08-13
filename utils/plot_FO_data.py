@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import logging
+import pandas as pd
 
 # Class to plot the data that takes in the path and file names
 class PlotData:

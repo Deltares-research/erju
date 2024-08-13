@@ -8,8 +8,8 @@ from utils.utils import get_files_in_dir
 ##### USER INPUT #######################################################################################################
 
 # Define the path to the TDMS file
-dir_path = r'C:\Projects\erju\data\just1'
-#dir_path = r'D:\FO_culemborg_20112020\subset'
+#dir_path = r'C:\Projects\erju\data\just1'
+dir_path = r'D:\FO_culemborg_20112020\subset'
 
 # Define the path to save the figures
 save_to_path = r'C:\Projects\erju\test\test_output'
@@ -71,12 +71,12 @@ for file_name in selected_files:
     train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
 
 
-data = file_cul_instance.get_data_with_window(selected_files[1], window_before=30, window_after=30, resample=True, new_sampling_frequency=100)
-extended_plot = PlotData(selected_files[1], all_data)
+data = file_cul_instance.get_data_with_window(selected_files[0], window_before=30, window_after=30, resample=True, new_sampling_frequency=100)
+extended_plot = PlotData(selected_files[0], all_data)
 extended_plot.plot_2d_buffer(save_to_path=save_to_path, save_figure=True, data=data)
 
 # Plot files together to follow a given train
-file_cul_instance.plot_array_channels(file_to_plot=selected_files[4], window_before=30, window_after=30, resample=True,
+file_cul_instance.plot_array_channels(file_to_plot=selected_files[0], window_before=30, window_after=30, resample=True,
                                       new_sampling_frequency=50, save_to_path=save_to_path, save_figure=True)
 
 # Plot a single channel

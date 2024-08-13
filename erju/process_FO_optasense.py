@@ -24,6 +24,8 @@ class OptasenseFOdata(BaseFOdata):
         # Call the __init__ method of the BaseFindTrains class
         super().__init__(dir_path, first_channel, last_channel)
 
+
+
     def convert_microseconds_to_datetime(self, microseconds: int) -> datetime:
         """
         Convert a timestamp in microseconds since epoch to a UTC datetime.
@@ -39,6 +41,33 @@ class OptasenseFOdata(BaseFOdata):
 
         # Return the corresponding datetime
         return datetime.utcfromtimestamp(seconds)
+
+
+    def from_opticalphase_to_strain(self, raw_data: np.ndarray) -> np.ndarray:
+        """
+        Take the raw OptaSense data and convert it to units of strain.
+
+        Args:
+            signal_data (np.ndarray): The raw OptaSense data
+
+        Returns:
+            data (np.ndarray): The strain data
+        """
+        # Remove the mean from the data. Since it is a 2D of (150000>time, 5000>location) [rows, columns]
+        # We remove the mean over time for each location with axis=0 (operation over rows)
+        raw_data = raw_data - np.mean(raw_data, axis=0)
+
+        # Convert into units of radians
+        raw_data = raw_data * (2*np.pi / 2**16)
+
+        # Get from the properties the values I need to convert to strain
+        n = self.properties['Fibre Refractive Index']
+        L = self.properties['GaugeLength']
+        # Convert into units of strain
+        data = raw_data * ((1550.12 * 1e-9)/(0.78 * 4 * np.pi * n * L))
+
+        return data
+
 
     def extract_properties_per_file(self, file_name: str):
         """
@@ -70,7 +99,7 @@ class OptasenseFOdata(BaseFOdata):
             time_interval = (rawDataTime[1] - rawDataTime[0]) * 1e-6 # Convert to seconds
 
             # Get the properties from different sections in the file
-            properties = {
+            self.properties = {
                 'AcquisitionId': file['Acquisition'].attrs['AcquisitionId'],
                 'GaugeLength': file['Acquisition'].attrs['GaugeLength'],
                 'GaugeLengthUnit': file['Acquisition'].attrs['GaugeLengthUnit'],
@@ -84,6 +113,7 @@ class OptasenseFOdata(BaseFOdata):
                 'SpatialSamplingIntervalUnit': file['Acquisition'].attrs['SpatialSamplingIntervalUnit'],
                 'StartLocusIndex': file['Acquisition'].attrs['StartLocusIndex'],
                 'TriggeredMeasurement': file['Acquisition'].attrs['TriggeredMeasurement'],
+                'Fibre Refractive Index': file['Acquisition']['Custom'].attrs['Fibre Refractive Index'],
                 'GPS Enabled': file['Acquisition']['Custom'].attrs['GPS Enabled'],
                 'Num Elements Per Channel': file['Acquisition']['Custom'].attrs['Num Elements Per Channel'],
                 'Num Outputs Channels': file['Acquisition']['Custom'].attrs['Num Output Channels'],
@@ -103,10 +133,8 @@ class OptasenseFOdata(BaseFOdata):
 
             }
 
-        return properties
 
-
-
+        return self.properties
 
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
@@ -125,31 +153,26 @@ class OptasenseFOdata(BaseFOdata):
         Returns:
             data (np.array): The extracted data
         """
-
         # Use instance's channels if first_channel or last_channel are not specified
         first_channel = first_channel if first_channel is not None else self.first_channel
         last_channel = last_channel if last_channel is not None else self.last_channel
 
-        # Use the instance's properties if frequency is not specified
-        frequency = frequency or self.properties['SamplingFrequency[Hz]']
-
-        # Convert start_time and end_time to indices
-        start_index = int(start_time * frequency) if start_time is not None else 0
-        end_index = int(end_time * frequency) if end_time is not None else int(
-            self.properties['measurement_time'] * frequency)
-
-        # Construct the full file path
+        # Create the file path
         file_path = os.path.join(self.dir_path, file_name)
-        #print('Extracting the data from file:', file_path, 'in extract_data')
 
-        # Create the TDMS instance
-        tdms_instance = TdmsReader(file_path)
+        # Open the .h5 file
+        with h5py.File(file_path, 'r') as file:
 
-        # Get the data
-        data = tdms_instance.get_data(first_channel, last_channel, start_index, end_index)
+            # Create an instance of the raw data for easier access
+            all_raw_data = file['Acquisition']['Raw[0]']['RawData']
+            # Get the selected channels
+            raw_data = all_raw_data[:, first_channel:last_channel+1]
 
-        # Store the data in the class instance
+        # Convert the raw data to strain
+        data = self.from_opticalphase_to_strain(raw_data)
+
+        # Store the data in the class instance and transpose it to make it fit the other code
         self.data = data.T
 
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
-        return data.T
+        return self.data
