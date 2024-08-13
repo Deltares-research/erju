@@ -109,7 +109,26 @@ class BaseFOdata:
         raise NotImplementedError('Subclass must implement abstract method')
 
 
+    def get_measurement_duration(self):
+        """
+        From the length of the data and the sampling frequency, calculate the measurement time
+        for the time series.
 
+        Args:
+            data (np.ndarray): The data to extract the measurement time
+
+        Returns:
+            measurement_time (int): The measurement time
+        """
+        # Get the data length
+        data_length = self.data.shape[1]
+        # Get the sampling frequency
+        fs = self.properties['SamplingFrequency[Hz]']
+
+        # Calculate the duration of the measurement
+        measurement_duration = data_length / fs
+
+        return measurement_duration
 
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """

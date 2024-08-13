@@ -144,7 +144,7 @@ class AccelDataTimeWindows():
         return self.settings
 
 
-    def create_windows_indices_and_times(self, accel_data: pd.DataFrame):
+    def create_windows_indices_and_times_threshold(self, accel_data: pd.DataFrame):
         """
         Create the windows of time in which a train passing by is detected.
         To do this, the threshold signal value is used to detect the train.

@@ -106,7 +106,7 @@ class OptasenseFOdata(BaseFOdata):
                 'MaximumFrequency': file['Acquisition'].attrs['MaximumFrequency'],
                 'MinimumFrequency': file['Acquisition'].attrs['MinimumFrequency'],
                 'NumberOfLoci': file['Acquisition'].attrs['NumberOfLoci'],
-                'PulseRate': file['Acquisition'].attrs['PulseRate'],
+                'SamplingFrequency[Hz]': file['Acquisition'].attrs['PulseRate'],
                 'PulseWidth': file['Acquisition'].attrs['PulseWidth'],
                 'PulseWidthUnit': file['Acquisition'].attrs['PulseWidthUnit'],
                 'SpatialSamplingInterval': file['Acquisition'].attrs['SpatialSamplingInterval'],
