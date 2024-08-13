@@ -22,7 +22,7 @@ last_channel = 8000  # to note, the maximum number of channels in the current iD
 threshold = 500
 
 # Choose the reader type between 'silixa' and 'nptdms'
-reader_type = 'silixa'
+reader_type = 'nptdms'
 
 ########################################################################################################################
 
