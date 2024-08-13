@@ -113,7 +113,12 @@ trace = rawData[:, 2000]  # Assuming you want to inspect data for location index
 dt = (rawDataTime[1] - rawDataTime[0]) * 1e-6  # Convert from microseconds to seconds
 fs = 1.0 / dt  # Sampling frequency
 print('The CALCULATED time interval between samples is', dt, 's')
+
+# The sampling rate is also stored in the file
 print('Sampling rate derived from timestamps:', fs, 'Hz')
+# Calculate the time interval from the frequency
+dt_fs = 1.0 / fs
+print('The time interval derived from the frequency is', dt_fs, 's')
 
 # Generate the time axis based on the time dimension
 time = np.arange(len(trace)) * dt

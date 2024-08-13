@@ -125,10 +125,12 @@ class BaseFOdata:
         # Get the sampling frequency
         fs = self.properties['SamplingFrequency[Hz]']
 
-        # Calculate the duration of the measurement
-        measurement_duration = data_length / fs
+        # Calculate the time interval between samples
+        time_interval = 1 / fs
+        # Calculate the measurement duration
+        measurement_duration = data_length * time_interval
 
-        return measurement_duration
+        return self.measurement_duration
 
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """

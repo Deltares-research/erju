@@ -18,6 +18,7 @@ class PlotData:
         Args:
             file_name (str): The name of the file to be plotted
             all_data (dict): The dictionary containing all the data
+            duration (float): The duration of the data in seconds
         
         Returns:
             None
@@ -32,13 +33,29 @@ class PlotData:
             # Raise an error if the file_name is not in the dictionary
             raise ValueError(f'{file_name} is not in the dictionary')
 
-    def plot_single_channel(self, channel_index: int, save_to_path: str = None, save_figure: bool = False):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    import os
+    import logging
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    import os
+    import logging
+    from datetime import datetime
+
+    def plot_single_channel(self, channel_index: int, start_time: datetime, end_time: datetime,
+                            save_to_path: str = None, save_figure: bool = False):
         """
-        Plot a single channel as a line plot
+        Plot a single channel as a line plot with time duration
 
         Args:
-            save_to_path (str): The path to save the figure
             channel_index (int): The index of the channel to be plotted
+            start_time (datetime): The start time of the measurement
+            end_time (datetime): The end time of the measurement
+            save_to_path (str): The path to save the figure
             save_figure (bool): A flag to save the figure
 
         Returns:
@@ -46,30 +63,47 @@ class PlotData:
         """
         # Check if the specified channel_index is valid
         if channel_index < 0 or channel_index >= self.selected_data.shape[0]:
-            raise ValueError(f'Invalid channel index: {channel_index}. It should be between 0 and {self.selected_data.shape[0] - 1}.')
+            raise ValueError(
+                f'Invalid channel index: {channel_index}. It should be between 0 and {self.selected_data.shape[0] - 1}.')
 
         # Extract the data for the specified channel
         channel_data = np.squeeze(self.selected_data[channel_index])
+
+        # Convert datetime objects to timestamps (seconds since the epoch)
+        start_timestamp = start_time.timestamp()
+        end_timestamp = end_time.timestamp()
+
+        # Calculate the total duration and create a time vector
+        num_points = len(channel_data)
+        time_vector = np.linspace(start_timestamp, end_timestamp, num_points)
+
+        # Convert the time vector from timestamps to a more readable format (seconds since start_time)
+        time_vector -= start_timestamp
 
         # Create a figure and axes
         fig, ax = plt.subplots(figsize=(10, 6))
 
         # Plot the data as a line plot
-        ax.plot(channel_data)
+        ax.plot(time_vector, channel_data)
         ax.set_xlabel('Time [s]')
         ax.set_ylabel(f'Amplitude (Channel {channel_index})')
 
-        # Use a lambda function to display the time in seconds
-        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: x / 1000))
+        # Format x-axis to show time in seconds
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x:.1f}'))
 
         # If save_figure is True, save the figure with a specific file name
         if save_figure:
             file_name_suffix = f'Figure_1D_Channel_{channel_index}'
             full_file_name = f'{self.file_name}_{file_name_suffix}.jpg'
-            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test', 'test_output', full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join('..', 'test',
+                                                                                                     'test_output',
+                                                                                                     full_file_name)
             plt.savefig(save_path, dpi=300)
-            logging.info(f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
+            logging.info(
+                f'Single channel figure for file {self.file_name} and channel {channel_index} saved. File name: {full_file_name}')
+
         plt.close()
+
 
     def plot_array_channels(self, save_to_path: str = None, save_figure: bool = False):
         """

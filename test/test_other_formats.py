@@ -51,7 +51,7 @@ print('Elapsed time: ', stop_timer - start_timer, 'seconds')
 # Plot the data file by file in the 30 seconds window
 for file in file_names:
     # Create the plotting instance
-    train_22_cul_plots = PlotData(file, data)
+    train_22_cul_plots = PlotData(file_name=file, all_data=data)
     # Plot the data
     train_22_cul_plots.plot_array_channels(save_to_path=save_to_path, save_figure=True)
 
@@ -60,10 +60,15 @@ for file in file_names:
 file_index = 0          # File index to plot
 channel_index = 2000    # Channel from the file to plot
 
+
 # Create the instance for a given file index
-single_ch_plot = PlotData(file_names[file_index], data)
+single_ch_plot = PlotData(file_name=file_names[file_index], all_data=data)
 
 # plot an array of channels
 #single_ch_plot.plot_array_channels(save_figure=True)
 # Plot the data
-single_ch_plot.plot_single_channel(channel_index=channel_index, save_to_path=save_to_path, save_figure=True)
+single_ch_plot.plot_single_channel(channel_index=channel_index,
+                                   start_time=properties['FileStartTime'],
+                                   end_time=properties['FileEndTime'],
+                                   save_to_path=save_to_path,
+                                   save_figure=True)
