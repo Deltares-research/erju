@@ -97,7 +97,31 @@ class SilixaFOdata(BaseFOdata):
         # Get the properties of the TDMS file
         properties = tdms_instance.get_properties()
 
-        return properties
+        data = tdms_instance.get_data()
+
+        # Add the 'n_samples_per_channel' key to the dictionary
+        n_samples_per_channel = len(data)
+        properties['n_samples_per_channel'] = n_samples_per_channel
+        # Add the 'measurement_time (in seconds)' key to the dictionary
+        properties['measurement_time'] = n_samples_per_channel / properties['SamplingFrequency[Hz]']
+        # Add the 'distance' key to the dictionary
+        properties['distance'] = np.arange(properties['MeasureLength[m]'] + 1) * \
+                                 properties['SpatialResolution[m]'] * \
+                                 properties['Fibre Length Multiplier'] + \
+                                 properties['Zero Offset (m)']
+        # Add the 'TimeInterval' key to the dictionary by calculating it from the 'SamplingFrequency[Hz]'
+        properties['TimeInterval'] = 1 / properties['SamplingFrequency[Hz]']
+        # Add the 'MeasurementDuration' key to the dictionary by calculating it from the 'n_samples_per_channel'
+        properties['MeasurementDuration'] = properties['TimeInterval'] * n_samples_per_channel
+        # Add the 'FileStartTime' ket to the dictionary from the 'GPSTimeStamp'
+        properties['FileStartTime'] = properties['GPSTimeStamp']
+        # Add the 'FileEndTime' key to the dictionary by calculating with the measurement duration
+        time_delta = timedelta(seconds=properties['MeasurementDuration'])
+        properties['FileEndTime'] = properties['FileStartTime'] + time_delta
+
+        self.properties = properties
+
+        return self.properties
 
 
 

@@ -21,8 +21,8 @@ last_channel = 8000  # to note, the maximum number of channels in the current iD
 # Define the threshold for the signal detection
 threshold = 500
 
-# Choose the reader type between 'silixa' and 'nptdms'
-reader_type = 'nptdms'
+# Choose the reader type between 'silixa' / 'nptdms' / 'optasense'
+reader_type = 'silixa'
 
 ########################################################################################################################
 
