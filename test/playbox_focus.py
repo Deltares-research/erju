@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import timedelta, datetime
 from protocol.message import FilePackageReader, RSMessage
 from protocol.envelope import ReceiveServerOutputEnvelope, IndusDASEnvelope
 from protocol.message.rs_file_reader import open_rs_file
@@ -70,6 +71,65 @@ def read_data(file_path):
     #package_reader.close_file()
 
     return header, all_data, signals_sum
+
+
+def extract_properties_from_header(header):
+    """
+    Extracts the file properties as a dictionary from the given header.
+
+    Args:
+        header (dict): The header information decoded from the file.
+
+    Returns:
+        properties (dict): The extracted properties.
+    """
+    properties = {
+        'signature': header['signature'],
+        'package_length': header['package_length'],
+        'protocol_version': header['protocol_version'],
+        'software_version': header['software_version'],
+        'firmware_version': header['firmware_version'],
+        'serial_no': header['serial_no'],
+        'source_type': header['source_type'],
+        'summary_type': header['summary_type'],
+        'payload_type': header['payload_type'],
+        'bps_source': header['bps_source'],
+        'bps_summary': header['bps_summary'],
+        'bps_payload': header['bps_payload'],
+        'timestamp': header['timestamp'],
+        'gps_counter': header['gps_counter'],
+        'sampling_freq': header['sampling_freq'],
+        'channel_num': header['channel_num'],
+        'sampling_num': header['sampling_num'],
+        'data_type_id': header['data_type_id'],
+        'channel_spacing': header['channel_spacing'],
+        'start': header['start'],
+        'conversion_factor': header['conversion_factor'],
+        'hpf_id': header['hpf_id'],
+        'frame_count_err': header['frame_count_err'],
+        'first_frame_no': header['first_frame_no'],
+        'last_frame_no': header['last_frame_no'],
+        'last_frame_timestamp': header['last_frame_timestamp'],
+        'last_frame_ns': header['last_frame_ns'],
+        'frame_decimation': header['frame_decimation'],
+        'spatial_decimation': header['spatial_decimation'],
+        'frames_in_package': header['frames_in_package'],
+        'fpga_reg': header['fpga_reg'],
+        'pcie_config': header['pcie_config'],
+        'gpsCounter': header['gpsCounter'],
+        'samplingFreq': header['samplingFreq'],
+        'channelNum': header['channelNum'],
+        'frameDecimation': header['frameDecimation']
+    }
+
+    # Calculate additional properties
+    properties['TimeInterval'] = 1 / properties['sampling_freq']
+    properties['MeasurementDuration'] = properties['TimeInterval'] * properties['frames_in_package']
+    properties['FileStartTime'] = datetime.utcfromtimestamp(properties['timestamp'])
+    time_delta = timedelta(seconds=properties['MeasurementDuration'])
+    properties['FileEndTime'] = properties['FileStartTime'] + time_delta
+
+    return properties
 
 
 def plot_all_data(header, all_data):
@@ -155,6 +215,10 @@ def plot_single_channel(header, signals_sum):
 
 # Read the data from the file
 header, all_data, signals_sum = read_data(file_path)
+
+# Extract the properties from the header
+properties = extract_properties_from_header(header)
+print(f"Properties: {properties}")
 
 # Plot the first payload data (all_data)
 plot_all_data(header, all_data)
