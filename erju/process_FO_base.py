@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from scipy import signal
 
-from utils.utils import get_files_in_dir
+from utils.file_utils import get_files_in_dir
 
 
 class BaseFOdata:

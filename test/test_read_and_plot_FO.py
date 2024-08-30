@@ -3,7 +3,7 @@ import time
 from utils.plot_FO_data import PlotData
 from erju.process_FO_base import BaseFOdata
 
-from utils.utils import get_files_in_dir
+from utils.file_utils import get_files_in_dir
 
 ##### USER INPUT #######################################################################################################
 

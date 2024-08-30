@@ -7,7 +7,7 @@ import pickle
 
 from erju.create_accel_windows import AccelDataTimeWindows
 from erju.process_FO_base import BaseFOdata
-from utils.utils import get_files_in_dir, extract_timestamp_from_name
+from utils.file_utils import get_files_in_dir, extract_timestamp_from_name
 from matplotlib.dates import DateFormatter
 
 

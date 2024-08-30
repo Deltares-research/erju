@@ -1,59 +1,65 @@
+# Simple code to open a FOAS file and plot the data:
 import time
+from erju.process_FO_base import BaseFOdata  # Import from erju/process_FO_base.py
+from file_utils import get_files_in_dir  # Import from utils/file_utils.py
+from utils.plot_FO_data import PlotData  # Import from utils/plot_FO_data.py
+import matplotlib.pyplot as plt
 
-from erju.process_FO_base import BaseFOdata
-from utils.plot_FO_data import PlotData
 
-from utils.file_utils import get_files_in_dir
 
-##### USER INPUT #######################################################################################################
+
+# User inputs:
+# Define the path to the file
+file_path = r'C:\Projects\erju\data\holten\samples'
+#file_path = r'C:\Projects\erju\data\optasense'
+#file_path = r'C:\Projects\erju\data\silixa'
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\test\test_output'
+save_to_path = r'C:\Projects\erju\test\holten'
 
 # Define the first and last channel to be extracted
 first_channel = 0
-last_channel = 5000  # to note, the maximum number of channels in the current iDAS files is 7808
+last_channel = 3000
 
-# Choose the reader type between 'silixa' / 'nptdms' / 'optasense'
+# Define the reader type
 reader_type = 'optasense'
 
+########################################################################################################################
 if reader_type == 'silixa':
     file_format = '.tdms'
-    file_path = r'D:\FO_culemborg_20112020\subset'
 elif reader_type == 'nptdms':
     file_format = '.tdms'
-    file_path = r'D:\FO_culemborg_20112020\subset'
 elif reader_type == 'optasense':
     file_format = '.h5'
-    file_path = r'C:\Projects\erju\data\optasense'
 else:
     print('The reader type is not valid. Please choose between "silixa", "nptdms" or "optasense".')
 
-
-########################################################################################################################
 
 # Start the timer
 start_timer = time.time()
 
 # Initialize the FindTrains class instance
 FOdata = BaseFOdata.create_instance(file_path, first_channel, last_channel, reader_type)
-
 # Get a list with all the names of the TDMS files
 file_names = get_files_in_dir(folder_path=file_path, file_format=file_format)
 print('File names: ', file_names)
 
-# Extract the properties of FO file
+# Extract the properties of the TDMS file
 properties = FOdata.extract_properties_per_file(file_names[0])
 print('Properties: ', properties)
 
 # Get the data
 data = FOdata.get_data_per_file(file_names)
 
+# Plot with imshow the first element in the data dictionary
+fig, ax = plt.subplots()
+im = ax.imshow(data[file_names[0]], aspect='auto')
+plt.colorbar(im)
+plt.show()
+
 # Stop the timer
 stop_timer = time.time()
 print('Elapsed time: ', stop_timer - start_timer, 'seconds')
 
-
-########################################################################################################################
 """
 # Plot the data file by file in the 30 seconds window
 for file in file_names:
@@ -64,19 +70,5 @@ for file in file_names:
                                            end_time=properties['FileEndTime'],
                                            save_to_path=save_to_path,
                                            save_figure=True)
+
 """
-
-# Plot a single channel
-file_index = 15          # File index to plot
-channel_index = 2300    # Channel from the file to plot
-
-
-# Create the instance for a given file index
-single_ch_plot = PlotData(file_name=file_names[file_index], all_data=data)
-
-# Plot the data
-single_ch_plot.plot_single_channel(channel_index=channel_index,
-                                   start_time=properties['FileStartTime'],
-                                   end_time=properties['FileEndTime'],
-                                   save_to_path=save_to_path,
-                                   save_figure=True)
