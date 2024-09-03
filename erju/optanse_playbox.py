@@ -31,8 +31,7 @@ def bandpass(data, freqmin, freqmax, df, corners, zerophase=True):
     fe = 0.5 * df
     low = freqmin / fe
     high = freqmax / fe
-    z, p, k = iirfilter(corners, [low, high], btype='band',
-                        ftype='butter', output='zpk')
+    z, p, k = iirfilter(corners, [low, high], btype='band', ftype='butter', output='zpk')
     sos = zpk2sos(z, p, k)
 
     if zerophase:
@@ -48,14 +47,18 @@ with h5py.File(file_path, 'r') as file:
     # Create a new variable for the "RawData" h5py dataset
     rawData = file['Acquisition']['Raw[0]']['RawData']
     fs = file['Acquisition']['Raw[0]'].attrs['OutputDataRate']
+    num_outputs = file['Acquisition']['Custom'].attrs['Num Output Channels']
+    print('Number of outputs: ', num_outputs)
+    num_measurements = file['Acquisition']['Raw[0]']['RawData'].shape[0]
+    print('Number of measurements: ', num_measurements)
 
     signals = rawData[:]
 
-    window = windows.tukey(60000, 0.1)
+    window = windows.tukey(M = num_measurements, alpha = 0.1)
 
     filt_array = np.zeros(np.shape(signals))
 
-    for i in range(3000):
+    for i in range(num_outputs):
         signal_filt = bandpass(window * signals[:, i], 1.0, 50, fs, corners=5, zerophase=True)
         filt_array[:, i] = signal_filt
 
@@ -70,7 +73,7 @@ with h5py.File(file_path, 'r') as file:
     plt.show()
     plt.close()
 
-    plt.plot(signals[:, 2000])
+    #plt.plot(signals[:, 2000])
     plt.plot(filt_array[:, 2000])
     plt.title('Trace 2000')
     plt.show()

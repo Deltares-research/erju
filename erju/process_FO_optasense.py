@@ -6,6 +6,7 @@ from datetime import datetime
 
 from utils.TDMS_Read import TdmsReader
 from erju.process_FO_base import BaseFOdata
+from scipy.signal import iirfilter, sosfilt, zpk2sos, sosfilt, windows
 
 class OptasenseFOdata(BaseFOdata):
     """
@@ -67,6 +68,33 @@ class OptasenseFOdata(BaseFOdata):
         data = raw_data * ((1550.12 * 1e-9)/(0.78 * 4 * np.pi * n * L))
 
         return data
+
+    def bandpass(self, data, freqmin, freqmax, fs, corners, zerophase=True):
+        """
+        Apply a bandpass filter to the data.
+
+        Args:
+            data (np.array): The data to be filtered.
+            freqmin (float): The lower frequency bound of the filter.
+            freqmax (float): The upper frequency bound of the filter.
+            fs (float): The sampling frequency.
+            corners (int): The number of corners in the filter.
+            zerophase (bool): Whether to apply the filter in both directions.
+
+        Returns:
+            np.array: The filtered data
+        """
+        fe = 0.5 * fs
+        low = freqmin / fe
+        high = freqmax / fe
+        z, p, k = iirfilter(corners, [low, high], btype='band', ftype='butter', output='zpk')
+        sos = zpk2sos(z, p, k)
+
+        if zerophase:
+            firstpass = sosfilt(sos, data)
+            return sosfilt(sos, firstpass[::-1])[::-1]
+        else:
+            return sosfilt(sos, data)
 
 
     def extract_properties_per_file(self, file_name: str):
@@ -166,10 +194,23 @@ class OptasenseFOdata(BaseFOdata):
             # Create an instance of the raw data for easier access
             all_raw_data = file['Acquisition']['Raw[0]']['RawData']
             # Get the selected channels
-            raw_data = all_raw_data[:, first_channel:last_channel+1]
+            raw_signal_data = all_raw_data[:, first_channel:last_channel+1]
+
+            # Apply the tukey window to the raw data in order to reduce the edge effects prior to filtering
+            signal_window = windows.tukey(M = raw_signal_data.shape[0], alpha = 0.1)
+            # Create a new array to store the filtered data
+            filtered_data = np.zeros(np.shape(raw_signal_data))
+            # Filter the data
+            for i in range(raw_signal_data.shape[1]):
+                filtered_data[:, i] = self.bandpass(data=raw_signal_data[:, i] * signal_window,
+                                                    freqmin=1,
+                                                    freqmax=50,
+                                                    fs=self.properties['SamplingFrequency[Hz]'],
+                                                    corners=5)
+
 
         # Convert the raw data to strain
-        data = self.from_opticalphase_to_strain(raw_data)
+        data = self.from_opticalphase_to_strain(filtered_data)
 
         # Store the data in the class instance and transpose it to make it fit the other code
         self.data = data.T
