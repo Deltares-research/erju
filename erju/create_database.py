@@ -16,11 +16,11 @@ class CreateDatabase:
     A class used to create a database of FO and accelerometer data.
     It will create a database with at least 4 elements inside: the first element is
     the start time of the event, the second element is the end time of the event, the third
-    element is the FO signal and the fourth, fith and so on, will be all the accelerometer
+    element is the FO signal and the fourth, fifth and so on, will be all the accelerometer
     signals, with as many elements as sensors we have.
     """
 
-    def __init__(self, fo_data_path: str, acc_data_path: str, logbook_path: str):
+    def __init__(self, fo_data_path: str, acc_data_path: str = None, logbook_path: str = None):
         """
         Initialize the class instance to perform the database creation.
         Key elements are the paths to the FO and accelerometer data files and
@@ -81,7 +81,6 @@ class CreateDatabase:
         # Return
         return self.window_indices, self.window_times
 
-
     def from_windows_get_times(self):
         """
         Using the windows found with from_accel_get_windows, create a database with the start and end times.
@@ -103,7 +102,6 @@ class CreateDatabase:
         self.database['dt'] = self.database['end_time'] - self.database['start_time']
 
         return self.database
-
 
     def from_windows_get_fo_signal(self):
         """
@@ -142,10 +140,6 @@ class CreateDatabase:
 
 
     #############################################################################################################
-
-
-
-
     # The previous 3 functions look like I dont use anymore. Keep them there in case I do need them later.
     # From here on out, I will use the following functions to create the database.
 
@@ -404,19 +398,61 @@ class CreateDatabase:
                 print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
 
 
+    def extract_all_events(self, selected_channel: int = 4270, window_size: int = 30, step_size: int = 30):
+        """
+        This function takes as input a given channel, and scans through all the FO data using
+        windows of 90 seconds. This means that for files of 30 seconds, we will consider 3
+        files at a time. The step of the window is 30 seconds (1 file). We then extract the signal for
+        the given channel in the 3 files and stitch them together to create a single signal. From
+        that single signal we extract the events using the STA/LTA method. We then save the events
+        in a pickle file.
+
+        Args:
+            selected_channel (int): The channel number of interest.
+            window_size (int): The size of the window in seconds.
+            step_size (int): The step size of the window in seconds.
+
+        Returns:
+            None
+        """
+        # Get all the files in the directory
+        file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+
+        # Join all the FO data from a single channel into a single signal
+        all_data = self.extract_and_join_fo_data(fo_file_names=file_names, channel_no=selected_channel)
+
+        # Plot the data
+        plt.figure(figsize=(15, 5))
+        plt.plot(all_data['time'], all_data['signal'])
+
+
+
 
 ##### TEST THE CODE ###################################################################################################
 # Define the paths to the FO and accelerometer data
-fo_data_path = r'C:\Projects\erju\data\fo_data'
+fo_data_path = r'C:\Projects\erju\data\culemborg\das_20201111'
 acc_data_path = r'C:\Projects\erju\data\accel_data'
 logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
-path_save_database = r'C:\Projects\erju\data\database'
+path_save_database = r'C:\Projects\erju\outputs'
 
 # Create an instance of the CreateDatabase class
-database = CreateDatabase(fo_data_path=fo_data_path,
-                          acc_data_path=acc_data_path,
-                          logbook_path=logbook_path)
+database = CreateDatabase(fo_data_path=fo_data_path)
+
+# Join all the FO data from a single channel into a single signal
+all_data = database.extract_and_join_fo_data(fo_file_names=get_files_in_dir(folder_path=fo_data_path, file_format='.tdms'),
+                                             channel_no=4270)
+
+print(all_data.head())
+
+# Plot the data
+plt.figure(figsize=(15, 5))
+plt.plot(all_data['time'], all_data['signal'])
+plt.xlabel('Time')
+plt.ylabel('Signal')
+plt.title('FO Signal Data')
+plt.show()
+
 
 # Create a pickle database
-database.create_pickle_database(channel_no=4270, save_path=path_save_database)
+#database.create_pickle_database(channel_no=4270, save_path=path_save_database)
 

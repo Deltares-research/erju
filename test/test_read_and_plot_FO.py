@@ -9,10 +9,10 @@ from utils.file_utils import get_files_in_dir
 
 # Define the path to the TDMS file
 #dir_path = r'C:\Projects\erju\data\just1'
-dir_path = r'D:\FO_culemborg_20112020\subset'
+dir_path = r'C:\Projects\erju\data\culemborg\das_20201122'
 
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\test\test_output'
+save_to_path = r'C:\Projects\erju\outputs\culemborg'
 
 # Define the first and last channel to be extracted
 first_channel = 0
@@ -73,7 +73,7 @@ for file_name in selected_files:
                                            save_to_path=save_to_path,
                                            save_figure=True)
 
-
+"""
 data = file_cul_instance.get_data_with_window(selected_files[0],
                                               window_before=30,
                                               window_after=30,
@@ -114,3 +114,4 @@ single_ch_plot.plot_single_channel(channel_index=channel_index,
                                    save_figure=True)
 
 
+"""

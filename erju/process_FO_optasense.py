@@ -197,7 +197,7 @@ class OptasenseFOdata(BaseFOdata):
             raw_signal_data = all_raw_data[:, first_channel:last_channel+1]
 
             # Apply the tukey window to the raw data in order to reduce the edge effects prior to filtering
-            signal_window = windows.tukey(M = raw_signal_data.shape[0], alpha = 0.1)
+            signal_window = windows.tukey(M=raw_signal_data.shape[0], alpha=0.1)
             # Create a new array to store the filtered data
             filtered_data = np.zeros(np.shape(raw_signal_data))
             # Filter the data

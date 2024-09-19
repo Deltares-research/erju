@@ -54,12 +54,12 @@ with h5py.File(file_path, 'r') as file:
 
     signals = rawData[:]
 
-    window = windows.tukey(M = num_measurements, alpha = 0.1)
+    window = windows.tukey(M=num_measurements, alpha=0.1)
 
     filt_array = np.zeros(np.shape(signals))
 
     for i in range(num_outputs):
-        signal_filt = bandpass(window * signals[:, i], 1.0, 50, fs, corners=5, zerophase=True)
+        signal_filt = bandpass(window * signals[:, i], 0.8, 100, fs, corners=5, zerophase=True)
         filt_array[:, i] = signal_filt
 
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(15, 5))
@@ -69,7 +69,7 @@ with h5py.File(file_path, 'r') as file:
     ax0.set_title('RAW')
     cbar1 = ax1.imshow(np.log10(np.abs(filt_array)), aspect='auto', cmap='jet')
     fig.colorbar(cbar1, ax=ax1)
-    ax1.set_title('FILTERED -- 1 Hz - 50 Hz')
+    ax1.set_title('FILTERED -- 0.1 Hz - 100 Hz')
     plt.show()
     plt.close()
 

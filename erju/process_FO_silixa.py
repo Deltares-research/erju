@@ -22,6 +22,7 @@ class SilixaFOdata(BaseFOdata):
         # Call the __init__ method of the BaseFindTrains class
         super().__init__(dir_path, first_channel, last_channel)
 
+
     def extract_properties(self):
         """
         Extract the file properties as a dictionary. In this function this is done only
@@ -77,6 +78,7 @@ class SilixaFOdata(BaseFOdata):
 
         return properties
 
+
     def extract_properties_per_file(self, file_name: str):
         """
         Extract the file properties as a dictionary for a given file. Note that this function is different
@@ -122,9 +124,6 @@ class SilixaFOdata(BaseFOdata):
         self.properties = properties
 
         return self.properties
-
-
-
 
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
