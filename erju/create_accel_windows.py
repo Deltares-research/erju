@@ -195,8 +195,8 @@ class AccelDataTimeWindows():
         return windows_indices, windows_times
 
 
-    def detect_events_with_sta_lta(self, accel_data: pd.DataFrame, nsta: int, nlta: int,
-                                   trigger_on: float, trigger_off: float):
+    def detect_accel_events_sta_lta(self, accel_data: pd.DataFrame, nsta: int, nlta: int,
+                                    trigger_on: float, trigger_off: float):
         """
         Detect events using the STA/LTA method and create windows around these events. This method
         uses the recursive_sta_lta function from ObsPy to compute the STA/LTA ratio and the trigger_onset

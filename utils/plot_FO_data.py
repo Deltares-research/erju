@@ -95,7 +95,7 @@ class PlotData:
 
 
     def plot_array_channels(self, start_time: datetime, end_time: datetime, save_to_path: str = None,
-                            save_figure: bool = False):
+                            guide_line:int = None, save_figure: bool = False):
         """
         Plot an array of channels as an image plot with time scale
 
@@ -148,6 +148,10 @@ class PlotData:
         y_ticks = np.linspace(0, num_time_points - 1, num=min(6, num_time_points))
         ax.set_yticks(y_ticks)
         ax.set_yticklabels([f'{int(time_vector[int(y)]):,}' for y in y_ticks])
+
+        # If the user provides a guide_line, add a vertical dotted line at that X
+        if guide_line:
+            ax.axvline(x=guide_line, color='black', linestyle='--')
 
         # Show colorbar
         cbar = plt.colorbar(im, ax=ax)
@@ -218,6 +222,13 @@ class PlotData:
             save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
         plt.close()
+
+
+    def plot_stalta_signal(self)        :
+        """
+        Plot the signal and STA/LTA ratio with detected events using STA/LTA method
+        """
+
 
 
 

@@ -29,6 +29,7 @@ class CreateDatabase:
         Args:
             fo_data_path (str): The path to the folder containing the FO data files.
             acc_data_path (str): The path to the folder containing the accelerometer data files.
+            logbook_path (str): The path to the logbook file.
         """
         self.fo_data_path = fo_data_path
         self.acc_data_path = acc_data_path
@@ -72,11 +73,11 @@ class CreateDatabase:
         # Detect the events using the STA/LTA method
         nsta = int(nsta * 1000)  # convert to seconds with a fz of 1000 Hz
         nlta = int(nlta * 1000)  # convert to seconds with a fz of 1000 Hz
-        self.window_indices, self.window_times = accel_windows.detect_events_with_sta_lta(accel_data=accel_data_df,
-                                                                                          nsta=nsta,
-                                                                                          nlta=nlta,
-                                                                                          trigger_on=trigger_on,
-                                                                                          trigger_off=trigger_off)
+        self.window_indices, self.window_times = accel_windows.detect_accel_events_sta_lta(accel_data=accel_data_df,
+                                                                                           nsta=nsta,
+                                                                                           nlta=nlta,
+                                                                                           trigger_on=trigger_on,
+                                                                                           trigger_off=trigger_off)
 
         # Return
         return self.window_indices, self.window_times
@@ -172,7 +173,7 @@ class CreateDatabase:
         nlta = int(nlta * 1000)  # convert to milliseconds
 
         # Create the accelerometer windows indices and times with the STA/LTA method
-        accel_windows_indices, accel_windows_times = accel_windows.detect_events_with_sta_lta(
+        accel_windows_indices, accel_windows_times = accel_windows.detect_accel_events_sta_lta(
             accel_data=accel_data_per_file,
             nsta=nsta,
             nlta=nlta,
@@ -418,19 +419,32 @@ class CreateDatabase:
         # Get all the files in the directory
         file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
 
+        # Create an instance of the BaseFindTrains class to extract the data
+        file_instance = BaseFOdata.create_instance(dir_path=self.fo_data_path,
+                                                   first_channel=selected_channel,
+                                                   last_channel=selected_channel,
+                                                   reader='silixa')
+
         # Join all the FO data from a single channel into a single signal
         all_data = self.extract_and_join_fo_data(fo_file_names=file_names, channel_no=selected_channel)
 
-        # Plot the data
-        plt.figure(figsize=(15, 5))
-        plt.plot(all_data['time'], all_data['signal'])
+        # Find the events with sta/lta method from all the data
+        window_indices, window_times, stalta_ratio = file_instance.detect_FO_events_sta_lta(FO_signal=all_data,
+                                                                              window_buffer=20*1000,
+                                                                              nsta=50,
+                                                                              nlta=10000,
+                                                                              trigger_on=14,
+                                                                              trigger_off=1)
+
+
+        return window_indices, window_times, stalta_ratio
 
 
 
 
 ##### TEST THE CODE ###################################################################################################
 # Define the paths to the FO and accelerometer data
-fo_data_path = r'C:\Projects\erju\data\culemborg\das_20201111'
+fo_data_path = r'C:\Projects\erju\data\culemborg\das_20201120'
 acc_data_path = r'C:\Projects\erju\data\accel_data'
 logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
 path_save_database = r'C:\Projects\erju\outputs'
@@ -438,19 +452,45 @@ path_save_database = r'C:\Projects\erju\outputs'
 # Create an instance of the CreateDatabase class
 database = CreateDatabase(fo_data_path=fo_data_path)
 
+fo_file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
+
 # Join all the FO data from a single channel into a single signal
-all_data = database.extract_and_join_fo_data(fo_file_names=get_files_in_dir(folder_path=fo_data_path, file_format='.tdms'),
+all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names,
                                              channel_no=4270)
+
+# Find the events with sta/lta method
+window_indices, window_times, stalta_ratio = database.extract_all_events(selected_channel=4270)
 
 print(all_data.head())
 
-# Plot the data
-plt.figure(figsize=(15, 5))
-plt.plot(all_data['time'], all_data['signal'])
-plt.xlabel('Time')
-plt.ylabel('Signal')
-plt.title('FO Signal Data')
+# Make a plot with 2 subplots in the vertical direction, on top all_data and on the bottom the stalta_ratio
+fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+ax[0].plot(all_data['time'], all_data['signal'], color='blue')
+# Add a shaded area for the detected events using the window_indices or window_times
+for i, window in enumerate(window_times):
+    ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
+
+ax[0].set_title('FO Signal')
+ax[0].set_xlabel('Time')
+ax[0].set_ylabel('Signal')
+
+ax[1].plot(all_data['time'], stalta_ratio, color='red')
+# Add a horizontal line at the trigger_on and trigger_off values
+ax[1].axhline(y=14, color='green', linestyle='--')
+ax[1].axhline(y=1, color='red', linestyle='--')
+ax[1].set_title('STA/LTA Ratio')
+ax[1].set_xlabel('Time')
+ax[1].set_ylabel('Ratio')
+
+# Format the x-axis to show the time
+date_form = DateFormatter("%H:%M:%S")
+ax[0].xaxis.set_major_formatter(date_form)
+ax[1].xaxis.set_major_formatter(date_form)
+
+plt.tight_layout()
 plt.show()
+
+
 
 
 # Create a pickle database

@@ -9,7 +9,7 @@ from utils.file_utils import get_files_in_dir
 
 # Define the path to the TDMS file
 #dir_path = r'C:\Projects\erju\data\just1'
-dir_path = r'C:\Projects\erju\data\culemborg\das_20201122'
+dir_path = r'C:\Projects\erju\data\culemborg\das_20201120'
 
 # Define the path to save the figures
 save_to_path = r'C:\Projects\erju\outputs\culemborg'
@@ -19,11 +19,12 @@ first_channel = 0
 last_channel = 8000  # to note, the maximum number of channels in the current iDAS files is 7808
 
 # Define the threshold for the signal detection
-threshold = 500
+threshold = 550
 
 # Choose the reader type between 'silixa' / 'nptdms' / 'optasense'
 reader_type = 'silixa'
 
+channel = 4270
 ########################################################################################################################
 
 # Start the timer
@@ -40,7 +41,7 @@ file_names = get_files_in_dir(folder_path=dir_path, file_format='.tdms')
 print('File names: ', file_names)
 
 # Get the average signal
-signal_mean = file_cul_instance.signal_averaging(plot=True, save_to_path=save_to_path)
+signal_mean = file_cul_instance.signal_averaging(plot=True, save_to_path=save_to_path, channel=channel, threshold=threshold)
 
 # Find the file names above the threshold
 selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
@@ -71,7 +72,8 @@ for file_name in selected_files:
     train_22_cul_plots.plot_array_channels(start_time=properties['FileStartTime'],
                                            end_time=properties['FileEndTime'],
                                            save_to_path=save_to_path,
-                                           save_figure=True)
+                                           save_figure=True,
+                                           guide_line=channel)
 
 """
 data = file_cul_instance.get_data_with_window(selected_files[0],
@@ -93,19 +95,16 @@ file_cul_instance.plot_array_channels(file_to_plot=selected_files[0],
                                       new_sampling_frequency=50,
                                       save_to_path=save_to_path,
                                       save_figure=True)
+"""
 
 # Plot a single channel
-file_index = 0          # File index to plot
-channel_index = 3800    # Channel from the file to plot
+file_index = 1          # File index to plot (from the selected_files list)
+channel_index = 4270    # Channel from the file to plot
 
 # Create the instance for a given file index
 single_ch_plot = PlotData(selected_files[file_index], all_data)
 
-# plot an array of channels
-single_ch_plot.plot_array_channels(start_time=properties['FileStartTime'],
-                                   end_time=properties['FileEndTime'],
-                                   save_to_path=save_to_path,
-                                   save_figure=True)
+
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index,
                                    start_time=properties['FileStartTime'],
@@ -113,5 +112,13 @@ single_ch_plot.plot_single_channel(channel_index=channel_index,
                                    save_to_path=save_to_path,
                                    save_figure=True)
 
+
+"""
+
+# plot an array of channels
+single_ch_plot.plot_array_channels(start_time=properties['FileStartTime'],
+                                   end_time=properties['FileEndTime'],
+                                   save_to_path=save_to_path,
+                                   save_figure=True)
 
 """

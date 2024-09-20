@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from utils.TDMS_Read import TdmsReader
 from erju.process_FO_base import BaseFOdata
+from scipy.signal import iirfilter, sosfilt, zpk2sos, sosfilt, windows
 
 class SilixaFOdata(BaseFOdata):
     """
@@ -126,6 +127,34 @@ class SilixaFOdata(BaseFOdata):
         return self.properties
 
 
+    def bandpass(self, data: np.array, freqmin: float, freqmax: float, fs: float, corners: int, zerophase=True):
+        """
+        Apply a bandpass filter to the data.
+
+        Args:
+            data (np.array): The data to be filtered.
+            freqmin (float): The lower frequency bound of the filter.
+            freqmax (float): The upper frequency bound of the filter.
+            fs (float): The sampling frequency.
+            corners (int): The number of corners in the filter.
+            zerophase (bool): Whether to apply the filter in both directions.
+
+        Returns:
+            np.array: The filtered data
+        """
+        fe = 0.5 * fs
+        low = freqmin / fe
+        high = freqmax / fe
+        z, p, k = iirfilter(corners, [low, high], btype='band', ftype='butter', output='zpk')
+        sos = zpk2sos(z, p, k)
+
+        if zerophase:
+            firstpass = sosfilt(sos, data)
+            return sosfilt(sos, firstpass[::-1])[::-1]
+        else:
+            return sosfilt(sos, data)
+
+
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
         """
@@ -168,5 +197,13 @@ class SilixaFOdata(BaseFOdata):
         # Store the data in the class instance
         self.data = data.T
 
+        filtered_data = self.bandpass(data = data,
+                                      freqmin=1,
+                                      freqmax=100,
+                                      fs=frequency,
+                                      corners=5)
+
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
-        return data.T
+        #return data.T
+
+        return self.data

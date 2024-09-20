@@ -34,10 +34,10 @@ class TestAccelAnalysis(unittest.TestCase):
 
         nsta = int(1 * 1000)
         nlta = int(8 * 1000)
-        windows_indices_sta_lta, windows_times_sta_lta = self.time_windows.detect_events_with_sta_lta(accel_data_df,
-                                                                                                      nsta, nlta,
-                                                                                                      self.trigger_on,
-                                                                                                      self.trigger_off)
+        windows_indices_sta_lta, windows_times_sta_lta = self.time_windows.detect_accel_events_sta_lta(accel_data_df,
+                                                                                                       nsta, nlta,
+                                                                                                       self.trigger_on,
+                                                                                                       self.trigger_off)
         self.assertGreater(len(windows_indices_sta_lta), 0)
         self.assertGreater(len(windows_times_sta_lta), 0)
 

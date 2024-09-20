@@ -69,7 +69,7 @@ class OptasenseFOdata(BaseFOdata):
 
         return data
 
-    def bandpass(self, data, freqmin, freqmax, fs, corners, zerophase=True):
+    def bandpass(self, data: np.array, freqmin: float, freqmax: float, fs: float, corners: int, zerophase=True):
         """
         Apply a bandpass filter to the data.
 
@@ -204,7 +204,7 @@ class OptasenseFOdata(BaseFOdata):
             for i in range(raw_signal_data.shape[1]):
                 filtered_data[:, i] = self.bandpass(data=raw_signal_data[:, i] * signal_window,
                                                     freqmin=1,
-                                                    freqmax=50,
+                                                    freqmax=100,
                                                     fs=self.properties['SamplingFrequency[Hz]'],
                                                     corners=5)
 

@@ -1,8 +1,10 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy import signal
+from obspy.signal.trigger import recursive_sta_lta, trigger_onset
 
 from utils.file_utils import get_files_in_dir
 
@@ -148,10 +150,13 @@ class BaseFOdata:
         """
 
         # Pull the measurement time from the properties
+        # in the culemborg data this is 30 seconds
         measurement_time = self.properties['measurement_time']
         # Calculate the start and end times
-        start_time = round(measurement_time * start_rate)
-        end_time = round(measurement_time * end_rate)
+        start_time = round(measurement_time * start_rate) # 30 * 0.2 = 6
+        end_time = round(measurement_time * end_rate) # 30 * 0.8 = 24
+
+
 
         return start_time, end_time
 
@@ -174,18 +179,23 @@ class BaseFOdata:
         scan_channel = int(np.mean([self.first_channel, self.last_channel]))
 
         # Define the time window for the search
-        start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
+        #start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
+        # 0 and 1 means the start and end of the data is the same as 0 and 30 seconds
+        start_time, end_time = self._calculate_cutoff_times(start_rate=0, end_rate=1)
 
         return scan_channel, start_time, end_time
 
 
-    def signal_averaging(self, plot: bool = False, save_to_path: str = None):
+    def signal_averaging(self, plot: bool = False, save_to_path: str = None, channel: int = None, threshold: int = 500):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
 
         Args:
-            plot (bool): Plot the mean signal
+            plot (bool): Plot the mean signal values
+            save_to_path (str): The path to save the figure
+            channel (int): The channel to extract the mean signal from
+            threshold (int): The threshold value for posterior filtering
 
         Returns:
             mean_signal (np.array): The mean signal values
@@ -194,8 +204,12 @@ class BaseFOdata:
         # Get the search parameters
         scan_channel, start_time, end_time = self.search_params()
 
-        # Adjust the scan_channel to be relative to the first_channel
-        relative_scan_channel = scan_channel - self.first_channel
+        # Check if user defined the channel to extract the mean signal from
+        # If he did, use that channel, if not, use the scan channel
+        if channel is not None:
+            relative_scan_channel = channel
+        else:
+            relative_scan_channel = scan_channel - self.first_channel
 
         # Get the tdms files in the directory
         tdms_files = get_files_in_dir(folder_path=self.dir_path, file_format='.tdms')
@@ -216,6 +230,8 @@ class BaseFOdata:
         if plot:
             plt.figure(figsize=(10, 6))
             plt.plot(mean_signal, label='Mean Signal')
+            # Add a black dotted horizontal line for the threshold
+            plt.axhline(y=threshold, color='black', linestyle='--', label='Threshold')
             plt.xlabel('File Index')
             plt.ylabel('Mean Signal Value')
             plt.title('Mean signal values for all files in the directory')
@@ -481,3 +497,113 @@ class BaseFOdata:
             data_resampled = signal.resample(data_resampled, n_samples, axis=1)
 
         return data_resampled
+
+
+    def detect_FO_events_sta_lta(self, FO_signal: pd.DataFrame, window_buffer: int, nsta: int, nlta: int,
+                                    trigger_on: float, trigger_off: float):
+        """
+        Detect events using the STA/LTA method and create windows around these events. This method
+        uses the recursive_sta_lta function from ObsPy to compute the STA/LTA ratio and the trigger_onset
+        function to detect the events. A buffer is added to the start and end of each event to create the
+        windows. The windows are then returned as indices and times. This method is used to detect events
+        in the FO data
+
+        Args:
+            FO_signal (pd.DataFrame): The dataframe containing the data from the location_name
+            window_buffer (int): The buffer to add to the start and end of each window
+            nsta (int): The number of samples in the STA window
+            nlta (int): The number of samples in the LTA window
+            trigger_on (float): The trigger on threshold
+            trigger_off (float): The trigger off threshold
+
+        Returns:
+            windows_indices (list): A list of tuples containing the start and end indices of each window
+            windows_times (list): A list of tuples containing the start and end times of each window
+        """
+
+        # Extract only the signal from the dataframe
+        signal_data = FO_signal["signal"]
+
+        # Compute the STA/LTA ratio
+        sta_lta_ratio = recursive_sta_lta(signal_data, nsta, nlta)
+
+        # Detect events using the trigger_onset function from ObsPy
+        events = trigger_onset(sta_lta_ratio, trigger_on, trigger_off)
+
+        # Create the windows around the detected events
+        windows_indices = []
+        windows_times = []
+
+        # For each event, create a window around it
+        for event in events:
+            # Extend the window by the window_size_extension at the start and end
+            start_index = max(0, event[0] - window_buffer)
+            end_index = min(len(FO_signal) - 1, event[1] + window_buffer)
+            # Compute the corresponding times for the start and end indices
+            start_time = FO_signal["time"].iloc[start_index]
+            end_time = FO_signal["time"].iloc[end_index]
+            # Append the window to the lists
+            windows_indices.append((start_index, end_index))
+            windows_times.append((start_time, end_time))
+
+        return windows_indices, windows_times, sta_lta_ratio
+
+
+    def plot_fo_signal_and_windows(self, fo_data: pd.DataFrame, windows_indices: list, nsta: int = None,
+                                   nlta: int = None, trigger_on: float = None, trigger_off: float = None):
+        """
+        Plot the FO signal, STA/LTA ratio, and detected event windows with shaded areas.
+
+        Args:
+            fo_data (pd.DataFrame): The dataframe containing FO data with 'time' and 'signal' columns
+            windows_indices (list): A list of tuples containing the start and end indices of each window
+            nsta (int): The number of samples in the STA window
+            nlta (int): The number of samples in the LTA window
+            trigger_on (float): The trigger on threshold
+            trigger_off (float): The trigger off threshold
+        """
+        # Use 'signal' column from the FO data
+        signal = fo_data['signal'].values
+        time_values = fo_data['time'].values
+
+        if nsta and nlta and trigger_on and trigger_off:
+            # Compute the STA/LTA ratio if parameters are provided
+            sta_lta_ratio = recursive_sta_lta(signal, nsta, nlta)
+        else:
+            sta_lta_ratio = None
+
+        # Plot the results
+        plt.figure(figsize=(15, 8))
+
+        # Plot the FO data (signal vs. time)
+        plt.subplot(2, 1, 1)
+        plt.plot(time_values, signal, label='FO Signal', color='black')
+        plt.xlabel('Time')
+        plt.ylabel('Amplitude')
+        plt.title('Raw FO Signal')
+        plt.legend()
+
+        if sta_lta_ratio is not None:
+            # Plot the STA/LTA ratio
+            plt.subplot(2, 1, 2)
+            plt.plot(time_values[:len(sta_lta_ratio)], sta_lta_ratio, label='STA/LTA Ratio', color='blue')
+            plt.axhline(y=trigger_on, color='r', linestyle='--', label='Trigger On Threshold')
+            plt.axhline(y=trigger_off, color='b', linestyle='--', label='Trigger Off Threshold')
+
+        # Highlight detected events in both subplots
+        for start_index, end_index in windows_indices:
+            plt.subplot(2, 1, 1)
+            plt.axvspan(time_values[start_index], time_values[end_index], color='green', alpha=0.3)
+            if sta_lta_ratio is not None:
+                plt.subplot(2, 1, 2)
+                plt.axvspan(time_values[start_index], time_values[end_index], color='green', alpha=0.3)
+
+        if sta_lta_ratio is not None:
+            plt.xlabel('Time')
+            plt.ylabel('STA/LTA Ratio')
+            plt.title('STA/LTA Ratio and Detected Events')
+            plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+

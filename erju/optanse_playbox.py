@@ -13,7 +13,7 @@ dir_path = r'C:\Projects\erju\data\holten\samples'
 file_names = get_files_in_dir(folder_path=dir_path, file_format='.h5')
 file_path = os.path.join(dir_path, file_names[1])
 
-def bandpass(data, freqmin, freqmax, df, corners, zerophase=True):
+def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
     """
     Apply a bandpass filter to the data.
 
@@ -21,14 +21,14 @@ def bandpass(data, freqmin, freqmax, df, corners, zerophase=True):
         data (np.array): The data to be filtered.
         freqmin (float): The lower frequency bound of the filter.
         freqmax (float): The upper frequency bound of the filter.
-        df (float): The sampling frequency.
+        fs (float): The sampling frequency.
         corners (int): The number of corners in the filter.
         zerophase (bool): Whether to apply the filter in both directions.
 
     Returns:
         np.array: The filtered data
     """
-    fe = 0.5 * df
+    fe = 0.5 * fs
     low = freqmin / fe
     high = freqmax / fe
     z, p, k = iirfilter(corners, [low, high], btype='band', ftype='butter', output='zpk')
@@ -59,7 +59,13 @@ with h5py.File(file_path, 'r') as file:
     filt_array = np.zeros(np.shape(signals))
 
     for i in range(num_outputs):
-        signal_filt = bandpass(window * signals[:, i], 0.8, 100, fs, corners=5, zerophase=True)
+        signal_filt = bandpass(data=window * signals[:, i],
+                               freqmin=1,
+                               freqmax=100,
+                               fs=fs,
+                               corners=5,
+                               zerophase=True)
+
         filt_array[:, i] = signal_filt
 
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(15, 5))
