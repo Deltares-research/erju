@@ -176,14 +176,14 @@ class BaseFOdata:
         """
 
         # Define the middle of the interest domain to scan there
-        scan_channel = int(np.mean([self.first_channel, self.last_channel]))
+        middle_channel = int(np.mean([self.first_channel, self.last_channel]))
 
         # Define the time window for the search
         #start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
         # 0 and 1 means the start and end of the data is the same as 0 and 30 seconds
         start_time, end_time = self._calculate_cutoff_times(start_rate=0, end_rate=1)
 
-        return scan_channel, start_time, end_time
+        return middle_channel, start_time, end_time
 
 
     def signal_averaging(self, plot: bool = False, save_to_path: str = None, channel: int = None, threshold: int = 500):
@@ -202,14 +202,14 @@ class BaseFOdata:
         """
 
         # Get the search parameters
-        scan_channel, start_time, end_time = self.search_params()
+        middle_channel, start_time, end_time = self.search_params()
 
         # Check if user defined the channel to extract the mean signal from
         # If he did, use that channel, if not, use the scan channel
         if channel is not None:
             relative_scan_channel = channel
         else:
-            relative_scan_channel = scan_channel - self.first_channel
+            relative_scan_channel = middle_channel - self.first_channel
 
         # Get the tdms files in the directory
         tdms_files = get_files_in_dir(folder_path=self.dir_path, file_format='.tdms')
@@ -243,16 +243,17 @@ class BaseFOdata:
             save_path = os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
             print('Mean Signal figure saved')
+            plt.close()
 
         return mean_signal
 
 
-    def get_files_above_threshold(self, mean_signal: np.ndarray, threshold: float):
+    def get_files_above_threshold(self, signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
 
         Args:
-            mean_signal (np.ndarray): The mean signal values
+            signal (np.ndarray): The mean signal values
             threshold (float): The threshold value
 
         Returns:
@@ -264,7 +265,7 @@ class BaseFOdata:
 
         # Filter files based on the threshold
         selected_files = [file_name for file_name, mean_value in zip(
-            tdms_files, mean_signal) if mean_value >= threshold]
+            tdms_files, signal) if mean_value >= threshold]
 
         return selected_files
 
@@ -510,9 +511,9 @@ class BaseFOdata:
 
         Args:
             FO_signal (pd.DataFrame): The dataframe containing the data from the location_name
-            window_buffer (int): The buffer to add to the start and end of each window
-            nsta (int): The number of samples in the STA window
-            nlta (int): The number of samples in the LTA window
+            window_buffer (int): The buffer to add to the start and end of each window in seconds
+            nsta (int): The number of samples in the STA window in seconds eg. 1000 samples at 1000 Hz is 1 second
+            nlta (int): The number of samples in the LTA window in seconds
             trigger_on (float): The trigger on threshold
             trigger_off (float): The trigger off threshold
 
@@ -520,6 +521,11 @@ class BaseFOdata:
             windows_indices (list): A list of tuples containing the start and end indices of each window
             windows_times (list): A list of tuples containing the start and end times of each window
         """
+        # Convert the window_buffer to seconds
+        window_buffer = int(window_buffer * self.properties['SamplingFrequency[Hz]'])
+        # Conver the nsta and nlta to number of samples
+        nsta = int(nsta * self.properties['SamplingFrequency[Hz]'])
+        nlta = int(nlta * self.properties['SamplingFrequency[Hz]'])
 
         # Extract only the signal from the dataframe
         signal_data = FO_signal["signal"]

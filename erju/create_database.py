@@ -20,7 +20,7 @@ class CreateDatabase:
     signals, with as many elements as sensors we have.
     """
 
-    def __init__(self, fo_data_path: str, acc_data_path: str = None, logbook_path: str = None):
+    def __init__(self, fo_data_path: str, acc_data_path: str = None, logbook_path: str = None, output_path: str = None):
         """
         Initialize the class instance to perform the database creation.
         Key elements are the paths to the FO and accelerometer data files and
@@ -34,6 +34,7 @@ class CreateDatabase:
         self.fo_data_path = fo_data_path
         self.acc_data_path = acc_data_path
         self.logbook_path = logbook_path
+        self.output_path = output_path
         self.window_indices = None
         self.window_times = None
         self.database = None
@@ -399,23 +400,24 @@ class CreateDatabase:
                 print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
 
 
-    def extract_all_events(self, selected_channel: int = 4270, window_size: int = 30, step_size: int = 30):
+    def extract_all_events(self, selected_channel: int = 4270, threshold: int = 500):
         """
-        This function takes as input a given channel, and scans through all the FO data using
-        windows of 90 seconds. This means that for files of 30 seconds, we will consider 3
-        files at a time. The step of the window is 30 seconds (1 file). We then extract the signal for
-        the given channel in the 3 files and stitch them together to create a single signal. From
-        that single signal we extract the events using the STA/LTA method. We then save the events
-        in a pickle file.
+        This function extracts all the events from a given channel using the STA/LTA method. It first finds
+        all the files with trains above the threshold, then goes file by file and extends the signal data by
+        joining the file before and after the given file. It then uses the STA/LTA method to detect the events
+        in the extended signal data. After an event is being detected, the start and end time is extended by
+        a given buffer. Finally, using the time window, the signal data is cropped to the exact time window and
+        saved as a pickle file.
 
         Args:
             selected_channel (int): The channel number of interest.
-            window_size (int): The size of the window in seconds.
-            step_size (int): The step size of the window in seconds.
+            threshold (int): The threshold to detect the events
+
 
         Returns:
             None
         """
+        # 1. Find all the files with trains above the threshold ########################################################
         # Get all the files in the directory
         file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
 
@@ -425,19 +427,73 @@ class CreateDatabase:
                                                    last_channel=selected_channel,
                                                    reader='silixa')
 
-        # Join all the FO data from a single channel into a single signal
-        all_data = self.extract_and_join_fo_data(fo_file_names=file_names, channel_no=selected_channel)
+        # Extract the general properties of the TDMS file
+        properties = file_instance.extract_properties()
 
-        # Find the events with sta/lta method from all the data
-        window_indices, window_times, stalta_ratio = file_instance.detect_FO_events_sta_lta(FO_signal=all_data,
-                                                                              window_buffer=20*1000,
-                                                                              nsta=50,
-                                                                              nlta=10000,
-                                                                              trigger_on=14,
-                                                                              trigger_off=1)
+        # For a given channel, get the average signal to later find the files above the threshold
+        signal_mean = file_instance.signal_averaging(channel=selected_channel,
+                                                     threshold=threshold,
+                                                     plot=True,
+                                                     save_to_path=self.output_path)
 
+        # Find the file names above the threshold
+        files_with_trains = file_instance.get_files_above_threshold(signal=signal_mean, threshold=threshold)
+        print('Selected files: ', files_with_trains)
+        # Save the name of the files with trains in a txt
+        file_instance.save_txt_with_file_names(save_to_path=self.output_path, selected_files=files_with_trains,
+                                                   file_names=file_names, include_indexes=True)
 
-        return window_indices, window_times, stalta_ratio
+        # 2. Extract the data from the selected files ##################################################################
+        # Go file by file and extract the data. Join the data from the file before and after the selected file.
+        # Then, use the STA/LTA method to detect the events in the extended signal data.
+        for file in files_with_trains:
+            print(f"Processing file: {file} ....................................................................")
+
+            # Join the data from the file before and after the selected file
+            # Get the index of the selected file
+            index = file_names.index(file)
+            # Get the file before and after the selected file
+            file_before = file_names[index - 1]
+            file_after = file_names[index + 1]
+            # Join the data from the selected file with the data from the file before and after
+            extended_signal = self.extract_and_join_fo_data(fo_file_names=[file_before, file, file_after],
+                                                     channel_no=selected_channel)
+
+            # Find the events with sta/lta method from the extended signal data
+            window_indices, window_times, stalta_ratio = file_instance.detect_FO_events_sta_lta(FO_signal=extended_signal,
+                                                                                  window_buffer=10,
+                                                                                  nsta=0.5,
+                                                                                  nlta=20,
+                                                                                  trigger_on=5,
+                                                                                  trigger_off=0.5)
+
+            # Make a plot with 2 subplots in the vertical direction, on top all_data and on the bottom the stalta_ratio
+            fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+            ax[0].plot(extended_signal['time'], extended_signal['signal'], color='blue')
+            # Add a shaded area for the detected events using the window_indices or window_times
+            for i, window in enumerate(window_times):
+                ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
+            ax[0].set_title(f'FO Signal {file}')
+            ax[0].set_xlabel('Time')
+            ax[0].set_ylabel('Signal')
+
+            ax[1].plot(extended_signal['time'], stalta_ratio, color='red')
+            # Add a horizontal line at the trigger_on and trigger_off values
+            ax[1].axhline(y=5, color='green', linestyle='--')
+            ax[1].axhline(y=0.5, color='red', linestyle='--')
+            ax[1].set_title('STA/LTA Ratio')
+            ax[1].set_xlabel('Time')
+            ax[1].set_ylabel('Ratio')
+
+            # Format the x-axis to show the time
+            date_form = DateFormatter("%H:%M:%S")
+            ax[0].xaxis.set_major_formatter(date_form)
+            ax[1].xaxis.set_major_formatter(date_form)
+
+            plt.tight_layout()
+            plt.show()
+            plt.close()
+
 
 
 
@@ -447,10 +503,11 @@ class CreateDatabase:
 fo_data_path = r'C:\Projects\erju\data\culemborg\das_20201120'
 acc_data_path = r'C:\Projects\erju\data\accel_data'
 logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
-path_save_database = r'C:\Projects\erju\outputs'
+path_save_database = r'C:\Projects\erju\outputs\culemborg'
 
 # Create an instance of the CreateDatabase class
-database = CreateDatabase(fo_data_path=fo_data_path)
+database = CreateDatabase(fo_data_path=fo_data_path,
+                          output_path=path_save_database)
 
 fo_file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
 
@@ -459,7 +516,8 @@ all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names,
                                              channel_no=4270)
 
 # Find the events with sta/lta method
-window_indices, window_times, stalta_ratio = database.extract_all_events(selected_channel=4270)
+window_indices, window_times, stalta_ratio = database.extract_all_events(selected_channel=4270,
+                                                                         threshold=550)
 
 print(all_data.head())
 
@@ -476,7 +534,7 @@ ax[0].set_ylabel('Signal')
 
 ax[1].plot(all_data['time'], stalta_ratio, color='red')
 # Add a horizontal line at the trigger_on and trigger_off values
-ax[1].axhline(y=14, color='green', linestyle='--')
+ax[1].axhline(y=5, color='green', linestyle='--')
 ax[1].axhline(y=1, color='red', linestyle='--')
 ax[1].set_title('STA/LTA Ratio')
 ax[1].set_xlabel('Time')
