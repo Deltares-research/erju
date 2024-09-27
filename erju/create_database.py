@@ -9,6 +9,7 @@ from erju.create_accel_windows import AccelDataTimeWindows
 from erju.process_FO_base import BaseFOdata
 from utils.file_utils import get_files_in_dir, extract_timestamp_from_name
 from matplotlib.dates import DateFormatter
+from utils.plot_FO_data import plot_signals_and_stalta
 
 
 class CreateDatabase:
@@ -405,8 +406,7 @@ class CreateDatabase:
         This function extracts all the events from a given channel using the STA/LTA method. It first finds
         all the files with trains above the threshold, then goes file by file and extends the signal data by
         joining the file before and after the given file. It then uses the STA/LTA method to detect the events
-        in the extended signal data. After an event is being detected, the start and end time is extended by
-        a given buffer. Finally, using the time window, the signal data is cropped to the exact time window and
+        in the extended signal data. Finally, using the time window, the signal data is cropped to the exact time window and
         saved as a pickle file.
 
         Args:
@@ -467,32 +467,14 @@ class CreateDatabase:
                                                                                   trigger_on=5,
                                                                                   trigger_off=0.5)
 
-            # Make a plot with 2 subplots in the vertical direction, on top all_data and on the bottom the stalta_ratio
-            fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-            ax[0].plot(extended_signal['time'], extended_signal['signal'], color='blue')
-            # Add a shaded area for the detected events using the window_indices or window_times
-            for i, window in enumerate(window_times):
-                ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
-            ax[0].set_title(f'FO Signal {file}')
-            ax[0].set_xlabel('Time')
-            ax[0].set_ylabel('Signal')
-
-            ax[1].plot(extended_signal['time'], stalta_ratio, color='red')
-            # Add a horizontal line at the trigger_on and trigger_off values
-            ax[1].axhline(y=5, color='green', linestyle='--')
-            ax[1].axhline(y=0.5, color='red', linestyle='--')
-            ax[1].set_title('STA/LTA Ratio')
-            ax[1].set_xlabel('Time')
-            ax[1].set_ylabel('Ratio')
-
-            # Format the x-axis to show the time
-            date_form = DateFormatter("%H:%M:%S")
-            ax[0].xaxis.set_major_formatter(date_form)
-            ax[1].xaxis.set_major_formatter(date_form)
-
-            plt.tight_layout()
-            plt.show()
-            plt.close()
+            # Plot the signal and STA/LTA ratio with detected events using the STA/LTA method
+            plot_signals_and_stalta(signal=extended_signal,
+                                    stalta_ratio=stalta_ratio,
+                                    window_times=window_times,
+                                    trigger_on=5,
+                                    trigger_off=0.5,
+                                    file=file,
+                                    output_folder=self.output_path)
 
 
 

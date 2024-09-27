@@ -266,3 +266,64 @@ def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
     plt.gca().xaxis.set_major_formatter(date_format)
 
     plt.show()
+
+
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+import os
+
+
+def plot_signals_and_stalta(signal, stalta_ratio, window_times, trigger_on, trigger_off, file, output_folder):
+    """
+    Plots the FO signal and STA/LTA ratio with detected events highlighted and saves the plot.
+
+    Parameters:
+        signal (DataFrame): DataFrame containing 'time' and 'signal' columns.
+        stalta_ratio (array-like): Array of STA/LTA ratio values.
+        window_times (list): List of tuples indicating the start and end times of detected events.
+        trigger_on (float): The value for the 'on' trigger line.
+        trigger_off (float): The value for the 'off' trigger line.
+        file (str): The filename or label for the plot title.
+        output_folder (str): The directory where the plot will be saved.
+    """
+    fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+
+    # Plot the extended signal
+    ax[0].plot(signal['time'], signal['signal'], color='blue')
+    # Add shaded areas for detected events
+    for window in window_times:
+        ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
+    ax[0].set_title(f'FO signal and STA/LTA ratio for: {file}')
+    ax[0].set_xlabel('Time')
+    ax[0].set_ylabel('Signal')
+
+    # Plot the STA/LTA ratio
+    ax[1].plot(signal['time'], stalta_ratio, color='red')
+    # Add horizontal lines for trigger values
+    ax[1].axhline(y=trigger_on, color='green', linestyle='--', label='Trigger On')
+    ax[1].axhline(y=trigger_off, color='red', linestyle='--', label='Trigger Off')
+    ax[1].set_title('STA/LTA Ratio')
+    ax[1].set_xlabel('Time')
+    ax[1].set_ylabel('Ratio')
+
+    # Format the x-axis to show the time
+    date_form = DateFormatter("%H:%M:%S")
+    ax[0].xaxis.set_major_formatter(date_form)
+    ax[1].xaxis.set_major_formatter(date_form)
+
+    ax[1].legend()  # Show legend for the trigger lines
+
+    plt.tight_layout()
+
+    # Create the output folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Construct the filename and save the plot
+    filename = f'STA_LTA_Ratio_and_Signal_for_file_{file}.png'
+    plt.savefig(os.path.join(output_folder, filename))
+
+    plt.close()
+
