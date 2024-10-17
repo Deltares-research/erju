@@ -476,6 +476,44 @@ class CreateDatabase:
                                     file=file,
                                     output_folder=self.output_path)
 
+            # 3. Using the windows, crop the signal data to the exact time window ######################################
+            for i, window_time in enumerate(window_times):
+                # Get the start and end time of the window
+                start_time = window_time[0]
+                end_time = window_time[1]
+
+                # Extract from the FO signal data only the data that is within the time window
+                fo_data_in_window = extended_signal[(extended_signal['time'] >= start_time) &
+                                                    (extended_signal['time'] <= end_time)].copy()
+
+                # 4. Save the data as a pickle file #####################################################################
+                # Create a dictionary with the data to save in the pickle file
+                data_dict = {
+                    'date': start_time.date(),
+                    'file': file,
+                    'window_index': i,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'fo_data': fo_data_in_window  # Add FO data to the dictionary
+                }
+
+                # Sanitize the start_time to create a valid file name
+                safe_start_time = start_time.strftime('%Y%m%d_%H%M%S%f')  # Format to safe filename
+                pickle_file_name = f'{file}_{safe_start_time}.pkl'
+
+                # Save the data dictionary as a pickle file
+                with open(os.path.join(self.output_path, pickle_file_name), 'wb') as file:
+                    pickle.dump(data_dict, file)
+
+                # Print the file name that was saved
+                print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(window_times)}")
+
+        return None
+
+
+
+
+
 
 
 
@@ -494,42 +532,10 @@ database = CreateDatabase(fo_data_path=fo_data_path,
 fo_file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
 
 # Join all the FO data from a single channel into a single signal
-all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names,
-                                             channel_no=4270)
+#all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names, channel_no=4270)
 
 # Find the events with sta/lta method
-window_indices, window_times, stalta_ratio = database.extract_all_events(selected_channel=4270,
-                                                                         threshold=550)
-
-print(all_data.head())
-
-# Make a plot with 2 subplots in the vertical direction, on top all_data and on the bottom the stalta_ratio
-fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-ax[0].plot(all_data['time'], all_data['signal'], color='blue')
-# Add a shaded area for the detected events using the window_indices or window_times
-for i, window in enumerate(window_times):
-    ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
-
-ax[0].set_title('FO Signal')
-ax[0].set_xlabel('Time')
-ax[0].set_ylabel('Signal')
-
-ax[1].plot(all_data['time'], stalta_ratio, color='red')
-# Add a horizontal line at the trigger_on and trigger_off values
-ax[1].axhline(y=5, color='green', linestyle='--')
-ax[1].axhline(y=1, color='red', linestyle='--')
-ax[1].set_title('STA/LTA Ratio')
-ax[1].set_xlabel('Time')
-ax[1].set_ylabel('Ratio')
-
-# Format the x-axis to show the time
-date_form = DateFormatter("%H:%M:%S")
-ax[0].xaxis.set_major_formatter(date_form)
-ax[1].xaxis.set_major_formatter(date_form)
-
-plt.tight_layout()
-plt.show()
-
+database.extract_all_events(selected_channel=4270, threshold=550)
 
 
 
