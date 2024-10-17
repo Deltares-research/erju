@@ -3,7 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 from datetime import timedelta
+import numpy as np
 import pickle
+import netCDF4 as nc
+import gzip
 
 from erju.create_accel_windows import AccelDataTimeWindows
 from erju.process_FO_base import BaseFOdata
@@ -400,6 +403,43 @@ class CreateDatabase:
                 # Print the file name that was saved
                 print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
 
+    def create_netcdf_file(self, output_folder, data_dict):
+        """
+        Creates a compressed NetCDF file from the provided data dictionary.
+
+        Args:
+            output_folder (str): Path to the folder where the NetCDF file will be saved.
+            data_dict (dict): Dictionary containing the data to be saved in the NetCDF file.
+
+        Returns:
+            None
+        """
+        # Sanitize the start_time to create a valid file name
+        safe_start_time = data_dict['start_time'].strftime('%Y%m%d_%H%M%S%f')  # Format to safe filename
+        netcdf_file_name = f'{safe_start_time}.nc'
+        netcdf_file_path = os.path.join(output_folder, netcdf_file_name)
+
+        # Create the NetCDF file
+        with nc.Dataset(netcdf_file_path, 'w', format='NETCDF4') as dataset:
+            # Create the dimensions
+            time_dim = dataset.createDimension('time', len(data_dict['fo_data']))
+
+            # Create the variables with compression (zlib)
+            timeseries_var = dataset.createVariable('signal', np.float32, ('time',), zlib=True, complevel=9)
+
+
+            # Assign data to variables
+            timeseries_var[:] = data_dict['fo_data']
+
+            # Add metadata
+            dataset.start_time = data_dict['start_time'].isoformat()
+            dataset.end_time = data_dict['end_time'].isoformat()
+            dataset.file = data_dict['file']
+            dataset.window_index = data_dict['window_index']
+            dataset.frequency = data_dict['frequency']
+
+        print(f"Compressed NetCDF file created: {netcdf_file_path}")
+
 
     def extract_all_events(self, selected_channel: int = 4270, threshold: int = 500):
         """
@@ -439,6 +479,7 @@ class CreateDatabase:
         # Find the file names above the threshold
         files_with_trains = file_instance.get_files_above_threshold(signal=signal_mean, threshold=threshold)
         print('Selected files: ', files_with_trains)
+
         # Save the name of the files with trains in a txt
         file_instance.save_txt_with_file_names(save_to_path=self.output_path, selected_files=files_with_trains,
                                                    file_names=file_names, include_indexes=True)
@@ -486,27 +527,33 @@ class CreateDatabase:
                 fo_data_in_window = extended_signal[(extended_signal['time'] >= start_time) &
                                                     (extended_signal['time'] <= end_time)].copy()
 
-                # 4. Save the data as a pickle file #####################################################################
+                print('fo data in window: ', fo_data_in_window['signal'].values)
+
+                # 4. Create a dictionary with all the data I want to put in the pickle and NetCDF file #################
                 # Create a dictionary with the data to save in the pickle file
                 data_dict = {
-                    'date': start_time.date(),
                     'file': file,
                     'window_index': i,
                     'start_time': start_time,
                     'end_time': end_time,
-                    'fo_data': fo_data_in_window  # Add FO data to the dictionary
+                    'frequency': properties['SamplingFrequency[Hz]'],
+                    'fo_data': fo_data_in_window['signal'].values,
                 }
-
                 # Sanitize the start_time to create a valid file name
                 safe_start_time = start_time.strftime('%Y%m%d_%H%M%S%f')  # Format to safe filename
-                pickle_file_name = f'{file}_{safe_start_time}.pkl'
 
-                # Save the data dictionary as a pickle file
-                with open(os.path.join(self.output_path, pickle_file_name), 'wb') as file:
-                    pickle.dump(data_dict, file)
+                # 5. Save the fo_data_in_window as a pickle file ########################################################
+                # Save the fo_data_in_window as a pickle file
+                # 5. Save the fo_data_in_window as a compressed pickle file ########################################################
+                # Save the fo_data_in_window as a compressed pickle file
+                pickle_file_name = f'{safe_start_time}.pkl.gz'  # Use .pkl.gz for the compressed file
+                with gzip.open(os.path.join(self.output_path, pickle_file_name), 'wb') as f:
+                    pickle.dump(data_dict, f)
 
-                # Print the file name that was saved
-                print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(window_times)}")
+                # 6. Save the fo_data_in_window as a NetCDF file ########################################################
+                self.create_netcdf_file(output_folder=self.output_path, data_dict=data_dict)
+
+
 
         return None
 

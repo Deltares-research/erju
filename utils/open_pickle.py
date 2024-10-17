@@ -1,4 +1,5 @@
 import pickle
+from matplotlib import pyplot as plt
 
 
 def observe_pickle_contents(file_path):
@@ -33,5 +34,9 @@ def observe_pickle_contents(file_path):
 
 
 # Example usage
-pickle_file_path = r'C:\Projects\erju\data\database\2_20201111_123200124000.pkl'  # Replace with your pickle file path
+pickle_file_path = r'C:\Projects\erju\outputs\culemborg\20201120_094844413777.pkl'  # Replace with your pickle file path
 observe_pickle_contents(pickle_file_path)
+
+
+
+
