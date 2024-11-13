@@ -69,6 +69,7 @@ class OptasenseFOdata(BaseFOdata):
 
         return data
 
+
     def bandpass(self, data: np.array, freqmin: float, freqmax: float, fs: float, corners: int, zerophase=True):
         """
         Apply a bandpass filter to the data.
@@ -125,6 +126,8 @@ class OptasenseFOdata(BaseFOdata):
             measurement_duration = (file_end_time - file_start_time).total_seconds()
             # Calculate the time interval between samples
             time_interval = (rawDataTime[1] - rawDataTime[0]) * 1e-6 # Convert to seconds
+            # Calculate the measurement duration with the samples and frequency
+            measurement_duration_samples = file['Acquisition']['Raw[0]']['RawData'].shape[0] * time_interval
 
             # Get the properties from different sections in the file
             self.properties = {
@@ -156,6 +159,7 @@ class OptasenseFOdata(BaseFOdata):
                 'FileStartTime': file_start_time,
                 'FileEndTime': file_end_time,
                 'MeasurementDuration': measurement_duration,
+                'measurement_time': measurement_duration_samples,
                 'TimeInterval': time_interval,
                 'NumberOfMeasurements': file['Acquisition']['Raw[0]']['RawData'].shape[0]
 

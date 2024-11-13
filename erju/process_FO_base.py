@@ -186,12 +186,13 @@ class BaseFOdata:
         return middle_channel, start_time, end_time
 
 
-    def signal_averaging(self, plot: bool = False, save_to_path: str = None, channel: int = None, threshold: int = 500):
+    def signal_averaging(self, file_type: str, plot: bool = False, save_to_path: str = None, channel: int = None, threshold: int = 500):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
 
         Args:
+            file_type (str): The type of the file to extract the data from
             plot (bool): Plot the mean signal values
             save_to_path (str): The path to save the figure
             channel (int): The channel to extract the mean signal from
@@ -212,7 +213,7 @@ class BaseFOdata:
             relative_scan_channel = middle_channel - self.first_channel
 
         # Get the tdms files in the directory
-        tdms_files = get_files_in_dir(folder_path=self.dir_path, file_format='.tdms')
+        tdms_files = get_files_in_dir(folder_path=self.dir_path, file_format=file_type)
         # Build the complete path to the files
         tdms_files = [os.path.join(self.dir_path, file) for file in tdms_files]
 
@@ -238,7 +239,7 @@ class BaseFOdata:
             plt.legend()
 
             # Save the figure
-            file_name_suffix = 'Mean_Signal_silixa'
+            file_name_suffix = 'Mean_Signal'
             full_file_name = f'{file_name_suffix}.jpg'
             save_path = os.path.join(save_to_path, full_file_name)
             plt.savefig(save_path, dpi=300)
@@ -248,11 +249,12 @@ class BaseFOdata:
         return mean_signal
 
 
-    def get_files_above_threshold(self, signal: np.ndarray, threshold: float):
+    def get_files_above_threshold(self, file_type: str, signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
 
         Args:
+            file_type
             signal (np.ndarray): The mean signal values
             threshold (float): The threshold value
 
@@ -261,7 +263,7 @@ class BaseFOdata:
         """
 
         # Get the list of TDMS files in the directory
-        tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
+        tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith(file_type)]
 
         # Filter files based on the threshold
         selected_files = [file_name for file_name, mean_value in zip(

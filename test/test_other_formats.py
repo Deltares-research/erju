@@ -7,14 +7,14 @@ from utils.file_utils import get_files_in_dir
 
 ##### USER INPUT #######################################################################################################
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\test\holten'
+save_to_path = r'C:\Projects\erju\outputs\holten'
 
 # Define the first and last channel to be extracted
 first_channel = 0
-last_channel = 8000  # to note, the maximum number of channels in the current iDAS files is 7808
+last_channel = 3000  # to note, the maximum number of channels in the current iDAS files is 7808
 
 # Choose the reader type between 'silixa' / 'nptdms' / 'optasense'
-reader_type = 'silixa'
+reader_type = 'optasense'
 
 if reader_type == 'silixa':
     file_format = '.tdms'
@@ -24,7 +24,7 @@ elif reader_type == 'nptdms':
     file_path = r'D:\FO_culemborg_20112020\subset'
 elif reader_type == 'optasense':
     file_format = '.h5'
-    file_path = r'C:\Projects\erju\data\holten\samples'
+    file_path = r'C:\Projects\erju\data\holten\new'
 else:
     print('The reader type is not valid. Please choose between "silixa", "nptdms" or "optasense".')
 
@@ -35,14 +35,14 @@ else:
 start_timer = time.time()
 
 # Initialize the FindTrains class instance
-FOdata = BaseFOdata.create_instance(file_path, first_channel, last_channel, reader_type)
+FOdata = BaseFOdata.create_instance(dir_path=file_path, first_channel=first_channel, last_channel=last_channel, reader=reader_type)
 
 # Get a list with all the names of the TDMS files
 file_names = get_files_in_dir(folder_path=file_path, file_format=file_format)
 print('File names: ', file_names)
 
 # Extract the properties of FO file
-properties = FOdata.extract_properties_per_file(file_names[1])
+properties = FOdata.extract_properties_per_file(file_names[0])
 print('Properties: ', properties)
 
 # Get the data
@@ -67,7 +67,7 @@ for file in file_names:
 
 
 # Plot a single channel
-file_index = 1
+file_index = 0
 channel_index = 2000    # Channel from the file to plot
 
 

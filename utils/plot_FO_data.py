@@ -132,7 +132,7 @@ class PlotData:
 
         # Plot the data as an image plot
         # im = ax.imshow(data, aspect='auto', cmap='jet', vmax=data.max() * 0.30) # This is the original line
-        im = ax.imshow(np.abs(np.log10(data)), aspect='auto', cmap='jet') # better visualization for both silixa and optasense
+        im = ax.imshow(np.log10(np.abs((data))), aspect='auto', cmap='jet') # better visualization for both silixa and optasense
         ax.set_xlabel('Channel count')
         ax.set_ylabel('Time [s]')
 

@@ -403,6 +403,7 @@ class CreateDatabase:
                 # Print the file name that was saved
                 print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
 
+
     def create_netcdf_file(self, output_folder, data_dict):
         """
         Creates a compressed NetCDF file from the provided data dictionary.

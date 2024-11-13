@@ -8,23 +8,22 @@ from utils.file_utils import get_files_in_dir
 ##### USER INPUT #######################################################################################################
 
 # Define the path to the TDMS file
-#dir_path = r'C:\Projects\erju\data\just1'
-dir_path = r'C:\Projects\erju\data\culemborg\das_20201120'
+dir_path = r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
 
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\outputs\culemborg'
+save_to_path = r'C:\Projects\erju\outputs\holten'
 
 # Define the first and last channel to be extracted
 first_channel = 0
-last_channel = 8000  # to note, the maximum number of channels in the current iDAS files is 7808
+last_channel = 3000  # to note, the maximum number of channels in the current iDAS files is 7808
 
 # Define the threshold for the signal detection
-threshold = 550
+threshold = 1.5E-8
 
 # Choose the reader type between 'silixa' / 'nptdms' / 'optasense'
-reader_type = 'silixa'
+reader_type = 'optasense'
 
-channel = 4270
+channel = 1500
 ########################################################################################################################
 
 # Start the timer
@@ -33,18 +32,28 @@ start_timer = time.time()
 # Initialize the FindTrains class instance
 file_cul_instance = BaseFOdata.create_instance(dir_path, first_channel, last_channel, reader_type)
 
-# Extract the properties of the TDMS file
-properties = file_cul_instance.extract_properties()
-
 # Get a list with all the names of the TDMS files
-file_names = get_files_in_dir(folder_path=dir_path, file_format='.tdms')
+if reader_type == 'optasense':
+    file_format = '.h5'
+else:
+    file_format = '.tdms'
+
+file_names = get_files_in_dir(folder_path=dir_path, file_format=file_format)
 print('File names: ', file_names)
 
+# Extract the properties of the TDMS file
+if reader_type == 'optasense':
+    properties = file_cul_instance.extract_properties_per_file(file_names[0])
+else:
+    properties = file_cul_instance.extract_properties()
+
+print('Properties: ', properties)
+
 # Get the average signal
-signal_mean = file_cul_instance.signal_averaging(plot=True, save_to_path=save_to_path, channel=channel, threshold=threshold)
+signal_mean = file_cul_instance.signal_averaging(file_type=file_format, plot=True, save_to_path=save_to_path, threshold=threshold)
 
 # Find the file names above the threshold
-selected_files = file_cul_instance.get_files_above_threshold(signal_mean, threshold=threshold)
+selected_files = file_cul_instance.get_files_above_threshold(file_type=file_format, signal=signal_mean, threshold=threshold)
 
 print('Selected files: ', selected_files)
 
@@ -99,7 +108,7 @@ file_cul_instance.plot_array_channels(file_to_plot=selected_files[0],
 
 # Plot a single channel
 file_index = 1          # File index to plot (from the selected_files list)
-channel_index = 4270    # Channel from the file to plot
+channel_index = channel    # Channel from the file to plot
 
 # Create the instance for a given file index
 single_ch_plot = PlotData(selected_files[file_index], all_data)
