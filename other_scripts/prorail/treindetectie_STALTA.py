@@ -114,9 +114,6 @@ def find_trains_STALTA(
     return df_trains
 
 
-import h5py
-
-
 def calculate_sampling_frequency(file: h5py.File) -> float:
     """
     Calculate the sampling frequency from an open HDF5 file by measuring the time interval
@@ -273,7 +270,7 @@ def detect_treinpassages_single_channel(
             raise ValueError("Data shape is not the same in the begin and end files")
 
         filelength = data_shape[0]
-        n_channels = data_shape[1]
+        #n_channels = data_shape[1]
 
     # Load local files
     dfs = []
