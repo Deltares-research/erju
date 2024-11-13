@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
+# Old script to get the files in a directory
 def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = True):
     """
     Get a list of unique file names inside the given folder path that match the given file format.
@@ -108,3 +109,26 @@ def get_files_list(folder_path: str, file_extension: str = 'h5'):
 
     return file_paths
 
+
+def get_file_extensions(folder_path: str):
+    """
+    Get a list of all unique file extensions in the specified folder.
+
+    Args:
+        folder_path (str): The path to the directory to scan for file extensions.
+
+    Returns:
+        List[str]: A sorted list of unique file extensions (e.g., ['.txt', '.jpeg', '.pdf']).
+    """
+
+    folder_path = Path(folder_path)
+
+    if not folder_path.is_dir():
+        print(f"Provided path is not a directory: {folder_path}")
+        return []
+
+    # Collect all file extensions in the folder (excluding subdirectories)
+    extensions = {file.suffix for file in folder_path.iterdir() if file.is_file()}
+
+    # Convert set to a sorted list for readability
+    return sorted(extensions)
