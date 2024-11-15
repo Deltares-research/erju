@@ -1,4 +1,5 @@
 import h5py
+from datetime import datetime
 
 
 
@@ -31,5 +32,21 @@ def calculate_sampling_frequency(file: h5py.File) -> float:
         raise ValueError("The 'RawDataTime' dataset is missing in the file structure.")
     except IndexError:
         raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
+
+def convert_microseconds_to_datetime(microseconds: int) -> datetime:
+    """
+    Convert a timestamp in microseconds since epoch to a UTC datetime.
+
+    Args:
+        microseconds (int): Timestamp in microseconds.
+
+    Returns:
+        datetime (datetime): Corresponding UTC datetime.
+    """
+    # Convert microseconds to seconds
+    seconds = microseconds * 1e-6
+
+    # Return the corresponding datetime
+    return datetime.utcfromtimestamp(seconds)
 
 

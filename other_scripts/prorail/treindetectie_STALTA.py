@@ -23,7 +23,8 @@ def do_stalta(
     lower: int = 1,
     upper: int = 10,
 ) -> np.ndarray:
-    """Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
+    """
+    Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
 
     The size of the STA and LTA windows are determined by the lower and upper parameters, respectively.
 
@@ -239,7 +240,6 @@ def detect_treinpassages_in_folder(
 
 def detect_treinpassages_single_channel(
     filenames: list[Path],
-    detection_resolution: int,
     batchsize: int = 2,
     stalta_lower_thres: float = 0.5,
     stalta_upper_thres: float = 6,
@@ -249,7 +249,6 @@ def detect_treinpassages_single_channel(
 
     Args:
         filenames (list[Path]): List of file paths to the h5py files, files are assumed to be in the same folder
-        detection_resolution (int): Gap between channels used in the method to detect trains
         batchsize (int, optional): Number of files processed per batch. Defaults to 2.
         stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 1.5.
         stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 4.5.
@@ -339,7 +338,6 @@ filenames = list(path_to_files.glob("*.h5"))
 
 
 files_with_trains = detect_treinpassages_single_channel(filenames=filenames,
-                               detection_resolution=500,
                                batchsize=2,
                                stalta_lower_thres=0.5,
                                stalta_upper_thres=6,
