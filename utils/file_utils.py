@@ -152,7 +152,9 @@ def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
         np.ndarray: The filtered data
     """
     b, a = butter(1, cutoff, btype="high", analog=False)
-    return filtfilt(b, a, data)
+    processed_data = filtfilt(b, a, data)
+
+    return processed_data
 
 
 def find_trains_STALTA(

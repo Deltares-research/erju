@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos, windows
 
+from utils.file_utils import highpass
+
 # Define the directory path
 dir_path = r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
 # Get the file names in the directory
