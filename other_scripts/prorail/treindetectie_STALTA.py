@@ -157,20 +157,8 @@ def detect_trainpassages_in_folder(
         plot_signal: bool = False,  # Option to plot and save signals
         save_path: str = None       # Folder path to save the plots
 ) -> pd.DataFrame:
-    """Detects all the h5py files with train passages in a folder using the STA-LTA algorithm.
+    """Detects all the h5py files with train passages in a folder using the STA-LTA algorithm."""
 
-    Args:
-        filenames (list[Path]): List of file paths to the h5py files, files are assumed to be in the same folder
-        inspect_channel (int, optional): The channel number to inspect. Defaults to the middle channel.
-        batchsize (int, optional): Number of files processed per batch. Defaults to 2.
-        stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 0.5.
-        stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 6.
-        plot_signal (bool, optional): If True, plots the raw signal when a train is detected. Defaults to False.
-        save_path (str, optional): Directory to save the plots if plot_signal is True. Defaults to None.
-
-    Returns:
-        pd.DataFrame: Table with channel, filename and start, end times of the detected trains
-    """
     # Get metadata from the first file
     with h5py.File(filenames[0], "r") as file_start, h5py.File(filenames[-1], "r") as file_end:
         sf = calculate_sampling_frequency(file_start)
@@ -184,16 +172,18 @@ def detect_trainpassages_in_folder(
         filelength = data_shape[0]
         n_channels = data_shape[1]
 
-        # If no channel is provided, use the middle channel
         if inspect_channel is None:
             inspect_channel = n_channels // 2
 
-    # Load local files
+    # Generate batches with overlapping logic
     dfs = []
-    file_batches = [filenames[i: i + batchsize] for i in range(0, len(filenames), batchsize)]
-    batchlength = batchsize * filelength
+    file_batches = []
+    for i in range(0, len(filenames), batchsize - 1):  # Ensure overlap of one file
+        batch = filenames[i:i + batchsize]
+        file_batches.append(batch)
+
     for batch_number, batch in enumerate(file_batches):
-        logger.info(f"Reading files in batch {batch_number}/{len(file_batches)}; files names: {batch}")
+        logger.info(f"Reading files in batch {batch_number}/{len(file_batches)}; file names: {batch}")
         batch_data = []
 
         for file_path in batch:
@@ -203,15 +193,13 @@ def detect_trainpassages_in_folder(
 
         batch_data = np.concatenate(batch_data, axis=0)
 
-        # Apply high-pass filter to the concatenated data before processing
-        batch_data = highpass(batch_data, cutoff=0.1)  # Adjust cutoff as needed
+        # Apply high-pass filter to the concatenated data
+        batch_data = highpass(batch_data, cutoff=0.1)
 
-        # Now process the specified channel
+        # Process the data
         try:
-            single_signal_concat = batch_data  # Only data for the inspect_channel
+            single_signal_concat = batch_data
             signal_seconds = single_signal_concat.shape[0] / sf
-
-            # The LTA window size is determined by the signal length
             LTA_window_size = min(signal_seconds / 2, 50)
             LTA_window_size = max(LTA_window_size, 10)
             STA_window_size = LTA_window_size // 10
@@ -220,30 +208,22 @@ def detect_trainpassages_in_folder(
                 inspect_channel,
                 sf,
                 batch_number,
-                batchlength,
+                batchsize * filelength,
                 upper_thres=stalta_upper_thres,
                 lower_thres=stalta_lower_thres,
                 lower_seconds=STA_window_size,
                 upper_seconds=LTA_window_size,
             )
 
-            # Plot and save if plot_signal is True
             if plot_signal:
                 for train_start, train_end in zip(train_df['start'], train_df['end']):
-                    # Extract the signal for the detected train passage
                     train_signal = single_signal_concat[train_start:train_end]
-
-                    # Create the plot
                     fig, ax0 = plt.subplots(1, 1, figsize=(12, 6))
-
-                    # Plot the full 2D signal
                     ax0.plot(single_signal_concat)
-                    ax0.set_title(f"Raw Signal (File {os.path.basename(batch[0])})")  # Title with file name
+                    ax0.set_title(f"Raw Signal (File {os.path.basename(batch[0])})")
                     ax0.set_xlabel('Sample')
                     ax0.set_ylabel('Amplitude')
                     ax0.grid(True)
-
-                    # Save the plot
                     if save_path:
                         plot_filename = os.path.join(save_path, f"train_passage_{os.path.basename(batch[0])}.png")
                         plt.savefig(plot_filename)
@@ -253,22 +233,26 @@ def detect_trainpassages_in_folder(
         except TypeError as e:
             logger.warning(f"Channel {inspect_channel} failed; error message: {e}")
 
-    # Combine the results from each batch
+    # Combine results
     df = pd.concat(dfs).reset_index(drop=True)
-
     if df.empty:
         logger.warning("No trains detected, returning empty DataFrame")
         return pd.DataFrame({})
 
-    df = df.assign(startfile_index=lambda x: x.start // (filelength))
-    df = df.assign(endfile_index=lambda x: x.end // (filelength))
+    # Fix: Ensure indices map correctly to filenames
+    def safe_map_index(index):
+        return filenames[index].name if 0 <= index < len(filenames) else "Invalid index"
+
+    df = df.assign(startfile_index=lambda x: x.start // filelength)
+    df = df.assign(endfile_index=lambda x: x.end // filelength)
     df["startfile_index"] = df["startfile_index"].astype(int)
     df["endfile_index"] = df["endfile_index"].astype(int)
-    df["startfile"] = df["startfile_index"].map(lambda x: filenames[x].name)
-    df["endfile"] = df["endfile_index"].map(lambda x: filenames[x].name)
-    df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
+    df["startfile"] = df["startfile_index"].map(safe_map_index)
+    df["endfile"] = df["endfile_index"].map(safe_map_index)
+    df = df.drop(columns=["startfile_index", "endfile_index", "batch"], errors="ignore")
 
     return df
+
 
 
 
@@ -282,7 +266,7 @@ filenames = list(path_to_files.glob("*.h5"))
 save_path = r'C:\Projects\erju\outputs\holten'
 
 files_with_trains = detect_trainpassages_in_folder(filenames=filenames,
-                                                   batchsize=2,
+                                                   batchsize=10,
                                                    stalta_lower_thres=0.5,
                                                    stalta_upper_thres=6,
                                                    inspect_channel=1200,
