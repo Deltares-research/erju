@@ -147,26 +147,25 @@ def find_trains_STALTA(
 
 
 def detect_treinpassages_in_folder(
-    filenames: list[Path],
-    detection_resolution: int,
-    batchsize: int = 2,
-    stalta_lower_thres: float = 0.5,
-    stalta_upper_thres: float = 6,
+        filenames: list[Path],
+        inspect_channel: int = None,  # Optional parameter for a specific channel
+        batchsize: int = 2,
+        stalta_lower_thres: float = 0.5,
+        stalta_upper_thres: float = 6,
 ) -> pd.DataFrame:
-    """Detects all the h5py files with trainpassages in a folder using the STA-LTA algorithm.
+    """Detects all the h5py files with train passages in a folder using the STA-LTA algorithm.
 
     Args:
         filenames (list[Path]): List of file paths to the h5py files, files are assumed to be in the same folder
-        detection_resolution (int): Gap between channels used in the method to detect trains
+        inspect_channel (int, optional): The channel number to inspect. Defaults to the middle channel.
         batchsize (int, optional): Number of files processed per batch. Defaults to 2.
-        stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 1.5.
-        stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 4.5.
+        stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 0.5.
+        stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 6.
 
     Returns:
         pd.DataFrame: Table with channel, filename and start, end times of the detected trains
     """
     # Get metadata from the first file
-    # Compare with the last file to ensure they are the same
     with h5py.File(filenames[0], "r") as file_start, h5py.File(filenames[-1], "r") as file_end:
         sf = calculate_sampling_frequency(file_start)
         if sf != calculate_sampling_frequency(file_end):
@@ -178,11 +177,14 @@ def detect_treinpassages_in_folder(
 
         filelength = data_shape[0]
         n_channels = data_shape[1]
-        channels_to_inspect = list(range(0, n_channels, detection_resolution))
+
+        # If no channel is provided, use the middle channel
+        if inspect_channel is None:
+            inspect_channel = n_channels // 2
 
     # Load local files
     dfs = []
-    file_batches = [filenames[i : i + batchsize] for i in range(0, len(filenames), batchsize)]
+    file_batches = [filenames[i: i + batchsize] for i in range(0, len(filenames), batchsize)]
     batchlength = batchsize * filelength
     for batch_number, batch in enumerate(file_batches):
         logger.info(f"Reading files in batch {batch_number}")
@@ -190,41 +192,40 @@ def detect_treinpassages_in_folder(
 
         for file_path in batch:
             with h5py.File(file_path, "r") as file:
-                data = file["Acquisition"]["Raw[0]"]["RawData"][:, channels_to_inspect]
+                data = file["Acquisition"]["Raw[0]"]["RawData"][:, inspect_channel]
                 batch_data.append(data)
 
         batch_data = np.concatenate(batch_data, axis=0)
 
-        for channel_index, channel in enumerate(channels_to_inspect):
-            try:
-                single_signal_concat = batch_data[:, channel_index]  # type: ignore
+        # Now process the specified channel
+        try:
+            single_signal_concat = batch_data  # Only data for the inspect_channel
+            signal_seconds = single_signal_concat.shape[0] / sf
 
-                signal_seconds = single_signal_concat.shape[0] / sf
-
-                # The LTA window size is determined by the signal length
-                LTA_window_size = min(signal_seconds / 2, 50)
-                LTA_window_size = max(LTA_window_size, 10)
-                STA_window_size = LTA_window_size // 10
-                dfs.append(
-                    find_trains_STALTA(
-                        single_signal_concat,
-                        channel,
-                        sf,
-                        batch_number,
-                        batchlength,
-                        upper_thres=stalta_upper_thres,
-                        lower_thres=stalta_lower_thres,
-                        lower_seconds=STA_window_size,
-                        upper_seconds=LTA_window_size,
-                    )
+            # The LTA window size is determined by the signal length
+            LTA_window_size = min(signal_seconds / 2, 50)
+            LTA_window_size = max(LTA_window_size, 10)
+            STA_window_size = LTA_window_size // 10
+            dfs.append(
+                find_trains_STALTA(
+                    single_signal_concat,
+                    inspect_channel,
+                    sf,
+                    batch_number,
+                    batchlength,
+                    upper_thres=stalta_upper_thres,
+                    lower_thres=stalta_lower_thres,
+                    lower_seconds=STA_window_size,
+                    upper_seconds=LTA_window_size,
                 )
-            except TypeError as e:
-                logger.warning(f"Channel {channel} failed; error message: {e}")
+            )
+        except TypeError as e:
+            logger.warning(f"Channel {inspect_channel} failed; error message: {e}")
 
     df = pd.concat(dfs).reset_index(drop=True)
 
     if df.empty:
-        logger.warning("No trains detected, return empty DataFrame")
+        logger.warning("No trains detected, returning empty DataFrame")
         return pd.DataFrame({})
 
     df = df.assign(startfile_index=lambda x: x.start // (filelength))
@@ -234,9 +235,11 @@ def detect_treinpassages_in_folder(
     df["startfile"] = df["startfile_index"].map(lambda x: filenames[x].name)
     df["endfile"] = df["endfile_index"].map(lambda x: filenames[x].name)
     df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
+
     return df
 
 
+########################################################################
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
@@ -244,9 +247,12 @@ filenames = list(path_to_files.glob("*.h5"))
 
 
 files_with_trains = detect_treinpassages_in_folder(filenames=filenames,
-                                                   detection_resolution=600,
                                                    batchsize=2,
                                                    stalta_lower_thres=0.5,
-                                                   stalta_upper_thres=6)
+                                                   stalta_upper_thres=6,
+                                                   inspect_channel=1200)  # Specify channel here
+
 
 print(files_with_trains)
+
+
