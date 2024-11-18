@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import os
 import h5py
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from loguru import logger
 from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
@@ -118,7 +120,8 @@ def find_trains_STALTA(
     # trace.filter("bandpass", freqmin=1.0, freqmax=50, corners=4, zerophase=True)  # Bandpass filtering
     # singlechanneldata = trace.data  # Storing the data in a numpy array
 
-    singlechanneldata = highpass(data)[:-sf]
+    #singlechanneldata = highpass(data)[:-sf]
+    singlechanneldata = data
 
     # Run STA-LTA on the signal
     values = do_stalta(
@@ -145,13 +148,14 @@ def find_trains_STALTA(
 
     return df_trains
 
-
-def detect_treinpassages_in_folder(
+def detect_trainpassages_in_folder(
         filenames: list[Path],
         inspect_channel: int = None,  # Optional parameter for a specific channel
         batchsize: int = 2,
         stalta_lower_thres: float = 0.5,
         stalta_upper_thres: float = 6,
+        plot_signal: bool = False,  # Option to plot and save signals
+        save_path: str = None       # Folder path to save the plots
 ) -> pd.DataFrame:
     """Detects all the h5py files with train passages in a folder using the STA-LTA algorithm.
 
@@ -161,6 +165,8 @@ def detect_treinpassages_in_folder(
         batchsize (int, optional): Number of files processed per batch. Defaults to 2.
         stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 0.5.
         stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 6.
+        plot_signal (bool, optional): If True, plots the raw signal when a train is detected. Defaults to False.
+        save_path (str, optional): Directory to save the plots if plot_signal is True. Defaults to None.
 
     Returns:
         pd.DataFrame: Table with channel, filename and start, end times of the detected trains
@@ -187,7 +193,7 @@ def detect_treinpassages_in_folder(
     file_batches = [filenames[i: i + batchsize] for i in range(0, len(filenames), batchsize)]
     batchlength = batchsize * filelength
     for batch_number, batch in enumerate(file_batches):
-        logger.info(f"Reading files in batch {batch_number}")
+        logger.info(f"Reading files in batch {batch_number}/{len(file_batches)}; files names: {batch}")
         batch_data = []
 
         for file_path in batch:
@@ -196,6 +202,9 @@ def detect_treinpassages_in_folder(
                 batch_data.append(data)
 
         batch_data = np.concatenate(batch_data, axis=0)
+
+        # Apply high-pass filter to the concatenated data before processing
+        batch_data = highpass(batch_data, cutoff=0.1)  # Adjust cutoff as needed
 
         # Now process the specified channel
         try:
@@ -206,22 +215,45 @@ def detect_treinpassages_in_folder(
             LTA_window_size = min(signal_seconds / 2, 50)
             LTA_window_size = max(LTA_window_size, 10)
             STA_window_size = LTA_window_size // 10
-            dfs.append(
-                find_trains_STALTA(
-                    single_signal_concat,
-                    inspect_channel,
-                    sf,
-                    batch_number,
-                    batchlength,
-                    upper_thres=stalta_upper_thres,
-                    lower_thres=stalta_lower_thres,
-                    lower_seconds=STA_window_size,
-                    upper_seconds=LTA_window_size,
-                )
+            train_df = find_trains_STALTA(
+                single_signal_concat,
+                inspect_channel,
+                sf,
+                batch_number,
+                batchlength,
+                upper_thres=stalta_upper_thres,
+                lower_thres=stalta_lower_thres,
+                lower_seconds=STA_window_size,
+                upper_seconds=LTA_window_size,
             )
+
+            # Plot and save if plot_signal is True
+            if plot_signal:
+                for train_start, train_end in zip(train_df['start'], train_df['end']):
+                    # Extract the signal for the detected train passage
+                    train_signal = single_signal_concat[train_start:train_end]
+
+                    # Create the plot
+                    fig, ax0 = plt.subplots(1, 1, figsize=(12, 6))
+
+                    # Plot the full 2D signal
+                    ax0.plot(single_signal_concat)
+                    ax0.set_title(f"Raw Signal (File {os.path.basename(batch[0])})")  # Title with file name
+                    ax0.set_xlabel('Sample')
+                    ax0.set_ylabel('Amplitude')
+                    ax0.grid(True)
+
+                    # Save the plot
+                    if save_path:
+                        plot_filename = os.path.join(save_path, f"train_passage_{os.path.basename(batch[0])}.png")
+                        plt.savefig(plot_filename)
+                    plt.close()
+
+            dfs.append(train_df)
         except TypeError as e:
             logger.warning(f"Channel {inspect_channel} failed; error message: {e}")
 
+    # Combine the results from each batch
     df = pd.concat(dfs).reset_index(drop=True)
 
     if df.empty:
@@ -239,18 +271,23 @@ def detect_treinpassages_in_folder(
     return df
 
 
+
+
+
 ########################################################################
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
 filenames = list(path_to_files.glob("*.h5"))
+save_path = r'C:\Projects\erju\outputs\holten'
 
-
-files_with_trains = detect_treinpassages_in_folder(filenames=filenames,
+files_with_trains = detect_trainpassages_in_folder(filenames=filenames,
                                                    batchsize=2,
                                                    stalta_lower_thres=0.5,
                                                    stalta_upper_thres=6,
-                                                   inspect_channel=1200)  # Specify channel here
+                                                   inspect_channel=1200,
+                                                   plot_signal=True,
+                                                   save_path=save_path)  # Specify channel here
 
 
 print(files_with_trains)
