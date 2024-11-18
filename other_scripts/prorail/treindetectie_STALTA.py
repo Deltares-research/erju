@@ -8,7 +8,37 @@ from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt
 
-from foas_utils.general import calculate_sampling_frequency
+
+def calculate_sampling_frequency(file: h5py.File) -> float:
+    """
+    Calculate the sampling frequency from an open HDF5 file by measuring the time interval
+    between consecutive samples in the 'RawDataTime' dataset.
+
+    Args:
+        file (h5py.File): An open HDF5 file object.
+
+    Returns:
+        float: The calculated sampling frequency in Hz.
+    """
+    try:
+        # Access the 'RawDataTime' dataset to get timestamps for calculating sampling interval
+        raw_data_time = file['Acquisition']['Raw[0]']['RawDataTime']
+
+        # Calculate time interval between the first two samples in seconds
+        time_interval = (raw_data_time[1] - raw_data_time[0]) * 1e-6  # Convert from microseconds to seconds
+
+        # Sampling frequency is the inverse of the time interval
+        sampling_frequency = 1 / time_interval
+        # Make sampling frequency an integer
+        sampling_frequency = int(sampling_frequency)
+
+        return sampling_frequency
+
+    except KeyError:
+        raise ValueError("The 'RawDataTime' dataset is missing in the file structure.")
+    except IndexError:
+        raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
+
 
 
 def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
@@ -205,3 +235,18 @@ def detect_treinpassages_in_folder(
     df["endfile"] = df["endfile_index"].map(lambda x: filenames[x].name)
     df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
     return df
+
+
+
+# From a given folder path, get all the files with a given extension
+path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
+filenames = list(path_to_files.glob("*.h5"))
+
+
+files_with_trains = detect_treinpassages_in_folder(filenames=filenames,
+                                                   detection_resolution=600,
+                                                   batchsize=2,
+                                                   stalta_lower_thres=0.5,
+                                                   stalta_upper_thres=6)
+
+print(files_with_trains)
