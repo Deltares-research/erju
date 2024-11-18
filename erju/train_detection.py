@@ -14,7 +14,7 @@ from utils.h5_utils import calculate_sampling_frequency, convert_microseconds_to
 
 def detect_trainpassage_single_channel_h5(folder_path: str,
                                           channel: int,
-                                          batch_size: int = 10,
+                                          batch_size: int = 2,
                                           stalta_lower_thres: float = 0.5,
                                           stalta_upper_thres: float = 6):
     """

@@ -8,8 +8,6 @@ from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt
 
-from foas_utils.general import calculate_sampling_frequency
-
 
 def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
     b, a = butter(1, cutoff, btype="high", analog=False)
@@ -25,7 +23,8 @@ def do_stalta(
     lower: int = 1,
     upper: int = 10,
 ) -> np.ndarray:
-    """Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
+    """
+    Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
 
     The size of the STA and LTA windows are determined by the lower and upper parameters, respectively.
 
@@ -116,6 +115,38 @@ def find_trains_STALTA(
     return df_trains
 
 
+def calculate_sampling_frequency(file: h5py.File) -> float:
+    """
+    Calculate the sampling frequency from an open HDF5 file by measuring the time interval
+    between consecutive samples in the 'RawDataTime' dataset.
+
+    Args:
+        file (h5py.File): An open HDF5 file object.
+
+    Returns:
+        float: The calculated sampling frequency in Hz.
+    """
+    try:
+        # Access the 'RawDataTime' dataset to get timestamps for calculating sampling interval
+        raw_data_time = file['Acquisition']['Raw[0]']['RawDataTime']
+
+        # Calculate time interval between the first two samples in seconds
+        time_interval = (raw_data_time[1] - raw_data_time[0]) * 1e-6  # Convert from microseconds to seconds
+
+        # Sampling frequency is the inverse of the time interval
+        sampling_frequency = 1 / time_interval
+        # Make sampling frequency an integer
+        sampling_frequency = int(sampling_frequency)
+
+        return sampling_frequency
+
+    except KeyError:
+        raise ValueError("The 'RawDataTime' dataset is missing in the file structure.")
+    except IndexError:
+        raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
+
+
+
 def detect_treinpassages_in_folder(
     filenames: list[Path],
     detection_resolution: int,
@@ -149,6 +180,7 @@ def detect_treinpassages_in_folder(
         filelength = data_shape[0]
         n_channels = data_shape[1]
         channels_to_inspect = list(range(0, n_channels, detection_resolution))
+        channels_to_inspect = 1200
 
     # Load local files
     dfs = []
@@ -205,3 +237,112 @@ def detect_treinpassages_in_folder(
     df["endfile"] = df["endfile_index"].map(lambda x: filenames[x].name)
     df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
     return df
+
+def detect_treinpassages_single_channel(
+    filenames: list[Path],
+    batchsize: int = 2,
+    stalta_lower_thres: float = 0.5,
+    stalta_upper_thres: float = 6,
+    channel_to_inspect: int = 1200,  # Single channel to inspect
+) -> pd.DataFrame:
+    """Detects all the h5py files with train passages in a folder using the STA-LTA algorithm for a single channel.
+
+    Args:
+        filenames (list[Path]): List of file paths to the h5py files, files are assumed to be in the same folder
+        batchsize (int, optional): Number of files processed per batch. Defaults to 2.
+        stalta_lower_thres (float, optional): Threshold for switching trigger off. Defaults to 1.5.
+        stalta_upper_thres (float, optional): Threshold for switching trigger on. Defaults to 4.5.
+        channel_to_inspect (int, optional): The channel index to inspect. Defaults to 1200.
+
+    Returns:
+        pd.DataFrame: Table with channel, filename and start, end times of the detected trains
+    """
+    # Get metadata from the first file
+    # Compare with the last file to ensure they are the same
+    with h5py.File(filenames[0], "r") as file_start, h5py.File(filenames[-1], "r") as file_end:
+        sf = calculate_sampling_frequency(file_start)
+        if sf != calculate_sampling_frequency(file_end):
+            raise ValueError("Sampling frequency is not the same in the begin and end files")
+
+        data_shape = file_start["Acquisition"]["Raw[0]"]["RawData"].shape
+        if data_shape != file_end["Acquisition"]["Raw[0]"]["RawData"].shape:
+            raise ValueError("Data shape is not the same in the begin and end files")
+
+        filelength = data_shape[0]
+        #n_channels = data_shape[1]
+
+    # Load local files
+    dfs = []
+    file_batches = [filenames[i : i + batchsize] for i in range(0, len(filenames), batchsize)]
+    batchlength = batchsize * filelength
+    for batch_number, batch in enumerate(file_batches):
+        logger.info(f"Reading files in batch {batch_number}")
+        batch_data = []
+
+        for file_path in batch:
+            with h5py.File(file_path, "r") as file:
+                # Get only the specified channel's data
+                data = file["Acquisition"]["Raw[0]"]["RawData"][:, channel_to_inspect]
+                batch_data.append(data)
+
+        batch_data = np.concatenate(batch_data, axis=0)
+
+        try:
+            single_signal_concat = batch_data  # Only one channel, no need to iterate over channels
+
+            signal_seconds = single_signal_concat.shape[0] / sf
+
+            # The LTA window size is determined by the signal length
+            LTA_window_size = min(signal_seconds / 2, 50)
+            LTA_window_size = max(LTA_window_size, 10)
+            STA_window_size = LTA_window_size // 10
+            dfs.append(
+                find_trains_STALTA(
+                    single_signal_concat,
+                    channel_to_inspect,
+                    sf,
+                    batch_number,
+                    batchlength,
+                    upper_thres=stalta_upper_thres,
+                    lower_thres=stalta_lower_thres,
+                    lower_seconds=STA_window_size,
+                    upper_seconds=LTA_window_size,
+                )
+            )
+        except TypeError as e:
+            logger.warning(f"Channel {channel_to_inspect} failed; error message: {e}")
+
+    df = pd.concat(dfs).reset_index(drop=True)
+
+    if df.empty:
+        logger.warning("No trains detected, return empty DataFrame")
+        return pd.DataFrame({})
+
+    df = df.assign(startfile_index=lambda x: x.start // (filelength))
+    df = df.assign(endfile_index=lambda x: x.end // (filelength))
+    df["startfile_index"] = df["startfile_index"].astype(int)
+    df["endfile_index"] = df["endfile_index"].astype(int)
+    df["startfile"] = df["startfile_index"].map(lambda x: filenames[x].name)
+    df["endfile"] = df["endfile_index"].map(lambda x: filenames[x].name)
+    df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
+
+    return df
+
+
+
+########################################################################
+
+# From a given folder path, get all the files with a given extension
+path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
+filenames = list(path_to_files.glob("*.h5"))
+
+
+files_with_trains = detect_treinpassages_single_channel(filenames=filenames,
+                               batchsize=2,
+                               stalta_lower_thres=0.5,
+                               stalta_upper_thres=6,
+                               channel_to_inspect=1200)
+
+print(files_with_trains)
+
+
