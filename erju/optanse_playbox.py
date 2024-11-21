@@ -2,6 +2,7 @@ import os
 import h5py
 from utils.file_utils import get_files_in_dir
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos, windows
 
@@ -63,6 +64,15 @@ with h5py.File(file_path, 'r') as file:
     fs = file['Acquisition']['Raw[0]'].attrs['OutputDataRate']
     num_outputs = file['Acquisition']['Custom'].attrs['Num Output Channels']
     num_measurements = file['Acquisition']['Raw[0]']['RawData'].shape[0]
+
+    print('The file name is: ', file_path)
+    # Get the "RawDataTime" dataset
+    rawDataTime = file['Acquisition']['Raw[0]']['RawDataTime']
+    # Get the first and last entry in "RawDataTime"
+    # Assuming rawDataTime contains timestamps in microseconds
+    file_start_time = datetime.utcfromtimestamp(
+        rawDataTime[0] * 1e-6)  # Convert to seconds, then to datetime
+    print('The file start time is: ', file_start_time)
 
     signals = rawData[:]
     window = windows.tukey(M=num_measurements, alpha=0.1)
