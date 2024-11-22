@@ -1,11 +1,14 @@
 import h5py
 import numpy as np
 from pathlib import Path
+import pandas as pd
 import matplotlib.pyplot as plt
 from loguru import logger
 from datetime import datetime
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 from utils.file_utils import get_files_list
+from obspy.core.trace import Trace
+from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 
 
 def calculate_sampling_frequency(file: h5py.File) -> float:
@@ -89,6 +92,109 @@ def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
         return sosfilt(sos, data)
 
 
+def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres: float = 4.5, lower_thres: float = 1.5,
+              plots: bool = True, lower: int = 1, upper: int = 10,) -> np.ndarray:
+    """
+    Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
+    The size of the STA and LTA windows are determined by the lower and upper parameters, respectively.
+
+    Args:
+        data (Union[Trace, np.ndarray]): Input signal
+        freq (float): Sampling frequency
+        upper_thres (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
+        lower_thres (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
+        plots (bool, optional): If True, plot the results. Defaults to True.
+        lower (int, optional): Determines the size of the STA window. Defaults to 1.
+        upper (int, optional): Determines the size of the LTA window. . Defaults to 10.
+
+    Returns:
+        np.ndarray: STA-LTA values
+    """
+    # Convert input to Trace if it is not already
+    trace = data if isinstance(data, Trace) else Trace(np.array(data))
+    # Run the recursive STA-LTA algorithm
+    cft = recursive_sta_lta(a=trace.data, nsta=int(lower * freq), nlta=int(upper * freq))
+    # Plot the results if requested
+    if plots:
+        # Plot the STA-LTA values
+        plot_trigger(trace, cft, upper_thres, lower_thres)
+    return cft
+
+
+def find_trains_STALTA(
+    data: np.ndarray,
+    inspect_channel: int,
+    sf: int,
+    batch: int,
+    batch_length: int,
+    file_start_time: float,
+    window_extension: int = 10,
+    lower_seconds: int = 1,
+    upper_seconds: int = 10,
+    upper_thres: float = 6,
+    lower_thres: float = 0.5,
+    minimum_trigger_period: float = 3.0,
+) -> pd.DataFrame:
+    """Detect trains in a single channel using the STA-LTA algorithm.
+
+    Args:
+        data (np.ndarray): FOAS data for a single channel
+        inspect_channel(int): Single channel number
+        sf (int): Sampling frequency
+        batch (int): Batch number
+        batch_length (int): Length of a batch
+        file_start_time (float): Start time of the file
+        window_extension (int, optional): The time in seconds to extend the event window. Defaults to 10.
+        lower_seconds (int, optional): Determines the size of the STA window. Defaults to 1.
+        upper_seconds (int, optional): Determines the size of the LTA window. Defaults to 10.
+        upper_thres (float, optional): Threshold for switching trigger on. Defaults to 4.5.
+        lower_thres (float, optional): Threshold for switching trigger off. Defaults to 1.5.
+        minimum_trigger_period (float, optional):
+            The minimum period (in seconds) a trigger has to be to be included in the output. Defaults to 3.0
+
+    Returns:
+        pd.DataFrame: DataFrame with start and end times and the channel number of the detected trains
+    """
+    # Run STA-LTA on the signal
+    values = do_stalta(
+        data=data,
+        freq=sf, #TODO: this used to be sf/2 in the original, why?
+        plots=False,  # Only True for local dev
+        lower=lower_seconds,
+        upper=upper_seconds,
+        lower_thres=lower_thres,
+        upper_thres=upper_thres,
+    )
+
+    # Find the events where the STA-LTA value exceeds the thresholds and return the start and end indices
+    events = trigger_onset(values, upper_thres, lower_thres)
+
+    # Create the windows around the detected events
+    windows_indices = []
+    windows_times = []
+
+    # For each event, create a windows around it
+    for event in events:
+        # Extend the window by a buffer at the start and the end
+        start_index = max(0, event - window_extension * sf)
+        end_index = min(len(data) -1, event[1] + window_extension * sf)
+        # Compute the corresponding time for the start and end indices
+        start_time = file_start_time + start_index / sf
+
+        if len(events) == 0:  # Only continue if there are events
+            return pd.DataFrame(columns=["start", "end", "channel"])
+        offset = batch * batch_length  # TODO: We should not want to do this for very large runs
+        df_trains = pd.DataFrame(events, columns=["start", "end"]).assign(batch=batch)
+        df_trains = df_trains.loc[lambda d: d.end - d.start > minimum_trigger_period * sf]
+        df_trains["start"] = df_trains["start"] + offset
+        df_trains["end"] = df_trains["end"] + offset
+        df_trains["channel"] = inspect_channel
+        df_trains["start_time"] = file_start_time
+
+        return df_trains
+
+
+
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
 
@@ -139,7 +245,12 @@ for batch_number, batch in enumerate(file_batches):
             length_batch_raw_data = len(batch_raw_data)
 
     # Concatenate the data from the batch. Here are all the channels from the combined batch files
+    # Concatenate data and calculate time
     raw_data = np.concatenate(batch_raw_data, axis=0)
+    time = np.array([
+        file_start_time + pd.Timedelta(microseconds=int(raw_data_time[i]))
+        for i in range(len(raw_data_time))
+    ])
     print('Elements inside raw_data: ', len(raw_data))
 
     # Create arrays to hold filtered data with the same shape as raw_data
@@ -154,6 +265,20 @@ for batch_number, batch in enumerate(file_batches):
         # Apply the bandpass filter to the high-pass-filtered data of the current channel
         raw_data_bandpass[:, channel] = bandpass(data=raw_data_highpass[:, channel],
                                                  freqmin=0.1, freqmax=100, fs=1000, corners=4)
+
+    # Apply the STA/LTA algorithm to the filtered data
+    try:
+        print('Elements inside raw_data_bandpass: ', len(raw_data_bandpass))
+
+
+
+    except ValueError as e:
+        logger.error(f"An error occurred while processing batch {batch_number + 1}: {e}")
+
+
+
+
+
 
     # Plot one raw and filtered channel for comparison
     channel_to_plot = 5  # Adjust this to visualize different channels

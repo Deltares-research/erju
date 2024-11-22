@@ -76,7 +76,7 @@ def do_stalta(
     """
     trace = data if isinstance(data, Trace) else Trace(np.array(data))
 
-    cft = recursive_sta_lta(trace.data, int(lower * freq), int(upper * freq))
+    cft = recursive_sta_lta(a=trace.data, nsta=int(lower * freq), nlta=int(upper * freq))
     if plots:
         plot_trigger(trace, cft, upper_thres, lower_thres)
     return cft
@@ -128,8 +128,8 @@ def find_trains_STALTA(
 
     # Run STA-LTA on the signal
     values = do_stalta(
-        singlechanneldata,
-        sf / 2,
+        data=singlechanneldata,
+        freq=sf / 2, # Why freq is sf/2?
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
