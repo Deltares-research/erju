@@ -247,6 +247,8 @@ for batch_number, batch in enumerate(file_batches):
     # Concatenate the data from the batch. Here are all the channels from the combined batch files
     # Concatenate data and calculate time
     raw_data = np.concatenate(batch_raw_data, axis=0)
+    # Calculate the time for each sample
+    #TODO: I WAS HERE, FIX THIS
     time = np.array([
         file_start_time + pd.Timedelta(microseconds=int(raw_data_time[i]))
         for i in range(len(raw_data_time))
