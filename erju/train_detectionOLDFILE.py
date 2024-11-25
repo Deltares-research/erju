@@ -1,9 +1,11 @@
-# This is the new (as of 13/11/24) version of train_detection.py, based on the STA_LTA method.
+# OLD> NOT IN USE ANYMORE
+# This is the new (as of 13/11/24) version of train_detectionOLDFILE.py, based on the STA_LTA method.
 # The idea of this script is to find files with trains.
 
 # I will first start with the files of the Silixa format (.tdms)
 
 # Import the necessary libraries
+import os
 import h5py
 from loguru import logger
 import numpy as np
@@ -123,7 +125,7 @@ def detect_trainpassage_single_channel_h5(folder_path: str,
 
 
 
-def detect_trainpassage_single_channel(folder_path: str, channel: int):
+def detect_trainpassage_single_channel(folder_path: str, channel: int, save_path: str = None):
     """
     Detect the train passage in a single channel. This process looks into a specific channel (location), file by file
     for a signal anomaly that indicates the passage of a train. It will call a different function depending on the
@@ -132,6 +134,7 @@ def detect_trainpassage_single_channel(folder_path: str, channel: int):
      Args:
             folder_path (str): The path to the directory containing the files.
             channel (int): The channel number to look for the train passage.
+            save_path (str): The path to save the results
     """
 
     # Browse the directory and gather a list of all the file extensions.
@@ -140,8 +143,13 @@ def detect_trainpassage_single_channel(folder_path: str, channel: int):
     # Call a different function depending on the file extension.
     if '.h5' in file_extensions:
         logger.info("The files are in the OptaSense .h5 format.")
+        # Call the function to detect the train passage in the OptaSense .h5 files
         df = detect_trainpassage_single_channel_h5(folder_path=folder_path, channel=channel)
-        print(df)
+        # Save the results to a CSV file on the specified path with the name 'train_detection and the channel number'
+        if save_path:
+            save_name = f"train_detection_channel_{channel}.csv"
+            save_path = os.path.join(save_path, save_name)
+            df.to_csv(save_path, index=False)
 
     elif '.tdms' in file_extensions:
         logger.info("The files are in the Silixa .tdms format.")
@@ -161,6 +169,7 @@ def detect_trainpassage_single_channel(folder_path: str, channel: int):
 ########################################################################################################################
 
 files_path = r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
-detect_trainpassage_single_channel(folder_path=files_path, channel=1200)
+save_path = r'C:\Projects\erju\outputs\holten'
+detect_trainpassage_single_channel(folder_path=files_path, channel=1200, save_path=save_path)
 
 print('Done')

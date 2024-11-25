@@ -244,6 +244,7 @@ Based on the code provided by Joost (ProRail) and Edwin (Deltares), this code:
 - If it detects a train, it saves the start and end times of the train, the channel number, and the file name
 - It then saves all the files with trains in a CSV file
 """
+#TODO: This now works only with .h5 files. Lets make it general like in the old train_detectionOLDFILE.py
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')

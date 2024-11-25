@@ -216,6 +216,10 @@ for i in range(0, len(file_paths), batchsize - 1):  # Ensure overlap of one file
 center_channel = 1200
 channel_range = 5
 
+# Calculate the relative position of the center channel in a new list of a given number of channels according to the channel range
+relative_center_channel = channel_range * 2 // 2
+print('Relative center channel: ', relative_center_channel)
+
 # Calculate the new start channel and end channel
 start_channel = max(0, center_channel - channel_range)  # Ensure start channel is not negative
 end_channel = center_channel + channel_range
@@ -239,6 +243,8 @@ for batch_number, batch in enumerate(file_batches):
                 # Get the first timestamp and convert it to a datetime object
                 file_start_time = datetime.utcfromtimestamp(raw_data_time[0] * 1e-6)
                 num_measurements = file['Acquisition']['Raw[0]']['RawData'].shape[0]
+                # Calculate the sampling frequency
+                sampling_frequency = calculate_sampling_frequency(file)
 
             # Append the data to the list
             batch_raw_data.append(file_raw_data)
@@ -247,13 +253,10 @@ for batch_number, batch in enumerate(file_batches):
     # Concatenate the data from the batch. Here are all the channels from the combined batch files
     # Concatenate data and calculate time
     raw_data = np.concatenate(batch_raw_data, axis=0)
+    # Print the file_start_time to check if it is correct
+    print('File start time: ', file_start_time)
     # Calculate the time for each sample
-    #TODO: I WAS HERE, FIX THIS
-    time = np.array([
-        file_start_time + pd.Timedelta(microseconds=int(raw_data_time[i]))
-        for i in range(len(raw_data_time))
-    ])
-    print('Elements inside raw_data: ', len(raw_data))
+
 
     # Create arrays to hold filtered data with the same shape as raw_data
     raw_data_highpass = np.empty_like(raw_data)
@@ -268,9 +271,27 @@ for batch_number, batch in enumerate(file_batches):
         raw_data_bandpass[:, channel] = bandpass(data=raw_data_highpass[:, channel],
                                                  freqmin=0.1, freqmax=100, fs=1000, corners=4)
 
+
+
     # Apply the STA/LTA algorithm to the filtered data
     try:
-        print('Elements inside raw_data_bandpass: ', len(raw_data_bandpass))
+        # First lets calculate the STA and LTA window sizes
+        signal_seconds = raw_data_bandpass.shape[0] / sampling_frequency
+        LTA_window_size = min(signal_seconds / 2, 50)
+        LTA_window_size = max(LTA_window_size, 10)
+        STA_window_size = LTA_window_size // 10
+
+        events_df = find_trains_STALTA(data=raw_data_bandpass,
+                                       inspect_channel=relative_center_channel,
+                                       sf=sampling_frequency,
+                                       batch=batch_number,
+                                       batch_length=num_measurements * batchsize,
+                                       file_start_time=file_start_time,
+                                       window_extension=10,
+                                       upper_thres=6,
+                                       lower_thres=0.5,
+                                       lower_seconds=STA_window_size,
+                                       upper_seconds=LTA_window_size,)
 
 
 

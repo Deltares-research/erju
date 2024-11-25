@@ -202,13 +202,13 @@ def find_trains_STALTA(
 
     # Run STA-LTA on the signal
     values = do_stalta(
-        singlechanneldata,
-        sf / 2,
+        data=singlechanneldata,
+        freq=sf,
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
-        lower_thres=lower_thres,
-        upper_thres=upper_thres,
+        lower_thres_plot=lower_thres,
+        upper_thres_plot=upper_thres,
     )
 
     # Find the triggers in the signal based on the thresholds provided
@@ -232,8 +232,8 @@ def find_trains_STALTA(
 def do_stalta(
     data: Trace | np.ndarray,
     freq: float,
-    upper_thres: float = 4.5,
-    lower_thres: float = 1.5,
+    upper_thres_plot: float = 4.5,
+    lower_thres_plot: float = 1.5,
     plots: bool = True,
     lower: int = 1,
     upper: int = 10,
@@ -259,5 +259,5 @@ def do_stalta(
 
     cft = recursive_sta_lta(trace.data, int(lower * freq), int(upper * freq))
     if plots:
-        plot_trigger(trace, cft, upper_thres, lower_thres)
+        plot_trigger(trace, cft, upper_thres_plot, lower_thres_plot)
     return cft
