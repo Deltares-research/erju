@@ -47,8 +47,8 @@ def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
 def do_stalta(
     data: Trace | np.ndarray,
     freq: float,
-    upper_thres: float = 4.5,
-    lower_thres: float = 1.5,
+    upper_thres_plot: float = 4.5,
+    lower_thres_plot: float = 1.5,
     plots: bool = True,
     lower: int = 1,
     upper: int = 10,
@@ -60,8 +60,8 @@ def do_stalta(
     Args:
         data (Union[Trace, np.ndarray]): Input signal
         freq (float): _description_
-        upper_thres (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
-        lower_thres (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
+        upper_thres_plot (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
+        lower_thres_plot (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
         plots (bool, optional): If True, plot the results. Defaults to True.
         lower (int, optional): Determines the size of the STA window. Defaults to 1.
         upper (int, optional): Determines the size of the LTA window. . Defaults to 10.
@@ -73,7 +73,7 @@ def do_stalta(
 
     cft = recursive_sta_lta(trace.data, int(lower * freq), int(upper * freq))
     if plots:
-        plot_trigger(trace, cft, upper_thres, lower_thres)
+        plot_trigger(trace, cft, upper_thres_plot, _plot)
     return cft
 
 
@@ -120,13 +120,13 @@ def find_trains_STALTA(
 
     # Run STA-LTA on the signal
     values = do_stalta(
-        singlechanneldata,
-        sf / 2,
+        data=singlechanneldata,
+        freq=sf,
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
-        lower_thres=lower_thres,
-        upper_thres=upper_thres,
+        lower_thres_plot=lower_thres,
+        upper_thres_plot=upper_thres,
     )
 
     # Find triggers in the signal and the reversed signal
@@ -248,21 +248,36 @@ Based on the code provided by Joost (ProRail) and Edwin (Deltares), this code:
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
-filenames = list(path_to_files.glob("*.h5"))
 save_path = r'C:\Projects\erju\outputs\holten'
 
-files_with_trains = detect_trainpassages_in_folder(filenames=filenames,
-                                                   batchsize=1,
-                                                   detection_resolution=250,
-                                                   stalta_lower_thres=0.5,
-                                                   stalta_upper_thres=6,
-                                                   )
+# Detection parameters
+batchsize = 1
+detection_resolution = 250
+stalta_lower_thres = 0.5
+stalta_upper_thres = 6
+
+# Detect train passages (dummy function; replace with actual implementation)
+files_with_trains = detect_trainpassages_in_folder(
+    filenames=list(path_to_files.glob("*.h5")),
+    batchsize=batchsize,
+    detection_resolution=detection_resolution,
+    stalta_lower_thres=stalta_lower_thres,
+    stalta_upper_thres=stalta_upper_thres,
+)
 
 # Combine "startfile" and "endfile" columns into one Series and get unique values
 all_files = pd.concat([files_with_trains['startfile'], files_with_trains['endfile']]).unique()
 
-# Convert the result to a DataFrame for saving as a CSV
-pd.DataFrame(all_files, columns=['file_name']).to_csv(save_path + r'\all_files_with_trains.csv', index=False)
+# Extract input folder name dynamically
+input_folder_name = path_to_files.name
 
+# Automatically generate the output CSV filename based on parameters and input folder name
+output_filename = (
+    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}.csv")
+output_filepath = Path(save_path) / output_filename
 
+# Save the results to a CSV file
+pd.DataFrame(all_files, columns=['file_name']).to_csv(output_filepath, index=False)
+
+logger.info(f"Saved the detected trains file list to {output_filepath}")
 

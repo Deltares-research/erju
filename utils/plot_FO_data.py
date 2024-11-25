@@ -5,6 +5,8 @@ import matplotlib.ticker as ticker
 import logging
 import pandas as pd
 from datetime import datetime
+from matplotlib.dates import DateFormatter
+
 
 # Class to plot the data that takes in the path and file names
 class PlotData:
@@ -268,12 +270,7 @@ def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
     plt.show()
 
 
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
 
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-import os
 
 
 def plot_signals_and_stalta(signal, stalta_ratio, window_times, trigger_on, trigger_off, file, output_folder):

@@ -92,7 +92,7 @@ def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
         return sosfilt(sos, data)
 
 
-def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres: float = 4.5, lower_thres: float = 1.5,
+def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres_plot: float = 4.5, lower_thres_plot: float = 1.5,
               plots: bool = True, lower: int = 1, upper: int = 10,) -> np.ndarray:
     """
     Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
@@ -101,8 +101,8 @@ def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres: float = 4.5, l
     Args:
         data (Union[Trace, np.ndarray]): Input signal
         freq (float): Sampling frequency
-        upper_thres (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
-        lower_thres (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
+        upper_thres_plot (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
+        lower_thres_plot (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
         plots (bool, optional): If True, plot the results. Defaults to True.
         lower (int, optional): Determines the size of the STA window. Defaults to 1.
         upper (int, optional): Determines the size of the LTA window. . Defaults to 10.
@@ -117,7 +117,7 @@ def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres: float = 4.5, l
     # Plot the results if requested
     if plots:
         # Plot the STA-LTA values
-        plot_trigger(trace, cft, upper_thres, lower_thres)
+        plot_trigger(trace, cft, upper_thres_plot, lower_thres_plot)
     return cft
 
 
@@ -158,12 +158,12 @@ def find_trains_STALTA(
     # Run STA-LTA on the signal
     values = do_stalta(
         data=data,
-        freq=sf, #TODO: this used to be sf/2 in the original, why?
+        freq=sf/2, #TODO: this used to be sf/2 in the original, why?
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
-        lower_thres=lower_thres,
-        upper_thres=upper_thres,
+        lower_thres_plot=lower_thres,
+        upper_thres_plot=upper_thres,
     )
 
     # Find the events where the STA-LTA value exceeds the thresholds and return the start and end indices
@@ -176,7 +176,7 @@ def find_trains_STALTA(
     # For each event, create a windows around it
     for event in events:
         # Extend the window by a buffer at the start and the end
-        start_index = max(0, event - window_extension * sf)
+        start_index = max(0, event[0] - window_extension * sf)
         end_index = min(len(data) -1, event[1] + window_extension * sf)
         # Compute the corresponding time for the start and end indices
         start_time = file_start_time + start_index / sf
@@ -280,6 +280,9 @@ for batch_number, batch in enumerate(file_batches):
         LTA_window_size = min(signal_seconds / 2, 50)
         LTA_window_size = max(LTA_window_size, 10)
         STA_window_size = LTA_window_size // 10
+
+        # Now lets compute the timestamp for each index in the data, starting from the file start time
+        timestamps = [file_start_time + i / sampling_frequency for i in range(raw_data_bandpass.shape[0])]
 
         events_df = find_trains_STALTA(data=raw_data_bandpass,
                                        inspect_channel=relative_center_channel,
