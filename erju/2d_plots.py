@@ -121,7 +121,7 @@ def read_and_plot_all_signals(csv_path: Path, data_base_path: Path, save_path: P
 
 
 # Path to the CSV, data base directory, and save directory
-csv_path = Path(r'C:\Projects\erju\outputs\holten\trains_recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels_res250_low0.5_up6.csv')
+csv_path = Path(r'C:\Projects\erju\outputs\holten\trains_recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels_res250_low0.5_up6_FSdiv2.csv')
 data_base_path = Path(
     r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
 save_path = Path(r'C:\Projects\erju\outputs\holten\plots')

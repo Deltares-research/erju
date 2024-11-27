@@ -121,7 +121,7 @@ def find_trains_STALTA(
     # Run STA-LTA on the signal
     values = do_stalta(
         data=singlechanneldata,
-        freq=sf,
+        freq=sf/2,
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
@@ -273,7 +273,7 @@ input_folder_name = path_to_files.name
 
 # Automatically generate the output CSV filename based on parameters and input folder name
 output_filename = (
-    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}.csv")
+    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}_FS.csv")
 output_filepath = Path(save_path) / output_filename
 
 # Save the results to a CSV file

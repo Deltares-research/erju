@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 from utils.file_utils import get_files_list
 from obspy.core.trace import Trace
@@ -255,8 +255,9 @@ for batch_number, batch in enumerate(file_batches):
     raw_data = np.concatenate(batch_raw_data, axis=0)
     # Print the file_start_time to check if it is correct
     print('File start time: ', file_start_time)
-    # Calculate the time for each sample
-
+    # Calculate the time for each data point in the signal starting from the file start time as a datetime object
+    # Assuming file_start_time is a datetime object and raw_data.shape[0] is the number of samples
+    timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
 
     # Create arrays to hold filtered data with the same shape as raw_data
     raw_data_highpass = np.empty_like(raw_data)
@@ -280,9 +281,6 @@ for batch_number, batch in enumerate(file_batches):
         LTA_window_size = min(signal_seconds / 2, 50)
         LTA_window_size = max(LTA_window_size, 10)
         STA_window_size = LTA_window_size // 10
-
-        # Now lets compute the timestamp for each index in the data, starting from the file start time
-        timestamps = [file_start_time + i / sampling_frequency for i in range(raw_data_bandpass.shape[0])]
 
         events_df = find_trains_STALTA(data=raw_data_bandpass,
                                        inspect_channel=relative_center_channel,
