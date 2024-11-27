@@ -304,21 +304,21 @@ for batch_number, batch in enumerate(file_batches):
 
 
 
-    # Plot one raw and filtered channel for comparison
+    # Plot one raw and filtered channel for comparison using the signal in y and the timestamps in x
     channel_to_plot = 5  # Adjust this to visualize different channels
     fig, ax0 = plt.subplots(3, 1, figsize=(12, 6), sharex=True)
 
-    ax0[0].plot(raw_data[:, channel_to_plot], color='black', label='Raw data')
+    ax0[0].plot(timestamps, raw_data[:, channel_to_plot], color='black', label='Raw data')
     ax0[0].set_title('Raw data')
     ax0[0].set_ylabel('Amplitude')
     ax0[0].grid(True)
 
-    ax0[1].plot(raw_data_bandpass[:, channel_to_plot], color='blue', label='Filtered data')
+    ax0[1].plot(timestamps, raw_data_bandpass[:, channel_to_plot], color='blue', label='Filtered data')
     ax0[1].set_title('Filtered data bandpass 0.1 - 100 Hz')
     ax0[1].set_ylabel('Amplitude')
     ax0[1].grid(True)
 
-    ax0[2].plot(raw_data_highpass[:, channel_to_plot], color='red', label='Filtered data')
+    ax0[2].plot(timestamps, raw_data_highpass[:, channel_to_plot], color='red', label='Filtered data')
     ax0[2].set_title('Filtered data highpass 0.1 Hz')
     ax0[2].set_ylabel('Amplitude')
     ax0[2].grid(True)
