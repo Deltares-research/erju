@@ -170,12 +170,9 @@ def find_trains_STALTA(
         windows_times (list): List of tuples with the start and end times of the detected events
         values (np.ndarray): STA-LTA ratio values
     """
-    # from the data, get the channel to inspect to find the events
-    data_main_channel = data[:, relative_center_channel]
-
     # Run STA-LTA on the signal
     values = do_stalta(
-        data=data_main_channel,
+        data=data,
         freq=sf/2, # It works better at finding events with sf/2 instead of the actual sf that I initially used
         plots=False,  # Only True for local dev
         lower=lower_seconds,
@@ -205,17 +202,9 @@ def find_trains_STALTA(
         start_time = timestamps[start_index]
         end_time = timestamps[end_index]
 
-        #TODO: I Need to extract the data from all the channels and not only the one used for the STA/LTA
-        # Extract the event data in each channel for the window
-        for i in range(data.shape[1]):
-            signal_i = data[:, i]
 
-
-        event_data = data[start_index:end_index + 1]
-        event_timestamps = timestamps[start_index:end_index + 1]
-
-        create_netcdf_file(event_data=event_data,
-                           timestamps=event_timestamps,
+        create_netcdf_file(data=data,
+                           timestamps=timestamps,
                            start_time=start_time,
                            end_time=end_time,
                            sampling_frequency=sf,
@@ -232,7 +221,8 @@ def find_trains_STALTA(
 
 
 
-def plot_signals_and_stalta(raw_signal, filtered_signal, timestamps, stalta_ratio, window_times, trigger_on, trigger_off):
+def plot_signals_and_stalta(raw_signal, filtered_signal, timestamps, stalta_ratio, window_times, trigger_on, trigger_off,
+                            output_dir="output", save_plot=False):
     """
     Plots the FO signal and STA/LTA ratio with detected events highlighted and saves the plot.
 
@@ -244,6 +234,8 @@ def plot_signals_and_stalta(raw_signal, filtered_signal, timestamps, stalta_rati
         window_times (list): List of tuples indicating the start and end times of detected events.
         trigger_on (float): The value for the 'on' trigger line.
         trigger_off (float): The value for the 'off' trigger line.
+        output_dir (str): Directory to save the plot.
+        save_plot (bool): If True, save the plot to the output directory.
     """
     fig, ax = plt.subplots(3, 1, figsize=(12, 8))
 
@@ -283,16 +275,24 @@ def plot_signals_and_stalta(raw_signal, filtered_signal, timestamps, stalta_rati
     ax[2].legend()  # Show legend for the trigger lines
 
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+
+    # If save_plot is True, save the plot to the output directory
+    if save_plot:
+        os.makedirs(output_dir, exist_ok=True)
+        file_name = f"batch_signal_{timestamps[0].strftime('%Y%m%dT%H%M%S')}.png"
+        file_path = os.path.join(output_dir, file_name)
+        plt.savefig(file_path)
+
     plt.close()
 
 
-def create_netcdf_file(event_data, timestamps, start_time, end_time, sampling_frequency, output_dir="output"):
+def create_netcdf_file(data, timestamps, start_time, end_time, sampling_frequency, output_dir="output"):
     """
     Create and save a NetCDF file for a detected event.
 
     Args:
-        event_data (np.ndarray): Signal data for the event.
+        data (np.ndarray): Signal data for the event.
         timestamps (list): Timestamps for the event.
         start_time (datetime): Start time of the event.
         end_time (datetime): End time of the event.
@@ -306,7 +306,7 @@ def create_netcdf_file(event_data, timestamps, start_time, end_time, sampling_fr
     # Create NetCDF file
     with nc.Dataset(file_path, 'w', format='NETCDF4') as ncfile:
         # Create dimensions
-        ncfile.createDimension('time', len(event_data))
+        ncfile.createDimension('time', len(data))
 
         # Create variables
         time_var = ncfile.createVariable('time', 'f8', ('time',))
@@ -314,7 +314,7 @@ def create_netcdf_file(event_data, timestamps, start_time, end_time, sampling_fr
 
         # Assign data
         time_var[:] = np.array([(ts - timestamps[0]).total_seconds() for ts in timestamps])
-        data_var[:] = event_data
+        data_var[:] = data
 
         # Add metadata
         ncfile.description = f"Event data from {start_time} to {end_time}"
@@ -328,7 +328,7 @@ def create_netcdf_file(event_data, timestamps, start_time, end_time, sampling_fr
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
-output_dir = r'C:\Projects\erju\outputs\holten'
+output_dir = r'C:\Projects\erju\outputs\holten\extract_signals'
 
 # Get the list of files
 file_paths = get_files_list(folder_path=path_to_files, file_extension='h5')
@@ -417,7 +417,7 @@ for batch_number, batch in enumerate(file_batches):
         STA_window_size = LTA_window_size // 10
 
         # Find the events in the center channel using the STA/LTA method#
-        window_indices, window_times, values = find_trains_STALTA(data=raw_data_highpass,
+        window_indices, window_times, values = find_trains_STALTA(data=raw_data_highpass[:, relative_center_channel],
                                                                   timestamps=timestamps,
                                                                   inspect_channel=relative_center_channel,
                                                                   sf=sampling_frequency,
@@ -445,7 +445,9 @@ for batch_number, batch in enumerate(file_batches):
                                 window_times=window_times,
                                 trigger_on=upper_thresh,
                                 trigger_off=lower_thresh,
-                                )
+                                output_dir=output_dir,
+                                save_plot=True)
+
     # Handle exceptions
     except ValueError as e:
         logger.error(f"An error occurred while processing batch {batch_number + 1}: {e}")
