@@ -3,8 +3,11 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
 from loguru import logger
 from datetime import datetime, timedelta
+
+from numpy.core.defchararray import upper
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 from utils.file_utils import get_files_list
 from obspy.core.trace import Trace
@@ -92,8 +95,13 @@ def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
         return sosfilt(sos, data)
 
 
-def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres_plot: float = 4.5, lower_thres_plot: float = 1.5,
-              plots: bool = True, lower: int = 1, upper: int = 10,) -> np.ndarray:
+def do_stalta(data: Trace | np.ndarray,
+              freq: float,
+              upper_thresh: float,
+              lower_thresh: float,
+              plots: bool = True,
+              lower: int = 1,
+              upper: int = 10,) -> np.ndarray:
     """
     Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
     The size of the STA and LTA windows are determined by the lower and upper parameters, respectively.
@@ -101,8 +109,8 @@ def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres_plot: float = 4
     Args:
         data (Union[Trace, np.ndarray]): Input signal
         freq (float): Sampling frequency
-        upper_thres_plot (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
-        lower_thres_plot (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
+        upper_thresh (float, optional): Threshold for switching trigger on, only relevant for plotting. Defaults to 4.5.
+        lower_thresh (float, optional): Threshold for switching trigger off, only relevant for plotting. Defaults to 1.5.
         plots (bool, optional): If True, plot the results. Defaults to True.
         lower (int, optional): Determines the size of the STA window. Defaults to 1.
         upper (int, optional): Determines the size of the LTA window. . Defaults to 10.
@@ -117,28 +125,31 @@ def do_stalta(data: Trace | np.ndarray, freq: float, upper_thres_plot: float = 4
     # Plot the results if requested
     if plots:
         # Plot the STA-LTA values
-        plot_trigger(trace, cft, upper_thres_plot, lower_thres_plot)
+        plot_trigger(trace, cft, upper_thresh, lower_thresh)
     return cft
 
 
 def find_trains_STALTA(
     data: np.ndarray,
+    timestamps: list,
     inspect_channel: int,
     sf: int,
     batch: int,
     batch_length: int,
     file_start_time: float,
+    upper_thresh: float,
+    lower_thresh: float,
     window_extension: int = 10,
     lower_seconds: int = 1,
     upper_seconds: int = 10,
-    upper_thres: float = 6,
-    lower_thres: float = 0.5,
+
     minimum_trigger_period: float = 3.0,
 ) -> pd.DataFrame:
     """Detect trains in a single channel using the STA-LTA algorithm.
 
     Args:
         data (np.ndarray): FOAS data for a single channel
+        timestamps (list): List of timestamps for each data point
         inspect_channel(int): Single channel number
         sf (int): Sampling frequency
         batch (int): Batch number
@@ -147,27 +158,35 @@ def find_trains_STALTA(
         window_extension (int, optional): The time in seconds to extend the event window. Defaults to 10.
         lower_seconds (int, optional): Determines the size of the STA window. Defaults to 1.
         upper_seconds (int, optional): Determines the size of the LTA window. Defaults to 10.
-        upper_thres (float, optional): Threshold for switching trigger on. Defaults to 4.5.
-        lower_thres (float, optional): Threshold for switching trigger off. Defaults to 1.5.
+        upper_thresh (float, optional): Threshold for switching trigger on. Defaults to 4.5.
+        lower_thresh (float, optional): Threshold for switching trigger off. Defaults to 1.5.
         minimum_trigger_period (float, optional):
             The minimum period (in seconds) a trigger has to be to be included in the output. Defaults to 3.0
 
     Returns:
-        pd.DataFrame: DataFrame with start and end times and the channel number of the detected trains
+        windows_indices (list): List of tuples with the start and end indices of the detected events
+        windows_times (list): List of tuples with the start and end times of the detected events
+        values (np.ndarray): STA-LTA ratio values
     """
     # Run STA-LTA on the signal
     values = do_stalta(
         data=data,
-        freq=sf/2, #TODO: this used to be sf/2 in the original, why?
+        freq=sf/2, # It works better at finding events with sf/2 instead of the actual sf that I initially used
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
-        lower_thres_plot=lower_thres,
-        upper_thres_plot=upper_thres,
+        lower_thresh=lower_thresh,
+        upper_thresh=upper_thresh,
     )
 
     # Find the events where the STA-LTA value exceeds the thresholds and return the start and end indices
-    events = trigger_onset(values, upper_thres, lower_thres)
+    events = trigger_onset(values, upper_thresh, lower_thresh)
+
+    # No events detected
+    if len(events) == 0:
+        logger.warning("No events detected.")
+        # Return empty lists for windows and events
+        return [], [], values
 
     # Create the windows around the detected events
     windows_indices = []
@@ -178,21 +197,75 @@ def find_trains_STALTA(
         # Extend the window by a buffer at the start and the end
         start_index = max(0, event[0] - window_extension * sf)
         end_index = min(len(data) -1, event[1] + window_extension * sf)
-        # Compute the corresponding time for the start and end indices
-        start_time = file_start_time + start_index / sf
+        # Get the start and end time of the window
+        start_time = timestamps[start_index]
+        end_time = timestamps[end_index]
+        # Append the window to the lists
+        windows_indices.append((start_index, end_index))
+        windows_times.append((start_time, end_time))
 
-        if len(events) == 0:  # Only continue if there are events
-            return pd.DataFrame(columns=["start", "end", "channel"])
-        offset = batch * batch_length  # TODO: We should not want to do this for very large runs
-        df_trains = pd.DataFrame(events, columns=["start", "end"]).assign(batch=batch)
-        df_trains = df_trains.loc[lambda d: d.end - d.start > minimum_trigger_period * sf]
-        df_trains["start"] = df_trains["start"] + offset
-        df_trains["end"] = df_trains["end"] + offset
-        df_trains["channel"] = inspect_channel
-        df_trains["start_time"] = file_start_time
+        # TODO: This used to be in the original function. Think about deleting it...
+        # if len(events) == 0:  # Only continue if there are events
+        #     return pd.DataFrame(columns=["start", "end", "channel"])
+        # offset = batch * batch_length  # TODO: We should not want to do this for very large runs
+        # df_trains = pd.DataFrame(events, columns=["start", "end"]).assign(batch=batch)
+        # df_trains = df_trains.loc[lambda d: d.end - d.start > minimum_trigger_period * sf]
+        # df_trains["start"] = df_trains["start"] + offset
+        # df_trains["end"] = df_trains["end"] + offset
+        # df_trains["channel"] = inspect_channel
+        # df_trains["start_time"] = file_start_time
 
-        return df_trains
+    return windows_indices, windows_times, values
 
+
+
+def plot_signals_and_stalta(signal, timestamps, stalta_ratio, window_times, trigger_on, trigger_off):
+    """
+    Plots the FO signal and STA/LTA ratio with detected events highlighted and saves the plot.
+
+    Parameters:
+        signal (array-like): Array or list containing signal values.
+        timestamps (array-like): List or array containing corresponding timestamps for the signal.
+        stalta_ratio (array-like): Array or list of STA/LTA ratio values.
+        window_times (list): List of tuples indicating the start and end times of detected events.
+        trigger_on (float): The value for the 'on' trigger line.
+        trigger_off (float): The value for the 'off' trigger line.
+    """
+    fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+
+    # Plot the extended signal
+    ax[0].plot(timestamps, signal, color='blue')
+    # Add shaded areas for detected events
+    for window in window_times:
+        ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
+    ax[0].set_title('FO Signal and STA/LTA Ratio')
+    ax[0].set_xlabel('Time')
+    ax[0].set_ylabel('Signal')
+
+    # Plot the STA/LTA ratio
+    ax[1].plot(timestamps, stalta_ratio, color='red')
+    # Add horizontal lines for trigger values
+    ax[1].axhline(y=trigger_on, color='green', linestyle='--', label='Trigger On')
+    ax[1].axhline(y=trigger_off, color='red', linestyle='--', label='Trigger Off')
+    ax[1].set_title('STA/LTA Ratio')
+    ax[1].set_xlabel('Time')
+    ax[1].set_ylabel('Ratio')
+
+    # Format the x-axis to show the time
+    date_form = DateFormatter("%H:%M:%S")
+    ax[0].xaxis.set_major_formatter(date_form)
+    ax[1].xaxis.set_major_formatter(date_form)
+
+    ax[1].legend()  # Show legend for the trigger lines
+
+    plt.tight_layout()
+
+    plt.show()
+
+    plt.close()
+
+
+########################################################################################################################
 
 
 # From a given folder path, get all the files with a given extension
@@ -215,6 +288,9 @@ for i in range(0, len(file_paths), batchsize - 1):  # Ensure overlap of one file
 # The user defines the center channel and the number of channels around it
 center_channel = 1200
 channel_range = 5
+upper_thresh = 3
+lower_thresh = 0.5
+window_extension = 10
 
 # Calculate the relative position of the center channel in a new list of a given number of channels according to the channel range
 relative_center_channel = channel_range * 2 // 2
@@ -253,8 +329,7 @@ for batch_number, batch in enumerate(file_batches):
     # Concatenate the data from the batch. Here are all the channels from the combined batch files
     # Concatenate data and calculate time
     raw_data = np.concatenate(batch_raw_data, axis=0)
-    # Print the file_start_time to check if it is correct
-    print('File start time: ', file_start_time)
+
     # Calculate the time for each data point in the signal starting from the file start time as a datetime object
     # Assuming file_start_time is a datetime object and raw_data.shape[0] is the number of samples
     timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
@@ -264,6 +339,7 @@ for batch_number, batch in enumerate(file_batches):
     raw_data_bandpass = np.empty_like(raw_data)
 
     # Iterate over each channel (column)
+    #TODO: Here you have 2 filters, choose which one you are going to use (discuss w/Bruno)
     for channel in range(raw_data.shape[1]):
         # Apply the high pass filter to the current channel
         raw_data_highpass[:, channel] = highpass(data=raw_data[:, channel], cutoff=0.1)
@@ -273,28 +349,60 @@ for batch_number, batch in enumerate(file_batches):
                                                  freqmin=0.1, freqmax=100, fs=1000, corners=4)
 
 
-
     # Apply the STA/LTA algorithm to the filtered data
+    # HERE I choose to find the events in just the center channel
     try:
         # First lets calculate the STA and LTA window sizes
-        signal_seconds = raw_data_bandpass.shape[0] / sampling_frequency
+        signal_seconds = raw_data_highpass.shape[0] / sampling_frequency
         LTA_window_size = min(signal_seconds / 2, 50)
         LTA_window_size = max(LTA_window_size, 10)
         STA_window_size = LTA_window_size // 10
 
-        events_df = find_trains_STALTA(data=raw_data_bandpass,
-                                       inspect_channel=relative_center_channel,
-                                       sf=sampling_frequency,
-                                       batch=batch_number,
-                                       batch_length=num_measurements * batchsize,
-                                       file_start_time=file_start_time,
-                                       window_extension=10,
-                                       upper_thres=6,
-                                       lower_thres=0.5,
-                                       lower_seconds=STA_window_size,
-                                       upper_seconds=LTA_window_size,)
+        # Pull the signal data from the center channel
+        raw_data_center_channel = raw_data_highpass[:, relative_center_channel]
+        # remove a given percentage (e.g. 20%) of the data from the start and end of the signal
 
+        window_indices, window_times, values = find_trains_STALTA(data=raw_data_center_channel,
+                                                                  timestamps=timestamps,
+                                                                  inspect_channel=relative_center_channel,
+                                                                  sf=sampling_frequency,
+                                                                  batch=batch_number,
+                                                                  batch_length=num_measurements * batchsize,
+                                                                  file_start_time=file_start_time,
+                                                                  upper_thresh=upper_thresh,
+                                                                  lower_thresh=lower_thresh,
+                                                                  window_extension=window_extension,
+                                                                  lower_seconds=STA_window_size,
+                                                                  upper_seconds=LTA_window_size)
 
+        if not window_indices:
+            logger.info(f"No events detected in batch {batch_number + 1}")
+
+        if len(window_indices) > 0:
+            logger.info(f"Detected {len(window_indices)} events in batch {batch_number + 1}")
+
+            print('the window indices are:', window_indices)
+            print('the window times are:', window_times)
+
+            # Plot the signal and STA/LTA ratio with detected events using the STA/LTA method
+            plot_signals_and_stalta(signal=raw_data_center_channel,
+                                    timestamps=timestamps,
+                                    stalta_ratio=values,
+                                    window_times=window_times,
+                                    trigger_on=upper_thresh,
+                                    trigger_off=lower_thresh,
+                                    )
+
+        # # Using the windows, crop the signal data to extract the events
+        # for i, window_time in enumerate(window_times):
+        #     # Get the start and end time of the window
+        #     start_time = window_time[0]
+        #     end_time = window_time[1]
+        #     # Extract from the signal the data between the start and end time
+        #     event_signal_data = raw_data_center_channel[start_time:end_time, relative_center_channel]
+        #
+        #     print(f"Event {i + 1}: {start_time} - {end_time}")
+        #     print(event_signal_data)
 
     except ValueError as e:
         logger.error(f"An error occurred while processing batch {batch_number + 1}: {e}")

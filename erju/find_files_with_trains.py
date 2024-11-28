@@ -254,7 +254,7 @@ save_path = r'C:\Projects\erju\outputs\holten'
 batchsize = 1
 detection_resolution = 250
 stalta_lower_thres = 0.5
-stalta_upper_thres = 6
+stalta_upper_thres = 3
 
 # Detect train passages (dummy function; replace with actual implementation)
 files_with_trains = detect_trainpassages_in_folder(
@@ -273,7 +273,7 @@ input_folder_name = path_to_files.name
 
 # Automatically generate the output CSV filename based on parameters and input folder name
 output_filename = (
-    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}_FS.csv")
+    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}.csv")
 output_filepath = Path(save_path) / output_filename
 
 # Save the results to a CSV file
