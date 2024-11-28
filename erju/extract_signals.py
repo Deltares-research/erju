@@ -1,3 +1,4 @@
+import os
 import h5py
 import numpy as np
 from pathlib import Path
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 from loguru import logger
 from datetime import datetime, timedelta
+import netCDF4 as nc
 
 from numpy.core.defchararray import upper
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
@@ -142,7 +144,7 @@ def find_trains_STALTA(
     window_extension: int = 10,
     lower_seconds: int = 1,
     upper_seconds: int = 10,
-
+    output_dir: str = "output",
     minimum_trigger_period: float = 3.0,
 ) -> pd.DataFrame:
     """Detect trains in a single channel using the STA-LTA algorithm.
@@ -168,9 +170,12 @@ def find_trains_STALTA(
         windows_times (list): List of tuples with the start and end times of the detected events
         values (np.ndarray): STA-LTA ratio values
     """
+    # from the data, get the channel to inspect to find the events
+    data_main_channel = data[:, relative_center_channel]
+
     # Run STA-LTA on the signal
     values = do_stalta(
-        data=data,
+        data=data_main_channel,
         freq=sf/2, # It works better at finding events with sf/2 instead of the actual sf that I initially used
         plots=False,  # Only True for local dev
         lower=lower_seconds,
@@ -184,7 +189,6 @@ def find_trains_STALTA(
 
     # No events detected
     if len(events) == 0:
-        logger.warning("No events detected.")
         # Return empty lists for windows and events
         return [], [], values
 
@@ -200,76 +204,131 @@ def find_trains_STALTA(
         # Get the start and end time of the window
         start_time = timestamps[start_index]
         end_time = timestamps[end_index]
+
+        #TODO: I Need to extract the data from all the channels and not only the one used for the STA/LTA
+        # Extract the event data in each channel for the window
+        for i in range(data.shape[1]):
+            signal_i = data[:, i]
+
+
+        event_data = data[start_index:end_index + 1]
+        event_timestamps = timestamps[start_index:end_index + 1]
+
+        create_netcdf_file(event_data=event_data,
+                           timestamps=event_timestamps,
+                           start_time=start_time,
+                           end_time=end_time,
+                           sampling_frequency=sf,
+                           output_dir=output_dir)
+
+
         # Append the window to the lists
         windows_indices.append((start_index, end_index))
         windows_times.append((start_time, end_time))
 
-        # TODO: This used to be in the original function. Think about deleting it...
-        # if len(events) == 0:  # Only continue if there are events
-        #     return pd.DataFrame(columns=["start", "end", "channel"])
-        # offset = batch * batch_length  # TODO: We should not want to do this for very large runs
-        # df_trains = pd.DataFrame(events, columns=["start", "end"]).assign(batch=batch)
-        # df_trains = df_trains.loc[lambda d: d.end - d.start > minimum_trigger_period * sf]
-        # df_trains["start"] = df_trains["start"] + offset
-        # df_trains["end"] = df_trains["end"] + offset
-        # df_trains["channel"] = inspect_channel
-        # df_trains["start_time"] = file_start_time
+        # For each event, create a netcdf file with the data
 
     return windows_indices, windows_times, values
 
 
 
-def plot_signals_and_stalta(signal, timestamps, stalta_ratio, window_times, trigger_on, trigger_off):
+def plot_signals_and_stalta(raw_signal, filtered_signal, timestamps, stalta_ratio, window_times, trigger_on, trigger_off):
     """
     Plots the FO signal and STA/LTA ratio with detected events highlighted and saves the plot.
 
     Parameters:
-        signal (array-like): Array or list containing signal values.
+        raw_signal (array-like): List or array containing the raw signal data.
+        filtered_signal (array-like): List or array containing the filtered signal data.
         timestamps (array-like): List or array containing corresponding timestamps for the signal.
         stalta_ratio (array-like): Array or list of STA/LTA ratio values.
         window_times (list): List of tuples indicating the start and end times of detected events.
         trigger_on (float): The value for the 'on' trigger line.
         trigger_off (float): The value for the 'off' trigger line.
     """
-    fig, ax = plt.subplots(2, 1, figsize=(12, 8))
+    fig, ax = plt.subplots(3, 1, figsize=(12, 8))
+
+    # Plot the raw_signal
+    ax[0].plot(timestamps, raw_signal, color='black')
+    ax[0].set_title(f'Raw batch signal')
+    ax[0].set_xlabel('Time [HH:MM:SS]')
+    ax[0].set_ylabel('Amplitude')
+    ax[0].grid(True)
 
     # Plot the extended signal
-    ax[0].plot(timestamps, signal, color='blue')
+    ax[1].plot(timestamps, filtered_signal, color='blue')
     # Add shaded areas for detected events
     for window in window_times:
-        ax[0].axvspan(window[0], window[1], color='gray', alpha=0.5)
-    ax[0].set_title('FO Signal and STA/LTA Ratio')
-    ax[0].set_xlabel('Time')
-    ax[0].set_ylabel('Signal')
+        ax[1].axvspan(window[0], window[1], color='gray', alpha=0.5)
+    ax[1].set_title('Filtered batch signal data and events')
+    ax[1].set_xlabel('Time [HH:MM:SS]')
+    ax[1].set_ylabel('Amplitude')
+    ax[1].grid(True)
 
     # Plot the STA/LTA ratio
-    ax[1].plot(timestamps, stalta_ratio, color='red')
+    ax[2].plot(timestamps, stalta_ratio, color='red')
     # Add horizontal lines for trigger values
-    ax[1].axhline(y=trigger_on, color='green', linestyle='--', label='Trigger On')
-    ax[1].axhline(y=trigger_off, color='red', linestyle='--', label='Trigger Off')
-    ax[1].set_title('STA/LTA Ratio')
-    ax[1].set_xlabel('Time')
-    ax[1].set_ylabel('Ratio')
+    ax[2].axhline(y=trigger_on, color='green', linestyle='--', label='Trigger On')
+    ax[2].axhline(y=trigger_off, color='red', linestyle='--', label='Trigger Off')
+    ax[2].set_title('STA/LTA Ratio')
+    ax[2].set_xlabel('Time [HH:MM:SS]')
+    ax[2].set_ylabel('Ratio')
+    ax[2].grid(True)
 
     # Format the x-axis to show the time
     date_form = DateFormatter("%H:%M:%S")
     ax[0].xaxis.set_major_formatter(date_form)
     ax[1].xaxis.set_major_formatter(date_form)
+    ax[2].xaxis.set_major_formatter(date_form)
 
-    ax[1].legend()  # Show legend for the trigger lines
+    ax[2].legend()  # Show legend for the trigger lines
 
     plt.tight_layout()
-
     plt.show()
-
     plt.close()
 
 
+def create_netcdf_file(event_data, timestamps, start_time, end_time, sampling_frequency, output_dir="output"):
+    """
+    Create and save a NetCDF file for a detected event.
+
+    Args:
+        event_data (np.ndarray): Signal data for the event.
+        timestamps (list): Timestamps for the event.
+        start_time (datetime): Start time of the event.
+        end_time (datetime): End time of the event.
+        sampling_frequency (int): Sampling frequency of the signal.
+        output_dir (str): Directory to save the NetCDF files.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    file_name = f"event_{start_time.strftime('%Y%m%dT%H%M%S')}.nc"
+    file_path = os.path.join(output_dir, file_name)
+
+    # Create NetCDF file
+    with nc.Dataset(file_path, 'w', format='NETCDF4') as ncfile:
+        # Create dimensions
+        ncfile.createDimension('time', len(event_data))
+
+        # Create variables
+        time_var = ncfile.createVariable('time', 'f8', ('time',))
+        data_var = ncfile.createVariable('signal', 'f4', ('time',))
+
+        # Assign data
+        time_var[:] = np.array([(ts - timestamps[0]).total_seconds() for ts in timestamps])
+        data_var[:] = event_data
+
+        # Add metadata
+        ncfile.description = f"Event data from {start_time} to {end_time}"
+        ncfile.sampling_frequency = sampling_frequency
+        ncfile.start_time = start_time.strftime('%Y-%m-%d %H:%M:%S')
+        ncfile.end_time = end_time.strftime('%Y-%m-%d %H:%M:%S')
+
+    print(f"Saved event data to {file_path}")
 ########################################################################################################################
 
 
 # From a given folder path, get all the files with a given extension
 path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
+output_dir = r'C:\Projects\erju\outputs\holten'
 
 # Get the list of files
 file_paths = get_files_list(folder_path=path_to_files, file_extension='h5')
@@ -294,7 +353,6 @@ window_extension = 10
 
 # Calculate the relative position of the center channel in a new list of a given number of channels according to the channel range
 relative_center_channel = channel_range * 2 // 2
-print('Relative center channel: ', relative_center_channel)
 
 # Calculate the new start channel and end channel
 start_channel = max(0, center_channel - channel_range)  # Ensure start channel is not negative
@@ -358,11 +416,8 @@ for batch_number, batch in enumerate(file_batches):
         LTA_window_size = max(LTA_window_size, 10)
         STA_window_size = LTA_window_size // 10
 
-        # Pull the signal data from the center channel
-        raw_data_center_channel = raw_data_highpass[:, relative_center_channel]
-        # remove a given percentage (e.g. 20%) of the data from the start and end of the signal
-
-        window_indices, window_times, values = find_trains_STALTA(data=raw_data_center_channel,
+        # Find the events in the center channel using the STA/LTA method#
+        window_indices, window_times, values = find_trains_STALTA(data=raw_data_highpass,
                                                                   timestamps=timestamps,
                                                                   inspect_channel=relative_center_channel,
                                                                   sf=sampling_frequency,
@@ -373,67 +428,27 @@ for batch_number, batch in enumerate(file_batches):
                                                                   lower_thresh=lower_thresh,
                                                                   window_extension=window_extension,
                                                                   lower_seconds=STA_window_size,
-                                                                  upper_seconds=LTA_window_size)
+                                                                  upper_seconds=LTA_window_size,
+                                                                  output_dir=output_dir,)
 
+        # Print the number of events detected in the batch
         if not window_indices:
             logger.info(f"No events detected in batch {batch_number + 1}")
-
         if len(window_indices) > 0:
             logger.info(f"Detected {len(window_indices)} events in batch {batch_number + 1}")
 
-            print('the window indices are:', window_indices)
-            print('the window times are:', window_times)
-
-            # Plot the signal and STA/LTA ratio with detected events using the STA/LTA method
-            plot_signals_and_stalta(signal=raw_data_center_channel,
-                                    timestamps=timestamps,
-                                    stalta_ratio=values,
-                                    window_times=window_times,
-                                    trigger_on=upper_thresh,
-                                    trigger_off=lower_thresh,
-                                    )
-
-        # # Using the windows, crop the signal data to extract the events
-        # for i, window_time in enumerate(window_times):
-        #     # Get the start and end time of the window
-        #     start_time = window_time[0]
-        #     end_time = window_time[1]
-        #     # Extract from the signal the data between the start and end time
-        #     event_signal_data = raw_data_center_channel[start_time:end_time, relative_center_channel]
-        #
-        #     print(f"Event {i + 1}: {start_time} - {end_time}")
-        #     print(event_signal_data)
-
+        # Plot the signal and STA/LTA ratio with detected events using the STA/LTA method
+        plot_signals_and_stalta(raw_signal=raw_data[:, relative_center_channel],
+                                filtered_signal=raw_data_highpass[:, relative_center_channel],
+                                timestamps=timestamps,
+                                stalta_ratio=values,
+                                window_times=window_times,
+                                trigger_on=upper_thresh,
+                                trigger_off=lower_thresh,
+                                )
+    # Handle exceptions
     except ValueError as e:
         logger.error(f"An error occurred while processing batch {batch_number + 1}: {e}")
 
 
 
-
-
-
-    # Plot one raw and filtered channel for comparison using the signal in y and the timestamps in x
-    channel_to_plot = 5  # Adjust this to visualize different channels
-    fig, ax0 = plt.subplots(3, 1, figsize=(12, 6), sharex=True)
-
-    ax0[0].plot(timestamps, raw_data[:, channel_to_plot], color='black', label='Raw data')
-    ax0[0].set_title('Raw data')
-    ax0[0].set_ylabel('Amplitude')
-    ax0[0].grid(True)
-
-    ax0[1].plot(timestamps, raw_data_bandpass[:, channel_to_plot], color='blue', label='Filtered data')
-    ax0[1].set_title('Filtered data bandpass 0.1 - 100 Hz')
-    ax0[1].set_ylabel('Amplitude')
-    ax0[1].grid(True)
-
-    ax0[2].plot(timestamps, raw_data_highpass[:, channel_to_plot], color='red', label='Filtered data')
-    ax0[2].set_title('Filtered data highpass 0.1 Hz')
-    ax0[2].set_ylabel('Amplitude')
-    ax0[2].grid(True)
-
-    plt.show()
-    plt.close()
-
-
-
-save_path = r'C:\Projects\erju\outputs\holten'

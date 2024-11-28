@@ -33,6 +33,7 @@ def calculate_sampling_frequency(file: h5py.File) -> float:
     except IndexError:
         raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
 
+
 def convert_microseconds_to_datetime(microseconds: int) -> datetime:
     """
     Convert a timestamp in microseconds since epoch to a UTC datetime.

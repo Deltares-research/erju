@@ -160,5 +160,53 @@ def main(pickle_file_path, netcdf_file_path):
 pickle_file = r'C:\Projects\erju\outputs\culemborg\20201120_094844413777.pkl.gz'  # Updated to .gz extension
 netcdf_file = r'C:\Projects\erju\outputs\culemborg\20201120_094844413777.nc'
 
-main(pickle_file, netcdf_file)
+#main(pickle_file, netcdf_file)
 
+# New check netcdf file function
+
+def read_and_check_netcdf(file_path):
+    """
+    Reads and checks the structure and contents of a NetCDF file.
+
+    Args:
+        file_path (str): Path to the NetCDF file.
+
+    Returns:
+        None
+    """
+    try:
+        # Open the NetCDF file
+        with nc.Dataset(file_path, 'r') as ds:
+            print(f"\nOpened NetCDF file: {file_path}")
+
+            # Print global attributes
+            print("\nGlobal attributes:")
+            for attr in ds.ncattrs():
+                print(f"  {attr}: {getattr(ds, attr)}")
+
+            # Print dimensions
+            print("\nDimensions:")
+            for dim in ds.dimensions.values():
+                print(f"  {dim.name}: size = {dim.size}")
+
+            # Print variables
+            print("\nVariables:")
+            for var_name, var in ds.variables.items():
+                print(f"  {var_name}: {var.dimensions}, shape = {var.shape}, dtype = {var.dtype}")
+
+            # Optionally read a sample of data from each variable
+            print("\nSample data from variables:")
+            for var_name, var in ds.variables.items():
+                data = var[:]
+                print(f"  {var_name}:")
+                print(f"    Data shape: {data.shape}")
+                print(f"    Sample values: {data.flatten()[:5]}...")  # Print the first 5 values
+
+            print("\nNetCDF file check completed successfully.")
+
+    except Exception as e:
+        print(f"An error occurred while reading the NetCDF file: {e}")
+
+# Example usage:
+netcdf_file= r'C:\Projects\erju\outputs\holten\event_20240829T090702.nc'
+read_and_check_netcdf(netcdf_file)

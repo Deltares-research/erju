@@ -270,9 +270,6 @@ def plot_data_for_date(data_df: pd.DataFrame, date_str: str):
     plt.show()
 
 
-
-
-
 def plot_signals_and_stalta(signal, stalta_ratio, window_times, trigger_on, trigger_off, file, output_folder):
     """
     Plots the FO signal and STA/LTA ratio with detected events highlighted and saves the plot.
