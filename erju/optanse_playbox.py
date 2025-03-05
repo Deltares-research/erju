@@ -9,10 +9,10 @@ from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos, windows
 from utils.file_utils import highpass
 
 # Define the directory path
-dir_path = r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
+dir_path = r'C:\fo_samples\holten'
 # Get the file names in the directory
 file_names = get_files_in_dir(folder_path=dir_path, file_format='.h5')
-file_path = os.path.join(dir_path, file_names[1])
+file_path = os.path.join(dir_path, file_names[0])
 
 
 def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
@@ -55,8 +55,8 @@ def from_opticalphase_to_strain(raw_data: np.ndarray) -> np.ndarray:
 
 
 # Set the start and end channels for plotting
-start_ch = 2000
-end_ch = 2005
+start_ch = 1184
+end_ch = 1204
 
 # Open the .h5 file
 with h5py.File(file_path, 'r') as file:

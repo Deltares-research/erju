@@ -247,8 +247,8 @@ Based on the code provided by Joost (ProRail) and Edwin (Deltares), this code:
 #TODO: This now works only with .h5 files. Lets make it general like in the old train_detectionOLDFILE.py
 
 # From a given folder path, get all the files with a given extension
-path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
-save_path = r'C:\Projects\erju\outputs\holten'
+path_to_files = Path(r'C:\fo_samples\holten')
+save_path = r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten'
 
 # Detection parameters
 batchsize = 1

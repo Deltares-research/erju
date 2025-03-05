@@ -9,8 +9,6 @@ decorator==5.1.1
 et-xmlfile==1.1.0
 exceptiongroup==1.2.0
 fonttools==4.45.1
-fs-commons @ file:///D:/fs_protocol/dependencies/fs_commons-0.5.4.tar.gz#sha256=566cf2e3217935107afdaf41cbdb80b0fe00288b62478bc65dbe4e0543e1f3d4
-fs-protocol @ file:///D:/fs_protocol/dist/fs_protocol-3.3.2.tar.gz#sha256=cf28582e0952aaaa39fd61197f2045eb120c718d8fc8d5f6867c3ca8b9aab432
 greenlet==3.0.3
 h5py==3.11.0
 idna==3.7

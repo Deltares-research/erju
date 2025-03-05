@@ -79,8 +79,8 @@ def read_and_plot_all_signals(csv_path: Path, data_base_path: Path, save_path: P
 
                     # Filter the data with the highpass function
                     # Iterate over each channel (column)
-                    for channel in range(data.shape[1]):
-                        data[:, channel] = highpass(data[:, channel], cutoff=0.1)
+                    # for channel in range(data.shape[1]):
+                    #     data[:, channel] = highpass(data[:, channel], cutoff=0.1)
 
                     # Plotting all channels
                     fig, ax = plt.subplots(figsize=(12, 6))
@@ -107,7 +107,7 @@ def read_and_plot_all_signals(csv_path: Path, data_base_path: Path, save_path: P
                     cbar.set_label('Intensity')
 
                     # Save the plot
-                    save_filename = f"2D_plot_{file_path.stem}.png"  # Use the file name without extension
+                    save_filename = f"2D_plot_{file_path.stem}_NOFILTER.png"  # Use the file name without extension
                     save_file_path = save_path / save_filename
                     plt.savefig(save_file_path, dpi=300)
                     logger.info(f"Saved plot for file: {file_path} to {save_file_path}")
@@ -121,10 +121,9 @@ def read_and_plot_all_signals(csv_path: Path, data_base_path: Path, save_path: P
 
 
 # Path to the CSV, data base directory, and save directory
-csv_path = Path(r'C:\Projects\erju\outputs\holten\trains_recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels_res250_low0.5_up3.csv')
-data_base_path = Path(
-    r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
-save_path = Path(r'C:\Projects\erju\outputs\holten\low0.5up3')
+csv_path = Path(r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\trains_holten_res250_low0.5_up3.csv")
+data_base_path = Path(r'C:\fo_samples\holten')
+save_path = Path(r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten')
 
 # Call the function to process files and save plots
 read_and_plot_all_signals(csv_path, data_base_path, save_path)

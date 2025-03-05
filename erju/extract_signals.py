@@ -16,6 +16,7 @@ from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 
 
+
 def calculate_sampling_frequency(file: h5py.File) -> float:
     """
     Calculate the sampling frequency from an open HDF5 file by measuring the time interval
@@ -66,7 +67,6 @@ def data_consistency_check(file_path_list: list) -> bool:
     with h5py.File(file_path_list[-1], 'r') as file:
         last_file_sf = calculate_sampling_frequency(file)
         last_file_data_shape = file['Acquisition']['Raw[0]']['RawData'].shape
-
 
     # Check if the sampling frequency and the shape is the same, if not raise an error for each specific case and if yes, return True and a log message that data is consistent.
     if first_file_sf != last_file_sf:
@@ -147,7 +147,8 @@ def find_trains_STALTA(
     output_dir: str = "output",
     minimum_trigger_period: float = 3.0,
 ) -> pd.DataFrame:
-    """Detect trains in a single channel using the STA-LTA algorithm.
+    """Detect trains in a single channel using the STA-LTA algorithm and return the start and end indices of the events.
+    It also creates a NetCDF file for each detected event.
 
     Args:
         data (np.ndarray): FOAS data for a single channel
@@ -303,18 +304,23 @@ def create_netcdf_file(data, timestamps, start_time, end_time, sampling_frequenc
     file_name = f"event_{start_time.strftime('%Y%m%dT%H%M%S')}.nc"
     file_path = os.path.join(output_dir, file_name)
 
+    # Extract the timestamps for only the event
+    start_idx = timestamps.index(start_time)
+    end_idx = timestamps.index(end_time)
+    event_timestamps = timestamps[start_idx:end_idx + 1]  # Get timestamps for the event
+
     # Create NetCDF file
     with nc.Dataset(file_path, 'w', format='NETCDF4') as ncfile:
         # Create dimensions
-        ncfile.createDimension('time', len(data))
+        ncfile.createDimension('time', len(event_timestamps))
 
         # Create variables
         time_var = ncfile.createVariable('time', 'f8', ('time',))
         data_var = ncfile.createVariable('signal', 'f4', ('time',))
 
         # Assign data
-        time_var[:] = np.array([(ts - timestamps[0]).total_seconds() for ts in timestamps])
-        data_var[:] = data
+        time_var[:] = np.array([(ts - start_time).total_seconds() for ts in event_timestamps])
+        data_var[:] = data[start_idx:end_idx + 1]  # Extract corresponding data
 
         # Add metadata
         ncfile.description = f"Event data from {start_time} to {end_time}"
@@ -323,12 +329,13 @@ def create_netcdf_file(data, timestamps, start_time, end_time, sampling_frequenc
         ncfile.end_time = end_time.strftime('%Y-%m-%d %H:%M:%S')
 
     print(f"Saved event data to {file_path}")
+
 ########################################################################################################################
 
 
 # From a given folder path, get all the files with a given extension
-path_to_files = Path(r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels')
-output_dir = r'C:\Projects\erju\outputs\holten\extract_signals'
+path_to_files = Path(r'C:\fo_samples\holten_simple')
+output_dir = r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten\fo_plot'
 
 # Get the list of files
 file_paths = get_files_list(folder_path=path_to_files, file_extension='h5')
@@ -345,8 +352,9 @@ for i in range(0, len(file_paths), batchsize - 1):  # Ensure overlap of one file
     file_batches.append(batch)
 
 # The user defines the center channel and the number of channels around it
-center_channel = 1200
+center_channel = 1194
 channel_range = 5
+# The user defines the thresholds and window extension for the STA/LTA algorithm
 upper_thresh = 3
 lower_thresh = 0.5
 window_extension = 10
