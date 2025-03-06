@@ -47,7 +47,6 @@ def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
 
 
 
-
 def read_and_plot_all_signals(csv_path: Path, data_base_path: Path, save_path: Path):
     """
     Reads a CSV with filenames, opens each file from a base path, and generates a 2D plot for all channels.

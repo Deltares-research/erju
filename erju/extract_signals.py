@@ -15,7 +15,7 @@ from utils.file_utils import get_files_list
 from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 
-
+from DatabaseUtils import get_commands
 
 def calculate_sampling_frequency(file: h5py.File) -> float:
     """
@@ -334,7 +334,7 @@ def create_netcdf_file(data, timestamps, start_time, end_time, sampling_frequenc
 
 
 # From a given folder path, get all the files with a given extension
-path_to_files = Path(r'C:\fo_samples\holten_simple')
+path_to_files = Path(r'C:\fo_samples\holten')
 output_dir = r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten\fo_plot'
 
 # Get the list of files
