@@ -1,1 +1,16 @@
 /data/
+/venv/
+# Ignore Python virtual environments
+venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore temporary Jupyter notebook checkpoints
+notebooks/.ipynb_checkpoints/
+
+# Ignore log files
+*.log
+logs/
