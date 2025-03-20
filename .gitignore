@@ -2,6 +2,7 @@
 /venv/
 # Ignore Python virtual environments
 venv/
+.idea/
 
 # Ignore compiled Python files
 __pycache__/
