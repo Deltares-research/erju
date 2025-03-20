@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb039461-8a39-493f-8528-5ee8d4176482" name="Changes" comment="test with text">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-    </list>
+    <list default="true" id="fb039461-8a39-493f-8528-5ee8d4176482" name="Changes" comment="updated idea" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -288,15 +286,73 @@
       <option name="project" value="LOCAL" />
       <updated>1742484689327</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="updated gitignore">
+      <option name="closed" value="true" />
+      <created>1742484937104</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1742484937105</updated>
+    </task>
+    <task id="LOCAL-00012" summary="updated idea">
+      <option name="closed" value="true" />
+      <created>1742485097343</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1742485097343</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
+    <option name="RECENT_FILTERS">
+      <map>
+        <entry key="Branch">
+          <value>
+            <list>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="origin/refactor" />
+                </option>
+              </RecentGroup>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="main" />
+                </option>
+              </RecentGroup>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="HEAD" />
+                </option>
+              </RecentGroup>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="refactor" />
+                </option>
+              </RecentGroup>
+            </list>
+          </value>
+        </entry>
+      </map>
+    </option>
     <option name="TAB_STATES">
       <map>
         <entry key="MAIN">
           <value>
-            <State />
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="origin/refactor" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
           </value>
         </entry>
       </map>
@@ -308,9 +364,10 @@
     <MESSAGE value="updated the Readme.md" />
     <MESSAGE value="Commit before creating a new branch" />
     <MESSAGE value="reorganization of folder for better structure" />
-    <MESSAGE value="updated gitignore" />
     <MESSAGE value="test with text" />
-    <option name="LAST_COMMIT_MESSAGE" value="test with text" />
+    <MESSAGE value="updated gitignore" />
+    <MESSAGE value="updated idea" />
+    <option name="LAST_COMMIT_MESSAGE" value="updated idea" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
