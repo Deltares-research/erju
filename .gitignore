@@ -1,17 +1,29 @@
-/data/
-/venv/
+# Ignore data folder (if data is stored outside the repo, remove this)
+data/
+
 # Ignore Python virtual environments
 venv/
-.idea/
+.venv/  # Some setups use ".venv"
+env/
+
+# Ignore IDE/editor-specific folders
+.idea/  # JetBrains (PyCharm, WebStorm, etc.)
+.vscode/  # VS Code settings
+*.swp  # Vim swap files
 
 # Ignore compiled Python files
 __pycache__/
 *.pyc
 *.pyo
 
-# Ignore temporary Jupyter notebook checkpoints
+# Ignore Jupyter notebook checkpoints
 notebooks/.ipynb_checkpoints/
 
-# Ignore log files
+# Ignore log files and debugging artifacts
 *.log
 logs/
+logs/**
+
+# Ignore cache and temporary files
+.DS_Store  # macOS system file
+Thumbs.db  # Windows thumbnail cache
