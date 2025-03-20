@@ -145,7 +145,6 @@ def get_file_extensions(folder_path: str):
 
 
 
-
 def find_trains_STALTA(
     data: np.ndarray,
     inspect_channel: int,
@@ -286,12 +285,6 @@ def from_windows_get_fo_signal(fo_data_path: str, database: pd.DataFrame):
         database.at[index, 'files'] = ', '.join(matching_files)
 
     return database
-
-
-import os
-import re
-import pandas as pd
-from datetime import datetime, timedelta
 
 
 def from_window_get_fo_file(fo_data_path: str, time_window: list):

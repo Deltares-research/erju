@@ -1,4 +1,5 @@
 import h5py
+import numpy as np
 from datetime import datetime
 
 
@@ -51,3 +52,30 @@ def convert_microseconds_to_datetime(microseconds: int) -> datetime:
     return datetime.utcfromtimestamp(seconds)
 
 
+def from_opticalphase_to_strain(raw_data: np.ndarray, fibre_refractive_index, gauge_length):
+    """
+    Take the raw OptaSense data and convert it to units of strain.
+
+    Args:
+        raw_data (np.ndarray): The raw OptaSense data
+
+    Returns:
+        data (np.ndarray): The strain data
+    """
+    # Remove the mean from the data. Since it is a 2D of (150000>time, 5000>location) [rows, columns]
+    # We remove the mean over time for each location with axis=0 (operation over rows)
+    print(f"raw_data shape: {raw_data.shape}")
+
+
+    raw_data = raw_data - np.mean(raw_data, axis=0)
+
+    # Convert into units of radians
+    raw_data = raw_data * (2*np.pi / 2**16)
+
+    # Get from the properties the values I need to convert to strain
+    n = fibre_refractive_index
+    L = gauge_length
+    # Convert into units of strain
+    data = raw_data * ((1550.12 * 1e-9)/(0.78 * 4 * np.pi * n * L))
+
+    return data

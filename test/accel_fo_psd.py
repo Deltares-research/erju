@@ -13,7 +13,7 @@ from utils.file_utils import from_window_get_fo_file, calculate_sampling_frequen
 # Paths
 path_database = r"P:/11207352-stem/database/Wielrondheid_132887.db"
 path_fo_files = r'E:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels'
-save_dir = r"N:/Projects/11210000/11210064/B. Measurements and calculations/holten/fo_vs_accel/"
+save_dir = r"N:/Projects/11210000/11210064/B. Measurements and calculations/holten/accel_fo_psd/"
 
 # Ensure save directory exists
 os.makedirs(save_dir, exist_ok=True)
@@ -114,6 +114,7 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
         timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
         timestamps_unix = np.array([t.timestamp() for t in timestamps])
 
+        raw_data = raw_data.astype(np.float64)
         # **Fix FO Scaling**: Normalize before resampling
         raw_data[:, relative_center_channel] -= np.mean(raw_data[:, relative_center_channel])
         raw_data[:, relative_center_channel] /= np.std(raw_data[:, relative_center_channel])

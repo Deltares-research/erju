@@ -545,7 +545,7 @@ class CreateDatabase:
 
                 # 5. Save the fo_data_in_window as a pickle file ########################################################
                 # Save the fo_data_in_window as a pickle file
-                # 5. Save the fo_data_in_window as a compressed pickle file ########################################################
+                # 5. Save the fo_data_in_window as a compressed pickle fil ########################################################
                 # Save the fo_data_in_window as a compressed pickle file
                 pickle_file_name = f'{safe_start_time}.pkl.gz'  # Use .pkl.gz for the compressed file
                 with gzip.open(os.path.join(self.output_path, pickle_file_name), 'wb') as f:
@@ -557,9 +557,6 @@ class CreateDatabase:
 
 
         return None
-
-
-
 
 
 
@@ -585,8 +582,4 @@ fo_file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
 # Find the events with sta/lta method
 database.extract_all_events(selected_channel=4270, threshold=550)
 
-
-
-# Create a pickle database
-#database.create_pickle_database(channel_no=4270, save_path=path_save_database)
 

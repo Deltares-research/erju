@@ -10,11 +10,11 @@ import matplotlib.pyplot as plt
 
 # User inputs:
 # Define the path to the file
-file_path = r'C:\Projects\erju\data\holten\samples'
+file_path = r'C:\fo_samples\holten_simple'
 #file_path = r'C:\Projects\erju\data\optasense'
 #file_path = r'C:\Projects\erju\data\silixa'
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\test\holten'
+save_to_path = r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten\visualize'
 
 # Define the first and last channel to be extracted
 first_channel = 0

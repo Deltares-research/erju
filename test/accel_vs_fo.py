@@ -7,12 +7,13 @@ from datetime import datetime, timedelta
 from DatabaseUtils import get_commands
 from utils.file_utils import from_window_get_fo_file, calculate_sampling_frequency, highpass, bandpass
 
+
 # ---------------------- CONFIGURATION ----------------------
 
 # Paths
 path_database = r"P:/11207352-stem/database/Wielrondheid_132887.db"
 path_fo_files = r'E:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels'
-save_dir = r"N:/Projects/11210000/11210064/B. Measurements and calculations/holten/fo_vs_accel/"
+save_dir = r"N:/Projects/11210000/11210064/B. Measurements and calculations/holten/accel_vs_fo/"
 
 # Ensure save directory exists
 os.makedirs(save_dir, exist_ok=True)
@@ -122,24 +123,15 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
                 data=raw_data_highpass[:, channel], freqmin=0.1, freqmax=100, fs=1000, corners=4
             )
 
-    # ---------------------- NORMALIZATION ----------------------
 
-    def normalize(signal):
-        return 2 * (signal - np.min(signal)) / (np.max(signal) - np.min(signal)) - 1
+# ---------------------- RESAMPLE FO DATA TO ACCELEROMETER TIMEBASE ----------------------
 
-    # Normalize accelerometer signals
-    trace_x_norm = normalize(trace_x)
-    trace_y_norm = normalize(trace_y)
-    trace_z_norm = normalize(trace_z)
-
-    # Normalize FO signal if available
-    fo_resampled_norm = None
     if timestamps and raw_data_bandpass is not None:
         timestamps_unix = np.array([t.timestamp() for t in timestamps])
         absolute_time_unix = np.array([t.timestamp() for t in absolute_time])
 
         fo_resampled = np.interp(absolute_time_unix, timestamps_unix, raw_data_bandpass[:, relative_center_channel])
-        fo_resampled_norm = normalize(fo_resampled)
+
 
     # ---------------------- PLOT AND SAVE RAW SIGNALS (WITH DUAL Y-AXES) ----------------------
     fig, ax_raw = plt.subplots(3, 1, figsize=(15, 8), sharex=True)
@@ -172,33 +164,5 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
     # Save the raw signal plot
     filename_raw = f"Event_{start_time.strftime('%Y-%m-%d_%H-%M-%S')}_fo_accel.png"
     plt.savefig(os.path.join(save_dir, filename_raw))
-    plt.close()
-
-    # ---------------------- PLOT AND SAVE NORMALIZED SIGNALS (SINGLE Y-AXIS) ----------------------
-    fig, ax_norm = plt.subplots(3, 1, figsize=(15, 8), sharex=True)
-
-    # Plot accelerometer data (normalized) with transparency
-    ax_norm[0].plot(absolute_time, trace_x_norm, label="Accelerometer X (Norm)", color='b', alpha=0.7)
-    ax_norm[1].plot(absolute_time, trace_y_norm, label="Accelerometer Y (Norm)", color='b', alpha=0.7)
-    ax_norm[2].plot(absolute_time, trace_z_norm, label="Accelerometer Z (Norm)", color='b', alpha=0.7)
-
-    # Plot FO data if available (normalized) with transparency
-    if fo_resampled_norm is not None:
-        ax_norm[0].plot(absolute_time, fo_resampled_norm, label="FO Data (Norm)", color='r', alpha=0.7)
-        ax_norm[1].plot(absolute_time, fo_resampled_norm, label="FO Data (Norm)", color='r', alpha=0.7)
-        ax_norm[2].plot(absolute_time, fo_resampled_norm, label="FO Data (Norm)", color='r', alpha=0.7)
-
-    # Labels, legend, and grid
-    for a in ax_norm:
-        a.legend()
-        a.set_ylabel("Normalized Signal [-1,1]")
-        a.grid(True, linestyle='--', alpha=0.5)  # Dashed gridlines with transparency
-
-    ax_norm[2].set_xlabel("Time [s]")
-    plt.suptitle(f"Normalized Signals: {start_time}")
-
-    # Save the normalized signal plot
-    filename_norm = f"Event_{start_time.strftime('%Y-%m-%d_%H-%M-%S')}_fo_accel_normalized.png"
-    plt.savefig(os.path.join(save_dir, filename_norm))
     plt.close()
 
