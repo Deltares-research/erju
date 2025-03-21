@@ -131,7 +131,6 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
 
         fo_resampled = np.interp(absolute_time_unix, timestamps_unix, raw_data_bandpass[:, relative_center_channel])
 
-
     # ---------------------- PLOT AND SAVE RAW SIGNALS (WITH DUAL Y-AXES) ----------------------
     fig, ax_raw = plt.subplots(3, 1, figsize=(15, 8), sharex=True)
 
@@ -149,8 +148,24 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
         ax_raw_fo[1].plot(absolute_time, fo_resampled, label="FO Data", color='r', alpha=0.7)
         ax_raw_fo[2].plot(absolute_time, fo_resampled, label="FO Data", color='r', alpha=0.7)
 
-    # Labels, legend, and grid
-    for ax, ax_fo in zip(ax_raw, ax_raw_fo):
+    # Adjust Y-limits to align zero points while keeping independent scales
+    for i, (ax, ax_fo) in enumerate(zip(ax_raw, ax_raw_fo)):
+        # Get min/max values of each signal
+        accel_data = [trace_x, trace_y, trace_z][i]
+        fo_data = fo_resampled if fo_resampled is not None else np.zeros_like(accel_data)
+
+        accel_min, accel_max = np.min(accel_data), np.max(accel_data)
+        fo_min, fo_max = np.min(fo_data), np.max(fo_data)
+
+        # Compute the center of each axis (should be 0)
+        accel_center = 0 - (accel_max + accel_min) / 2
+        fo_center = 0 - (fo_max + fo_min) / 2
+
+        # Adjust limits symmetrically around their respective centers
+        ax.set_ylim(accel_min + accel_center, accel_max + accel_center)
+        ax_fo.set_ylim(fo_min + fo_center, fo_max + fo_center)
+
+        # Labels, legend, and grid
         ax.legend(loc="upper left")
         ax.set_ylabel("Accelerometer Signal")
         ax.grid(True, linestyle='--', alpha=0.5)  # Dashed gridlines with transparency
@@ -164,4 +179,3 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
     filename_raw = f"Event_{start_time.strftime('%Y-%m-%d_%H-%M-%S')}_fo_accel.png"
     plt.savefig(os.path.join(save_dir, filename_raw))
     plt.close()
-

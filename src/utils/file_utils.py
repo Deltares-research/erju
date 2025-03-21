@@ -79,45 +79,42 @@ def extract_timestamp_from_name(file_names: list):
     return timestamps
 
 
+from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 def get_files_list(folder_path: str, file_extension: str = 'h5'):
     """
     Get a list of files in a directory with a specific extension.
 
     Args:
         folder_path (str): The path to the directory containing the files.
-        file_extension (str): The file extension to search for in the directory (default is 'h5').
+        file_extension (str): The file extension to search for (e.g., 'h5' or '.h5').
 
     Returns:
-        files: A list of Paths to the files detected in the folder.
+        List[Path]: A list of file paths matching the extension.
     """
 
-    # Convert the folder path to a Path object
     folder_path = Path(folder_path)
 
-    # Check if the provided path is a directory, if not return an empty and raise an error
     if not folder_path.is_dir():
         logger.error(f"Provided path is not a directory: {folder_path}")
         return []
 
-    # Automatically add '*' if the user provides only the extension
-    if not file_extension.startswith("*."):
-        file_extension = f"*.{file_extension}"
+    # Normalize the extension: remove leading dot if present
+    normalized_ext = file_extension.lstrip('.')
+    search_pattern = f"*.{normalized_ext}"
 
-    # Get a list of only the file names in the directory
-    file_names = [file.name for file in folder_path.glob(file_extension)]
-    # Get a list of the complete file paths
-    file_paths = list(folder_path.glob(file_extension))
+    file_paths = list(folder_path.glob(search_pattern))
 
-
-    # If no files are found, log a warning and return an empty list
     if not file_paths:
-        logger.warning(f"No files found with extension '{file_extension}' in {folder_path}")
+        logger.warning(f"No files found with extension '.{normalized_ext}' in {folder_path}")
         return []
 
-    # Log the number of files detected
-    logger.info(f"Detected {len(file_names)} files in {folder_path}")
-
+    logger.info(f"Detected {len(file_paths)} file(s) with extension '.{normalized_ext}' in {folder_path}")
     return file_paths
+
 
 
 def get_file_extensions(folder_path: str):
