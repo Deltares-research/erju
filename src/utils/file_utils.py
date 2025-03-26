@@ -408,3 +408,29 @@ def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
         return sosfilt(sos, firstpass[::-1])[::-1]
     else:
         return sosfilt(sos, data)
+
+
+def from_opticalphase_to_strain(raw_data: np.ndarray, refractive_idx, gauge_length) -> np.ndarray:
+    """
+    Take the raw OptaSense data and convert it to units of strain.
+
+    Args:
+        signal_data (np.ndarray): The raw OptaSense data
+
+    Returns:
+        data (np.ndarray): The strain data
+    """
+    # Remove the mean from the data. Since it is a 2D of (150000>time, 5000>location) [rows, columns]
+    # We remove the mean over time for each location with axis=0 (operation over rows)
+    raw_data = raw_data - np.mean(raw_data, axis=0)
+
+    # Convert into units of radians
+    raw_data = raw_data * (2 * np.pi / 2 ** 16)
+
+    # Get from the properties the values I need to convert to strain
+    n = refractive_idx
+    L = gauge_length
+    # Convert into units of strain
+    data = raw_data * ((1550.12 * 1e-9) / (0.78 * 4 * np.pi * n * L))
+
+    return data

@@ -4,8 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from DatabaseUtils import get_commands
-from src.utils.file_utils import from_window_get_fo_file, calculate_sampling_frequency, highpass, bandpass
+from src.utils.file_utils import from_window_get_fo_file, calculate_sampling_frequency, highpass, bandpass, \
+    from_opticalphase_to_strain
 
+from scipy.signal import windows
 
 # ---------------------- CONFIGURATION ----------------------
 
@@ -87,12 +89,35 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
                     raw_data_time = file['Acquisition']['Raw[0]']['RawDataTime']
                     file_start_time = datetime.utcfromtimestamp(raw_data_time[0] * 1e-6)
                     sampling_frequency = calculate_sampling_frequency(file)
+                    refractive_idx = file['Acquisition']['Custom'].attrs['Fibre Refractive Index']
+                    gauge_length = file['Acquisition'].attrs['GaugeLength']
 
         # Concatenate FO data from multiple files
         raw_data = np.concatenate(fo_data, axis=0)
 
+        # Create a Tukey window
+        signal_window = windows.tukey(M=raw_data.shape[0], alpha=0.1)
+
+        # Apply filtering *after* windowing, then convert to strain
+        raw_data_filtered = np.empty_like(raw_data)
+
+        for channel in range(raw_data.shape[1]):
+            # Apply window, then bandpass
+            windowed_signal = raw_data[:, channel] * signal_window
+            raw_data_filtered[:, channel] = bandpass(
+                data=windowed_signal,
+                freqmin=1,  # match BaseFOdata
+                freqmax=100,
+                fs=sampling_frequency,
+                corners=5
+            )
+
+        # Convert to strain after filtering
+        raw_data_filt_str = from_opticalphase_to_strain(raw_data_filtered, refractive_idx, gauge_length)
+
         # Compute timestamps for FO data
-        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
+        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in
+                      range(raw_data_filt_str.shape[0])]
 
         # Convert timestamps to NumPy datetime64 for indexing
         timestamps_array = np.array(timestamps, dtype='datetime64[ns]')
@@ -105,25 +130,18 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
 
         # Crop FO data to the time window
         timestamps = timestamps[start_index:end_index + 1]
-        raw_data = raw_data[start_index:end_index + 1, :]
+        raw_data_filt_str = raw_data_filt_str[start_index:end_index + 1, :]
 
         # ---------------------- APPLY FILTERS ----------------------
 
-        # Create arrays for filtered FO data
-        raw_data_highpass = np.empty_like(raw_data)
-        raw_data_bandpass = np.empty_like(raw_data)
+    ### QUICK TEST DELETE LATER
+    # plot the fo data to check
+    plt.figure()
+    plt.plot(timestamps, raw_data_filt_str)
+    plt.show()
+    #####
 
-        for channel in range(raw_data.shape[1]):
-            # Apply high-pass filter
-            raw_data_highpass[:, channel] = highpass(data=raw_data[:, channel], cutoff=0.1)
-
-            # Apply bandpass filter
-            raw_data_bandpass[:, channel] = bandpass(
-                data=raw_data_highpass[:, channel], freqmin=0.1, freqmax=100, fs=1000, corners=4
-            )
-
-
-# ---------------------- RESAMPLE FO DATA TO ACCELEROMETER TIMEBASE ----------------------
+    # ---------------------- RESAMPLE FO DATA TO ACCELEROMETER TIMEBASE ----------------------
 
     if timestamps and raw_data_bandpass is not None:
         timestamps_unix = np.array([t.timestamp() for t in timestamps])

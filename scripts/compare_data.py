@@ -1,3 +1,6 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
 from datetime import datetime, timedelta
 
 from DatabaseUtils import get_commands
@@ -111,8 +114,8 @@ if __name__ == "__main__":
     traintype = "SPR(A)"
     track = "2"
     # fo channels
-    first_channel = 1190
-    last_channel = 1200
+    first_channel = 1189
+    last_channel = 1199
 
     # Fetch the accelerometer data
     events, tim, mis = fetch_accel_data(db_path=path_db,
@@ -160,14 +163,38 @@ if __name__ == "__main__":
             if fo_file == fo_files_in_event[0]:
                 fo.extract_properties_per_file(fo_file)
                 print(fo.properties)
+                file_start_time = fo.properties['FileStartTime']
+                sampling_frequency = int(fo.properties['SamplingFrequency[Hz]'])
             # Try using the extract_data from the BaseFOdata class
             # This function already has a bandpass filter implemented, as well as a
             # conversion form optical phase to strain
-            fo.extract_data(file_name=fo_file, first_channel=first_channel, last_channel=last_channel,
-                            start_time=time_window[0], end_time=time_window[1])
+            fo.extract_data(file_name=fo_file, first_channel=first_channel, last_channel=last_channel)
 
+            # In the original code, the data is transposed, so we will un-transpose it
+            fo.data = fo.data.T
             # Append the data to the list
             fo_data.append(fo.data)
 
-            # Lets observe the data to check
-            print(fo.data.shape)
+        # Concatenate FO data from multiple files
+        raw_data = np.concatenate(fo_data, axis=0)
+
+        # Compute timestamps for FO data
+        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
+
+        # Convert timestamps to NumPy datetime64 for indexing
+        timestamps_array = np.array(timestamps, dtype='datetime64[ns]')
+
+        # Find closest start and end indices within the FO timestamps
+        start_time_np = np.datetime64(time_window[0])
+        end_time_np = np.datetime64(time_window[1])
+        start_index = np.argmin(np.abs(timestamps_array - start_time_np))
+        end_index = np.argmin(np.abs(timestamps_array - end_time_np))
+
+        # Crop FO data to the time window
+        timestamps = timestamps[start_index:end_index + 1]
+        raw_data = raw_data[start_index:end_index + 1, :]
+
+        # Lets plot the fo data againt the time
+        plt.figure()
+        plt.plot(timestamps, raw_data)
+        plt.show()

@@ -92,9 +92,6 @@ class OptasenseFOdata(BaseFOdata):
         else:
             return sosfilt(sos, data)
 
-    import os
-    import h5py
-
     def extract_properties_per_file(self, file_input: str):
         """
         Extract the file properties as a dictionary for a given file.
@@ -157,7 +154,7 @@ class OptasenseFOdata(BaseFOdata):
         return self.properties
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
-                     start_time: int = None, end_time: int = None, frequency: int = None):
+                     frequency: int = None):
         """
         Extract the file properties and the measurement data as a dictionary and an array respectively.
 
@@ -165,8 +162,6 @@ class OptasenseFOdata(BaseFOdata):
             file_name (str): The name of the file to extract the data from
             first_channel (int): The first channel to be extracted
             last_channel (int): The last channel to be extracted ** If you want just 1 channel, set first_channel = last_channel
-            start_time (int): The start time of the data to be extracted
-            end_time (int): The end time of the data to be extracted
             frequency (int): The sampling frequency of the data
 
         Returns:
