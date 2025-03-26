@@ -6,6 +6,7 @@ from datetime import datetime
 from src.erju.process_FO_base import BaseFOdata
 from scipy.signal import iirfilter, zpk2sos, sosfilt, windows
 
+
 class OptasenseFOdata(BaseFOdata):
     """
     Class for finding trains using the Optasense type format based on .h5 files
@@ -23,8 +24,6 @@ class OptasenseFOdata(BaseFOdata):
         # Call the __init__ method of the BaseFindTrains class
         super().__init__(dir_path, first_channel, last_channel)
 
-
-
     def convert_microseconds_to_datetime(self, microseconds: int) -> datetime:
         """
         Convert a timestamp in microseconds since epoch to a UTC datetime.
@@ -41,7 +40,6 @@ class OptasenseFOdata(BaseFOdata):
         # Return the corresponding datetime
         return datetime.utcfromtimestamp(seconds)
 
-
     def from_opticalphase_to_strain(self, raw_data: np.ndarray) -> np.ndarray:
         """
         Take the raw OptaSense data and convert it to units of strain.
@@ -57,16 +55,15 @@ class OptasenseFOdata(BaseFOdata):
         raw_data = raw_data - np.mean(raw_data, axis=0)
 
         # Convert into units of radians
-        raw_data = raw_data * (2*np.pi / 2**16)
+        raw_data = raw_data * (2 * np.pi / 2 ** 16)
 
         # Get from the properties the values I need to convert to strain
         n = self.properties['Fibre Refractive Index']
         L = self.properties['GaugeLength']
         # Convert into units of strain
-        data = raw_data * ((1550.12 * 1e-9)/(0.78 * 4 * np.pi * n * L))
+        data = raw_data * ((1550.12 * 1e-9) / (0.78 * 4 * np.pi * n * L))
 
         return data
-
 
     def bandpass(self, data: np.array, freqmin: float, freqmax: float, fs: float, corners: int, zerophase=True):
         """
@@ -95,39 +92,34 @@ class OptasenseFOdata(BaseFOdata):
         else:
             return sosfilt(sos, data)
 
+    import os
+    import h5py
 
-    def extract_properties_per_file(self, file_name: str):
+    def extract_properties_per_file(self, file_input: str):
         """
-        Extract the file properties as a dictionary for a given file. Note that this function is different
-        from the extract_properties function, because it does not add the additional manually calculated properties.
-        Those are only added in the extract_properties function.
+        Extract the file properties as a dictionary for a given file.
 
         Args:
-            file_name (str): The name of the file to extract the properties from
+            file_input (str): The file name or full file path to extract the properties from.
 
         Returns:
-            properties (dict): The extracted properties
+            properties (dict): The extracted properties.
         """
-        # From the file name build the full file path
-        file_path = os.path.join(self.dir_path, file_name)
+        # Determine if input is a full path or just a file name
+        if os.path.isabs(file_input):
+            file_path = file_input
+        else:
+            file_path = os.path.join(self.dir_path, file_input)
 
         # Open the .h5 file
         with h5py.File(file_path, 'r') as file:
-
-            # Calculate some parameters that are not directly available
-            # Get the "RawDataTime" dataset
             rawDataTime = file['Acquisition']['Raw[0]']['RawDataTime']
-            # Get the first and last entry in "RawDataTime"
             file_start_time = self.convert_microseconds_to_datetime(rawDataTime[0])
             file_end_time = self.convert_microseconds_to_datetime(rawDataTime[-1])
-            # Calculate the duration of the measurement
             measurement_duration = (file_end_time - file_start_time).total_seconds()
-            # Calculate the time interval between samples
-            time_interval = (rawDataTime[1] - rawDataTime[0]) * 1e-6 # Convert to seconds
-            # Calculate the measurement duration with the samples and frequency
+            time_interval = (rawDataTime[1] - rawDataTime[0]) * 1e-6
             measurement_duration_samples = file['Acquisition']['Raw[0]']['RawData'].shape[0] * time_interval
 
-            # Get the properties from different sections in the file
             self.properties = {
                 'AcquisitionId': file['Acquisition'].attrs['AcquisitionId'],
                 'GaugeLength': file['Acquisition'].attrs['GaugeLength'],
@@ -160,12 +152,9 @@ class OptasenseFOdata(BaseFOdata):
                 'measurement_time': measurement_duration_samples,
                 'TimeInterval': time_interval,
                 'NumberOfMeasurements': file['Acquisition']['Raw[0]']['RawData'].shape[0]
-
             }
 
-
         return self.properties
-
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
@@ -192,11 +181,8 @@ class OptasenseFOdata(BaseFOdata):
 
         # Open the .h5 file
         with h5py.File(file_path, 'r') as file:
-
-            # Create an instance of the raw data for easier access
-            all_raw_data = file['Acquisition']['Raw[0]']['RawData']
-            # Get the selected channels
-            raw_signal_data = all_raw_data[:, first_channel:last_channel+1]
+            # Create an instance of the raw data for easier access with the slicing of the channels
+            raw_signal_data = file['Acquisition']['Raw[0]']['RawData'][:, first_channel:last_channel + 1]
 
             # Apply the tukey window to the raw data in order to reduce the edge effects prior to filtering
             signal_window = windows.tukey(M=raw_signal_data.shape[0], alpha=0.1)
@@ -209,7 +195,6 @@ class OptasenseFOdata(BaseFOdata):
                                                     freqmax=100,
                                                     fs=self.properties['SamplingFrequency[Hz]'],
                                                     corners=5)
-
 
         # Convert the raw data to strain
         data = self.from_opticalphase_to_strain(filtered_data)

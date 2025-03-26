@@ -1,9 +1,9 @@
-from DatabaseUtils import get_commands
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-from src.utils.file_utils import get_files_in_dir, get_files_list
+
+from DatabaseUtils import get_commands
 
 from src.erju.process_FO_base import BaseFOdata
+from src.utils.file_utils import get_files_list, from_window_get_fo_file
 
 
 # What data we want to compare? Lets tackle it one by one:
@@ -97,7 +97,6 @@ def unpack_timeseries(event: list, data: dict):
     return absolute_time, trace_x, trace_y, trace_z, time_window
 
 
-
 if __name__ == "__main__":
     # Define the paths
     path_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
@@ -115,9 +114,6 @@ if __name__ == "__main__":
     first_channel = 1190
     last_channel = 1200
 
-
-
-
     # Fetch the accelerometer data
     events, tim, mis = fetch_accel_data(db_path=path_db,
                                         start_date=start_date,
@@ -127,7 +123,6 @@ if __name__ == "__main__":
                                         traintype=traintype,
                                         track=track,
                                         get_timeseries=True)
-
 
     # Get the event time series dictionary (assuming one location)
     event_series = list(tim.values())[0]
@@ -142,22 +137,37 @@ if __name__ == "__main__":
         # plt.plot(absolute_time, trace_x)
         # plt.show()
 
+        # 2 Lets look at the FO data ##########################################
 
+        # Lets create an instance of the BaseFOdata class
 
-# 2 Lets look at the FO data ##########################################
+        fo = BaseFOdata.create_instance(dir_path=path_fo,
+                                        first_channel=first_channel,
+                                        last_channel=last_channel,
+                                        reader='optasense')
+        # For each event, find the files in the time window
+        fo_files_in_event = from_window_get_fo_file(path_fo, time_window)
 
-# Lets create an instance of the BaseFOdata class
+        # fo.extract_properties_per_file(fo_files_in_event[0])
+        # print(fo.properties['SamplingFrequency[Hz]'])
 
-fo = BaseFOdata.create_instance(dir_path=path_fo,
-                                first_channel=first_channel,
-                                last_channel=last_channel,
-                                reader='optasense')
+        # Now we loop through the fo files one by one and extract the data
+        # First lets create a container to store the fo data
+        fo_data = []
+        # Now the loop
+        for fo_file in fo_files_in_event:
+            # Get properties from the first file
+            if fo_file == fo_files_in_event[0]:
+                fo.extract_properties_per_file(fo_file)
+                print(fo.properties)
+            # Try using the extract_data from the BaseFOdata class
+            # This function already has a bandpass filter implemented, as well as a
+            # conversion form optical phase to strain
+            fo.extract_data(file_name=fo_file, first_channel=first_channel, last_channel=last_channel,
+                            start_time=time_window[0], end_time=time_window[1])
 
-file_names = get_files_list(path_fo, file_extension='.h5')
+            # Append the data to the list
+            fo_data.append(fo.data)
 
-
-fo.extract_properties_per_file(file_names[0])
-print(fo.properties['SamplingFrequency[Hz]'])
-
-
-
+            # Lets observe the data to check
+            print(fo.data.shape)

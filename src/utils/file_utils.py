@@ -11,6 +11,7 @@ from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 
+
 # Old script to get the files in a directory
 def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = True):
     """
@@ -84,6 +85,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def get_files_list(folder_path: str, file_extension: str = 'h5'):
     """
     Get a list of files in a directory with a specific extension.
@@ -116,7 +118,6 @@ def get_files_list(folder_path: str, file_extension: str = 'h5'):
     return file_paths
 
 
-
 def get_file_extensions(folder_path: str):
     """
     Get a list of all unique file extensions in the specified folder.
@@ -141,18 +142,17 @@ def get_file_extensions(folder_path: str):
     return sorted(extensions)
 
 
-
 def find_trains_STALTA(
-    data: np.ndarray,
-    inspect_channel: int,
-    sf: int,
-    batch: int,
-    batch_length: int,
-    lower_seconds: int = 1,
-    upper_seconds: int = 10,
-    upper_thres: float = 6,
-    lower_thres: float = 0.5,
-    minimum_trigger_period: float = 3.0,
+        data: np.ndarray,
+        inspect_channel: int,
+        sf: int,
+        batch: int,
+        batch_length: int,
+        lower_seconds: int = 1,
+        upper_seconds: int = 10,
+        upper_thres: float = 6,
+        lower_thres: float = 0.5,
+        minimum_trigger_period: float = 3.0,
 ) -> pd.DataFrame:
     """
     Detect trains in a single channel using the STA-LTA algorithm.
@@ -213,15 +213,14 @@ def find_trains_STALTA(
     return df_trains
 
 
-
 def do_stalta(
-    data: Trace | np.ndarray,
-    freq: float,
-    upper_thres_plot: float = 4.5,
-    lower_thres_plot: float = 1.5,
-    plots: bool = True,
-    lower: int = 1,
-    upper: int = 10,
+        data: Trace | np.ndarray,
+        freq: float,
+        upper_thres_plot: float = 4.5,
+        lower_thres_plot: float = 1.5,
+        plots: bool = True,
+        lower: int = 1,
+        upper: int = 10,
 ) -> np.ndarray:
     """
     Wrapper around the recursive STA-LTA algorithm to a trace or numpy array, and optionally plot the results.
@@ -335,6 +334,7 @@ def from_window_get_fo_file(fo_data_path: str, time_window: list):
             else:
                 # If there is only one file, assume a default duration (e.g., 1 minute)
                 end = fo_timestamps[i] + pd.Timedelta(minutes=1)
+                logger.info(f"Only one file. Assuming a default duration of 1 minute.")
         intervals.append((start, end))
 
     # Find file indices where the file's time interval intersects the event time window.
@@ -391,8 +391,6 @@ def calculate_sampling_frequency(file: h5py.File) -> float:
         raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
 
 
-
-
 def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
     b, a = butter(1, cutoff, btype="high", analog=False)
     return filtfilt(b, a, data)
@@ -410,4 +408,3 @@ def bandpass(data, freqmin, freqmax, fs, corners, zerophase=True):
         return sosfilt(sos, firstpass[::-1])[::-1]
     else:
         return sosfilt(sos, data)
-
