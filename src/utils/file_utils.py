@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
+import scipy.signal as signal
 
 from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
@@ -434,3 +435,9 @@ def from_opticalphase_to_strain(raw_data: np.ndarray, refractive_idx, gauge_leng
     data = raw_data * ((1550.12 * 1e-9) / (0.78 * 4 * np.pi * n * L))
 
     return data
+
+
+def compute_psd(signal_data, fs, length_w=128):
+    """Compute PSD using Welch's method."""
+    freq, psd = signal.welch(signal_data, fs=fs, nperseg=length_w, window='hamming', scaling='density')
+    return freq, psd

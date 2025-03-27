@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from DatabaseUtils import get_commands
 
 from src.erju.process_FO_base import BaseFOdata
-from src.utils.file_utils import get_files_list, from_window_get_fo_file
+from src.utils.file_utils import from_window_get_fo_file, compute_psd
+from src.utils.plot_utils import plot_accel_vs_fo, plot_fo_before_after, \
+    plot_accel_signals_and_psd, plot_accel_fo_with_psd
 
 
 # What data we want to compare? Lets tackle it one by one:
@@ -135,11 +137,6 @@ if __name__ == "__main__":
         # Unpack the time series data
         absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(event, data)
 
-        # Plot absolute time in x vs accelerometer traceX in y
-        # plt.figure()
-        # plt.plot(absolute_time, trace_x)
-        # plt.show()
-
         # 2 Lets look at the FO data ##########################################
 
         # Lets create an instance of the BaseFOdata class
@@ -151,35 +148,36 @@ if __name__ == "__main__":
         # For each event, find the files in the time window
         fo_files_in_event = from_window_get_fo_file(path_fo, time_window)
 
-        # fo.extract_properties_per_file(fo_files_in_event[0])
-        # print(fo.properties['SamplingFrequency[Hz]'])
-
         # Now we loop through the fo files one by one and extract the data
         # First lets create a container to store the fo data
         fo_data = []
+        super_raw_data = []
         # Now the loop
         for fo_file in fo_files_in_event:
             # Get properties from the first file
             if fo_file == fo_files_in_event[0]:
                 fo.extract_properties_per_file(fo_file)
-                print(fo.properties)
                 file_start_time = fo.properties['FileStartTime']
                 sampling_frequency = int(fo.properties['SamplingFrequency[Hz]'])
+
             # Try using the extract_data from the BaseFOdata class
             # This function already has a bandpass filter implemented, as well as a
             # conversion form optical phase to strain
-            fo.extract_data(file_name=fo_file, first_channel=first_channel, last_channel=last_channel)
+            processed_data, raw_signal_data = fo.extract_data(file_name=fo_file,
+                                                              first_channel=first_channel,
+                                                              last_channel=last_channel)
 
             # In the original code, the data is transposed, so we will un-transpose it
-            fo.data = fo.data.T
             # Append the data to the list
-            fo_data.append(fo.data)
+            fo_data.append(processed_data.T)
+            super_raw_data.append(raw_signal_data)
 
         # Concatenate FO data from multiple files
-        raw_data = np.concatenate(fo_data, axis=0)
+        fo_data = np.concatenate(fo_data, axis=0)
+        super_raw_data = np.concatenate(super_raw_data, axis=0)
 
         # Compute timestamps for FO data
-        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
+        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(fo_data.shape[0])]
 
         # Convert timestamps to NumPy datetime64 for indexing
         timestamps_array = np.array(timestamps, dtype='datetime64[ns]')
@@ -192,9 +190,61 @@ if __name__ == "__main__":
 
         # Crop FO data to the time window
         timestamps = timestamps[start_index:end_index + 1]
-        raw_data = raw_data[start_index:end_index + 1, :]
+        fo_data = fo_data[start_index:end_index + 1, :]
+        super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
-        # Lets plot the fo data againt the time
-        plt.figure()
-        plt.plot(timestamps, raw_data)
-        plt.show()
+        # Compute PSDs
+        fx, psd_x = compute_psd(trace_x, fs=1000)
+        fy, psd_y = compute_psd(trace_y, fs=1000)
+        fz, psd_z = compute_psd(trace_z, fs=1000)
+        ff, psd_fo = compute_psd(fo_data[:, 1194 - first_channel], fs=sampling_frequency)
+
+        # Plot the accelerometer vs FO data
+        # plot_accel_vs_fo(
+        #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_vs_fo",
+        #     event_id=event_id,
+        #     accel_time=absolute_time,
+        #     trace_x=trace_x,
+        #     trace_y=trace_y,
+        #     trace_z=trace_z,
+        #     fo_time=timestamps,
+        #     fo_data=fo_data,
+        #     fo_channel=1194,
+        #     first_channel=first_channel,
+        #     save_interactive=True
+        # )
+
+        # Plot FO data before and after filtering
+        # plot_fo_before_after(
+        #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\before_after_filters",
+        #     event_id=event_id,
+        #     timestamps=timestamps,
+        #     raw_signal_data=super_raw_data,
+        #     processed_data=fo_data,
+        #     fo_channel=1194,
+        #     first_channel=first_channel,
+        #     save_interactive=True  # set False if you just want PNG
+        # )
+
+        # plot_accel_signals_and_psd(event_id,
+        #                            absolute_time,
+        #                            trace_x,
+        #                            trace_y,
+        #                            trace_z,
+        #                            fs=1000,
+        #                            save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_with_psd")
+
+        plot_accel_fo_with_psd(event_id,
+                               absolute_time,
+                               trace_x,
+                               trace_y,
+                               trace_z,
+                               timestamps,
+                               fo_data,
+                               fo_channel=1194,
+                               first_channel=first_channel,
+                               fs_accel=1000,
+                               fs_fo=sampling_frequency,
+                               save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_fo_with_psd",
+                               freq_range=(0, 100),
+                               save_interactive=True)

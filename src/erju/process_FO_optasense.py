@@ -198,4 +198,4 @@ class OptasenseFOdata(BaseFOdata):
         self.data = data.T
 
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
-        return self.data
+        return self.data, raw_signal_data
