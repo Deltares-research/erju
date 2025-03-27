@@ -437,7 +437,7 @@ def from_opticalphase_to_strain(raw_data: np.ndarray, refractive_idx, gauge_leng
     return data
 
 
-def compute_psd(signal_data, fs, length_w=512):
+def compute_psd(signal_data, fs, length_w=256):
     """Compute PSD using Welch's method."""
     freq, psd = signal.welch(signal_data, fs=fs, nperseg=length_w, window='hamming', scaling='density')
     return freq, psd
@@ -484,21 +484,11 @@ def compute_cosine_similarity_windows(signal1, signal2, window_size, overlap):
         similarities (list): Cosine similarity for each window.
     """
     assert len(signal1) == len(signal2), "Signals must be of equal length"
-    step = window_size - overlap
-    similarities = []
 
-    for start in range(0, len(signal1) - window_size + 1, step):
-        end = start + window_size
-        vec1 = signal1[start:end]
-        vec2 = signal2[start:end]
-        # Normalize to zero mean
-        vec1 = vec1 - np.mean(vec1)
-        vec2 = vec2 - np.mean(vec2)
-        # Compute cosine similarity
-        sim = 1 - cosine(vec1, vec2)
-        similarities.append(sim)
+    from numpy.linalg import norm
+    cosin = np.dot(signal1, signal2) / (norm(signal1) * norm(signal2))
 
-    return similarities
+    return cosin
 
 
 from scipy.signal import welch

@@ -315,7 +315,7 @@ def plot_accel_signals_and_psd(
         trace_z,
         fs=1000,
         save_dir=".",
-        freq_range=(0, 500)
+        freq_range=(0, 100)
 ):
     """
     Plot accelerometer signals and their PSDs (X, Y, Z) in 3x2 format.
@@ -379,7 +379,7 @@ def plot_accel_fo_with_psd(
         fs_accel=1000,
         fs_fo=1000,
         save_dir=".",
-        freq_range=(0, 500),
+        freq_range=(0, 100),
         save_interactive=False
 ):
     """

@@ -136,7 +136,7 @@ if __name__ == "__main__":
     locations = ['Meetjournal_MP8_Holten_zuid_4m_C']
     campaigns = None
     traintype = "SPR(A)"
-    track = "2"
+    track = "1"
     # fo channels
     first_channel = 1189
     last_channel = 1199
@@ -254,9 +254,9 @@ if __name__ == "__main__":
         scores_y = compute_cosine_similarity_windows(trace_y, aligned_fo, window_size, overlap)
         scores_z = compute_cosine_similarity_windows(trace_z, aligned_fo, window_size, overlap)
 
-        similarity_scores_x.extend(scores_x)
-        similarity_scores_y.extend(scores_y)
-        similarity_scores_z.extend(scores_z)
+        similarity_scores_x.append(scores_x)
+        similarity_scores_y.append(scores_y)
+        similarity_scores_z.append(scores_z)
 
         # Compute PSDs with fixed frequency bins (shared across events)
         fx, psd_x = compute_psd_fixed(trace_x_filt, fs=1000)
@@ -273,7 +273,7 @@ if __name__ == "__main__":
         psd_z_all.append(psd_z)
         psd_fo_all.append(psd_fo)
 
-        # Plot the accelerometer vs FO data
+        # # Plot the accelerometer vs FO data
         # plot_accel_vs_fo(
         #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_vs_fo",
         #     event_id=event_id,
@@ -287,8 +287,8 @@ if __name__ == "__main__":
         #     first_channel=first_channel,
         #     save_interactive=True
         # )
-
-        # Plot FO data before and after filtering
+        #
+        # # Plot FO data before and after filtering
         # plot_fo_before_after(
         #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\before_after_filters",
         #     event_id=event_id,
@@ -320,71 +320,71 @@ if __name__ == "__main__":
         #                        first_channel=first_channel,
         #                        fs_accel=1000,
         #                        fs_fo=sampling_frequency,
-        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_fo_with_psd_512",
+        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_fo_with_psd_256",
         #                        freq_range=(0, 100),
         #                        save_interactive=True
         #                        )
-        #
-        # Accelerometer and fo data WITHOUT FILTER OR STRAIN CONVERSION
-        # plot_accel_fo_with_psd(event_id,
-        #                        absolute_time,
-        #                        trace_x,
-        #                        trace_y,
-        #                        trace_z,
-        #                        timestamps,
-        #                        super_raw_data,
-        #                        fo_channel=1194,
-        #                        first_channel=first_channel,
-        #                        fs_accel=1000,
-        #                        fs_fo=sampling_frequency,
-        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_foRAW_with_psd",
-        #                        freq_range=(0, 100),
-        #                        save_interactive=True)
 
-        # Accelerometer FILTERED DATA and fo data
-        # plot_accel_fo_with_psd(event_id,
-        #                        absolute_time,
-        #                        trace_x_filt,
-        #                        trace_y_filt,
-        #                        trace_z_filt,
-        #                        timestamps,
-        #                        fo_data,
-        #                        fo_channel=1194,
-        #                        first_channel=first_channel,
-        #                        fs_accel=1000,
-        #                        fs_fo=sampling_frequency,
-        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accelF_foF_with_psd",
-        #                        freq_range=(0, 100),
-        #                        save_interactive=True)
-
-        # plot_accel_filtered_comparison(
-        #     event_id,
-        #     absolute_time,
-        #     trace_x,
-        #     trace_y,
-        #     trace_z,
-        #     trace_x_filt,
-        #     trace_y_filt,
-        #     trace_z_filt,
-        #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_filt_nofilt_compare",
-        # )
-
-        # IN ORDER TO CHECK ALLIGNMENT BETWEEN FO AND ACCELEROMETER DATA
-        # plot_signals_with_alignment_overlay(event_id, timestamps, trace_x, trace_y, trace_z, aligned_fo)
-
-    # # PLOT THE COSINE SIMILARITY BOXPLOT
-    # plot_cosine_similarity_boxplot(
-    #     sim_x=similarity_scores_x,
-    #     sim_y=similarity_scores_y,
-    #     sim_z=similarity_scores_z,
-    #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\cosine",
-    #     filename="cosine_similarity_boxplot.png"
-    # )
-
-    save_aggregated_psd_subplot(freqs_shared,
-                                psds_x=psd_x_all,
-                                psds_y=psd_y_all,
-                                psds_z=psd_z_all,
-                                psds_fo=psd_fo_all,
-                                save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\psd_summary",
-                                filename="aggregated_psd.png")
+    #     # Accelerometer and fo data WITHOUT FILTER OR STRAIN CONVERSION
+    #     plot_accel_fo_with_psd(event_id,
+    #                            absolute_time,
+    #                            trace_x,
+    #                            trace_y,
+    #                            trace_z,
+    #                            timestamps,
+    #                            super_raw_data,
+    #                            fo_channel=1194,
+    #                            first_channel=first_channel,
+    #                            fs_accel=1000,
+    #                            fs_fo=sampling_frequency,
+    #                            save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_foRAW_with_psd",
+    #                            freq_range=(0, 100),
+    #                            save_interactive=True)
+    #
+    #     # Accelerometer FILTERED DATA and fo data
+    #     plot_accel_fo_with_psd(event_id,
+    #                            absolute_time,
+    #                            trace_x_filt,
+    #                            trace_y_filt,
+    #                            trace_z_filt,
+    #                            timestamps,
+    #                            fo_data,
+    #                            fo_channel=1194,
+    #                            first_channel=first_channel,
+    #                            fs_accel=1000,
+    #                            fs_fo=sampling_frequency,
+    #                            save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accelF_foF_with_psd",
+    #                            freq_range=(0, 100),
+    #                            save_interactive=True)
+    #
+    #     # Plot the filtered accelerometer data and the raw accelerometer dat
+    #     plot_accel_filtered_comparison(event_id,
+    #                                    absolute_time,
+    #                                    trace_x,
+    #                                    trace_y,
+    #                                    trace_z,
+    #                                    trace_x_filt,
+    #                                    trace_y_filt,
+    #                                    trace_z_filt,
+    #                                    save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_filt_nofilt_compare",
+    #                                    )
+    #
+    #     # IN ORDER TO CHECK ALLIGNMENT BETWEEN FO AND ACCELEROMETER DATA
+    #     plot_signals_with_alignment_overlay(event_id, timestamps, trace_x, trace_y, trace_z, aligned_fo)
+    #
+    # # # PLOT THE COSINE SIMILARITY BOXPLOT
+    plot_cosine_similarity_boxplot(
+        sim_x=similarity_scores_x,
+        sim_y=similarity_scores_y,
+        sim_z=similarity_scores_z,
+        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\cosine",
+        filename="cosine_similarity_boxplot.png"
+    )
+    #
+    # save_aggregated_psd_subplot(freqs_shared,
+    #                             psds_x=psd_x_all,
+    #                             psds_y=psd_y_all,
+    #                             psds_z=psd_z_all,
+    #                             psds_fo=psd_fo_all,
+    #                             save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\psd_summary",
+    #                             filename="aggregated_psd.png")
