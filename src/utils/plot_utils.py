@@ -480,3 +480,188 @@ def plot_accel_fo_with_psd(
         fig_plotly.write_html(html_path, auto_open=False)
 
         print(f"Saved interactive HTML plot to: {html_path}")
+
+
+def plot_accel_filtered_comparison(
+        event_id,
+        time,
+        trace_x,
+        trace_y,
+        trace_z,
+        trace_x_filt,
+        trace_y_filt,
+        trace_z_filt,
+        save_dir=".",
+):
+    """
+    Plot unfiltered vs bandpass-filtered accelerometer signals (X, Y, Z) in 3x2 format.
+
+    Args:
+        event_id (str/int): Identifier for the event (used in filename).
+        time (list of datetime): Time axis for the traces.
+        trace_x/y/z (np.array): Raw accelerometer signals.
+        trace_x/y/z_filt (np.array): Filtered accelerometer signals.
+        save_dir (str): Directory to save the output plot.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    labels = ["X", "Y", "Z"]
+    traces_raw = [trace_x, trace_y, trace_z]
+    traces_filt = [trace_x_filt, trace_y_filt, trace_z_filt]
+
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(14, 8), sharex=True)
+
+    for i in range(3):
+        axes[i, 0].plot(time, traces_raw[i], alpha=0.8)
+        axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)")
+        axes[i, 0].set_title("Unfiltered")
+        axes[i, 0].grid(True)
+
+        axes[i, 1].plot(time, traces_filt[i], alpha=0.8)
+        axes[i, 1].set_title("Filtered (1-100 Hz)")
+        axes[i, 1].grid(True)
+
+    axes[-1, 0].set_xlabel("Time")
+    axes[-1, 1].set_xlabel("Time")
+
+    fig.suptitle(f"Accelerometer Traces (Unfiltered vs Filtered) - Event {event_id}")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    filename = f"event_{event_id}_accel_filtered_comparison.png"
+    fig.savefig(os.path.join(save_dir, filename))
+    plt.close(fig)
+
+    print(f"Saved filtered comparison plot to: {os.path.join(save_dir, filename)}")
+
+
+def plot_signals_with_alignment_overlay(
+        event_id,
+        time_axis,
+        trace_x,
+        trace_y,
+        trace_z,
+        fo_aligned,
+        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\check_data_align"
+):
+    """
+    Plot normalized aligned FO signal overlaid on the 3 accelerometer traces.
+
+    Args:
+        event_id (str or int): Event name or ID for filenames.
+        time_axis (list): Time axis (same for all signals).
+        trace_x/y/z (np.array): Accelerometer traces.
+        fo_aligned (np.array): Aligned FO signal.
+        save_dir (str): Directory to save the PNG plot.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Normalize all signals (zero mean, unit variance)
+    def normalize(signal):
+        return (signal - np.mean(signal)) / np.std(signal)
+
+    trace_x_norm = normalize(trace_x)
+    trace_y_norm = normalize(trace_y)
+    trace_z_norm = normalize(trace_z)
+    fo_norm = normalize(fo_aligned)
+
+    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(12, 8), sharex=True)
+    labels = ["X", "Y", "Z"]
+    traces = [trace_x_norm, trace_y_norm, trace_z_norm]
+
+    for i in range(3):
+        axes[i].plot(time_axis, traces[i], label=f"Accel {labels[i]}", alpha=0.8)
+        axes[i].plot(time_axis, fo_norm, label="FO (aligned, norm)", alpha=0.6, linestyle='--')
+        axes[i].set_ylabel(f"{labels[i]} / FO")
+        axes[i].legend()
+        axes[i].grid(True)
+
+    axes[-1].set_xlabel("Time")
+    fig.suptitle(f"Normalized FO Overlay on Accelerometer Traces - Event {event_id}")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    filename = f"event_{event_id}_fo_overlay_on_accel.png"
+    fig.savefig(os.path.join(save_dir, filename), format="png")
+    plt.close(fig)
+
+    print(f"Saved normalized overlay plot to: {os.path.join(save_dir, filename)}")
+
+
+import os
+import matplotlib.pyplot as plt
+
+
+def plot_cosine_similarity_boxplot(sim_x, sim_y, sim_z, save_dir=".", filename="cosine_similarity_boxplot.png"):
+    """
+    Create and save a boxplot comparing cosine similarity distributions for X/Y/Z axes.
+
+    Args:
+        sim_x, sim_y, sim_z (list): Lists of cosine similarity scores.
+        save_dir (str): Directory to save the figure.
+        filename (str): Filename to save as.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    data = [sim_x, sim_y, sim_z]
+    labels = ['Accel X', 'Accel Y', 'Accel Z']
+
+    plt.figure(figsize=(8, 6))
+    plt.boxplot(data, labels=labels, notch=True, patch_artist=True)
+    plt.ylabel('Cosine Similarity')
+    plt.title('Distribution of Windowed Cosine Similarity to FO Signal')
+    plt.grid(True, axis='y', linestyle='--', alpha=0.6)
+    plt.tight_layout()
+
+    plot_path = os.path.join(save_dir, filename)
+    plt.savefig(plot_path, dpi=300)
+    plt.close()
+    print(f"Saved boxplot to: {plot_path}")
+
+
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+
+
+def save_aggregated_psd_subplot(
+        frequencies,
+        psds_x,
+        psds_y,
+        psds_z,
+        psds_fo,
+        save_dir,
+        filename="aggregated_psd_subplots.png"
+):
+    """
+    Create subplots (1 per trace) showing mean ± std PSD across all events.
+
+    Args:
+        frequencies (np.array): Frequency bins (same for all).
+        psds_x/y/z/fo (list of np.array): PSDs from each event.
+        save_dir (str): Where to save the figure.
+        filename (str): Output image name.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
+    psd_sets = [psds_x, psds_y, psds_z, psds_fo]
+    labels = ["Accel X", "Accel Y", "Accel Z", "FO"]
+
+    for i, (ax, psd_list, label) in enumerate(zip(axes, psd_sets, labels)):
+        all_psds = np.vstack(psd_list)
+        mean_psd = np.mean(all_psds, axis=0)
+        std_psd = np.std(all_psds, axis=0)
+
+        ax.plot(frequencies, mean_psd, label="Mean PSD")
+        ax.fill_between(frequencies, mean_psd - std_psd, mean_psd + std_psd, alpha=0.3, label="±1 STD")
+        ax.set_ylabel("PSD")
+        ax.set_title(label)
+        ax.set_yscale('log')
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Frequency [Hz]")
+    fig.suptitle("PSD Summary Across All Events")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    output_path = os.path.join(save_dir, filename)
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    print(f"Saved subplot PSD summary to: {output_path}")

@@ -437,7 +437,80 @@ def from_opticalphase_to_strain(raw_data: np.ndarray, refractive_idx, gauge_leng
     return data
 
 
-def compute_psd(signal_data, fs, length_w=128):
+def compute_psd(signal_data, fs, length_w=512):
     """Compute PSD using Welch's method."""
     freq, psd = signal.welch(signal_data, fs=fs, nperseg=length_w, window='hamming', scaling='density')
     return freq, psd
+
+
+def align_signals(reference, target):
+    """
+    Align `target` signal to `reference` using cross-correlation.
+
+    Args:
+        reference (np.array): Reference signal.
+        target (np.array): Target signal to align.
+
+    Returns:
+        aligned_target (np.array): Target signal shifted to best match reference.
+        optimal_lag (int): Number of samples the target was shifted.
+    """
+    corr = signal.correlate(reference, target, mode='full')
+    lags = np.arange(-len(target) + 1, len(reference))
+    optimal_lag = lags[np.argmax(corr)]
+    aligned_target = np.roll(target, shift=optimal_lag)
+    return aligned_target, optimal_lag
+
+
+import numpy as np
+from scipy.spatial.distance import cosine
+from scipy.signal import correlate
+
+import numpy as np
+from scipy.spatial.distance import cosine
+
+
+def compute_cosine_similarity_windows(signal1, signal2, window_size, overlap):
+    """
+    Compute cosine similarity between two signals using a sliding window approach.
+
+    Args:
+        signal1 (np.array): First signal.
+        signal2 (np.array): Second signal (same length as signal1).
+        window_size (int): Window size in samples.
+        overlap (int): Overlap between windows in samples.
+
+    Returns:
+        similarities (list): Cosine similarity for each window.
+    """
+    assert len(signal1) == len(signal2), "Signals must be of equal length"
+    step = window_size - overlap
+    similarities = []
+
+    for start in range(0, len(signal1) - window_size + 1, step):
+        end = start + window_size
+        vec1 = signal1[start:end]
+        vec2 = signal2[start:end]
+        # Normalize to zero mean
+        vec1 = vec1 - np.mean(vec1)
+        vec2 = vec2 - np.mean(vec2)
+        # Compute cosine similarity
+        sim = 1 - cosine(vec1, vec2)
+        similarities.append(sim)
+
+    return similarities
+
+
+from scipy.signal import welch
+
+
+def compute_psd_fixed(signal, fs=1000, nperseg=512):
+    """
+    Compute the Power Spectral Density using Welch's method with fixed frequency bins.
+
+    Returns:
+        freqs (np.array): Frequency bins
+        psd (np.array): Power spectral density values
+    """
+    freqs, psd = welch(signal, fs=fs, nperseg=nperseg)
+    return freqs, psd

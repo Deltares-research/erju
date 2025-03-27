@@ -6,9 +6,11 @@ from datetime import datetime, timedelta
 from DatabaseUtils import get_commands
 
 from src.erju.process_FO_base import BaseFOdata
-from src.utils.file_utils import from_window_get_fo_file, compute_psd
+from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass, align_signals, \
+    compute_cosine_similarity_windows, compute_psd_fixed
 from src.utils.plot_utils import plot_accel_vs_fo, plot_fo_before_after, \
-    plot_accel_signals_and_psd, plot_accel_fo_with_psd
+    plot_accel_signals_and_psd, plot_accel_fo_with_psd, plot_accel_filtered_comparison, \
+    plot_signals_with_alignment_overlay, plot_cosine_similarity_boxplot, save_aggregated_psd_subplot
 
 
 # What data we want to compare? Lets tackle it one by one:
@@ -102,6 +104,26 @@ def unpack_timeseries(event: list, data: dict):
     return absolute_time, trace_x, trace_y, trace_z, time_window
 
 
+def estimate_sampling_frequency(time_vector):
+    """
+    Estimate the sampling frequency [Hz] from a list of datetime timestamps.
+
+    Args:
+        time_vector (list of datetime): List of datetime objects representing time axis.
+
+    Returns:
+        float: Estimated sampling frequency in Hz.
+    """
+    if len(time_vector) < 2:
+        raise ValueError("Need at least two timestamps to compute sampling frequency.")
+
+    # Calculate time differences in seconds
+    time_deltas = np.diff([t.timestamp() for t in time_vector])
+    avg_delta = np.mean(time_deltas)
+
+    return 1.0 / avg_delta
+
+
 if __name__ == "__main__":
     # Define the paths
     path_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
@@ -132,10 +154,31 @@ if __name__ == "__main__":
     # Get the event time series dictionary (assuming one location)
     event_series = list(tim.values())[0]
 
+    # Initialize storage for similarities
+    similarity_scores_x = []
+    similarity_scores_y = []
+    similarity_scores_z = []
+
+    # Initialize storage for PSDs
+    psd_x_all = []
+    psd_y_all = []
+    psd_z_all = []
+    psd_fo_all = []
+    freqs_shared = None
+
     # Loop through each event and its corresponding time series
     for event, (event_id, data) in zip(events, event_series.items()):
         # Unpack the time series data
         absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(event, data)
+
+        # The frequency of the accelerometer data is 1000 Hz.
+        freq_accel = estimate_sampling_frequency(absolute_time)
+        print(f"Estimated sampling frequency of accelerometer data: {freq_accel} Hz")
+
+        # Bandpass filter
+        trace_x_filt = bandpass(trace_x, 1, 100, 1000, 4)
+        trace_y_filt = bandpass(trace_y, 1, 100, 1000, 4)
+        trace_z_filt = bandpass(trace_z, 1, 100, 1000, 4)
 
         # 2 Lets look at the FO data ##########################################
 
@@ -199,6 +242,37 @@ if __name__ == "__main__":
         fz, psd_z = compute_psd(trace_z, fs=1000)
         ff, psd_fo = compute_psd(fo_data[:, 1194 - first_channel], fs=sampling_frequency)
 
+        # Compute windowed cosine similarity
+        window_size = 256  # samples
+        overlap = 128  # 50% overlap
+
+        ch_index = 1194 - first_channel
+        fo_trace = fo_data[:, ch_index]
+        aligned_fo, lag = align_signals(trace_x, fo_trace)
+
+        scores_x = compute_cosine_similarity_windows(trace_x, aligned_fo, window_size, overlap)
+        scores_y = compute_cosine_similarity_windows(trace_y, aligned_fo, window_size, overlap)
+        scores_z = compute_cosine_similarity_windows(trace_z, aligned_fo, window_size, overlap)
+
+        similarity_scores_x.extend(scores_x)
+        similarity_scores_y.extend(scores_y)
+        similarity_scores_z.extend(scores_z)
+
+        # Compute PSDs with fixed frequency bins (shared across events)
+        fx, psd_x = compute_psd_fixed(trace_x_filt, fs=1000)
+        fy, psd_y = compute_psd_fixed(trace_y_filt, fs=1000)
+        fz, psd_z = compute_psd_fixed(trace_z_filt, fs=1000)
+        ff, psd_fo = compute_psd_fixed(aligned_fo, fs=sampling_frequency)
+
+        # Save frequencies once
+        if freqs_shared is None:
+            freqs_shared = fx
+
+        psd_x_all.append(psd_x)
+        psd_y_all.append(psd_y)
+        psd_z_all.append(psd_z)
+        psd_fo_all.append(psd_fo)
+
         # Plot the accelerometer vs FO data
         # plot_accel_vs_fo(
         #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_vs_fo",
@@ -234,17 +308,83 @@ if __name__ == "__main__":
         #                            fs=1000,
         #                            save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_with_psd")
 
-        plot_accel_fo_with_psd(event_id,
-                               absolute_time,
-                               trace_x,
-                               trace_y,
-                               trace_z,
-                               timestamps,
-                               fo_data,
-                               fo_channel=1194,
-                               first_channel=first_channel,
-                               fs_accel=1000,
-                               fs_fo=sampling_frequency,
-                               save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_fo_with_psd",
-                               freq_range=(0, 100),
-                               save_interactive=True)
+        # Accelerometer data and fo with PSD's for 128/256/512
+        # plot_accel_fo_with_psd(event_id,
+        #                        absolute_time,
+        #                        trace_x,
+        #                        trace_y,
+        #                        trace_z,
+        #                        timestamps,
+        #                        fo_data,
+        #                        fo_channel=1194,
+        #                        first_channel=first_channel,
+        #                        fs_accel=1000,
+        #                        fs_fo=sampling_frequency,
+        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_fo_with_psd_512",
+        #                        freq_range=(0, 100),
+        #                        save_interactive=True
+        #                        )
+        #
+        # Accelerometer and fo data WITHOUT FILTER OR STRAIN CONVERSION
+        # plot_accel_fo_with_psd(event_id,
+        #                        absolute_time,
+        #                        trace_x,
+        #                        trace_y,
+        #                        trace_z,
+        #                        timestamps,
+        #                        super_raw_data,
+        #                        fo_channel=1194,
+        #                        first_channel=first_channel,
+        #                        fs_accel=1000,
+        #                        fs_fo=sampling_frequency,
+        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_foRAW_with_psd",
+        #                        freq_range=(0, 100),
+        #                        save_interactive=True)
+
+        # Accelerometer FILTERED DATA and fo data
+        # plot_accel_fo_with_psd(event_id,
+        #                        absolute_time,
+        #                        trace_x_filt,
+        #                        trace_y_filt,
+        #                        trace_z_filt,
+        #                        timestamps,
+        #                        fo_data,
+        #                        fo_channel=1194,
+        #                        first_channel=first_channel,
+        #                        fs_accel=1000,
+        #                        fs_fo=sampling_frequency,
+        #                        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accelF_foF_with_psd",
+        #                        freq_range=(0, 100),
+        #                        save_interactive=True)
+
+        # plot_accel_filtered_comparison(
+        #     event_id,
+        #     absolute_time,
+        #     trace_x,
+        #     trace_y,
+        #     trace_z,
+        #     trace_x_filt,
+        #     trace_y_filt,
+        #     trace_z_filt,
+        #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\accel_filt_nofilt_compare",
+        # )
+
+        # IN ORDER TO CHECK ALLIGNMENT BETWEEN FO AND ACCELEROMETER DATA
+        # plot_signals_with_alignment_overlay(event_id, timestamps, trace_x, trace_y, trace_z, aligned_fo)
+
+    # # PLOT THE COSINE SIMILARITY BOXPLOT
+    # plot_cosine_similarity_boxplot(
+    #     sim_x=similarity_scores_x,
+    #     sim_y=similarity_scores_y,
+    #     sim_z=similarity_scores_z,
+    #     save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\cosine",
+    #     filename="cosine_similarity_boxplot.png"
+    # )
+
+    save_aggregated_psd_subplot(freqs_shared,
+                                psds_x=psd_x_all,
+                                psds_y=psd_y_all,
+                                psds_z=psd_z_all,
+                                psds_fo=psd_fo_all,
+                                save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\psd_summary",
+                                filename="aggregated_psd.png")
