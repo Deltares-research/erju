@@ -13,6 +13,9 @@ from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 
 
+# from src.erju.extract_signals import center_channel
+
+
 # Old script to get the files in a directory
 def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = True):
     """
@@ -437,7 +440,7 @@ def from_opticalphase_to_strain(raw_data: np.ndarray, refractive_idx, gauge_leng
     return data
 
 
-def compute_psd(signal_data, fs, length_w=256):
+def compute_psd(signal_data, fs, length_w=512):
     """Compute PSD using Welch's method."""
     freq, psd = signal.welch(signal_data, fs=fs, nperseg=length_w, window='hamming', scaling='density')
     return freq, psd
@@ -470,15 +473,13 @@ import numpy as np
 from scipy.spatial.distance import cosine
 
 
-def compute_cosine_similarity_windows(signal1, signal2, window_size, overlap):
+def compute_cosine_similarity_windows(signal1, signal2):
     """
     Compute cosine similarity between two signals using a sliding window approach.
 
     Args:
         signal1 (np.array): First signal.
         signal2 (np.array): Second signal (same length as signal1).
-        window_size (int): Window size in samples.
-        overlap (int): Overlap between windows in samples.
 
     Returns:
         similarities (list): Cosine similarity for each window.
@@ -504,3 +505,48 @@ def compute_psd_fixed(signal, fs=1000, nperseg=512):
     """
     freqs, psd = welch(signal, fs=fs, nperseg=nperseg)
     return freqs, psd
+
+
+import os
+
+import os
+
+
+def create_results_folder(base_path, start_date, end_date, traintype, center_channel, track):
+    """
+    Create and return the path to the results folder based on parameters.
+    """
+    # Format strings
+    start_str = start_date.split()[0].replace("-", "")
+    end_str = end_date.split()[0].replace("-", "")
+
+    if traintype is None:
+        traintype_clean = "all_train"
+    else:
+        traintype_clean = traintype.replace("(", "").replace(")", "").replace(" ", "")
+
+    # Compose folder name
+    folder_name = f"results_{start_str}_{end_str}_{traintype_clean}_{center_channel}_{track}"
+
+    # Full path
+    full_path = os.path.join(base_path, folder_name)
+    os.makedirs(full_path, exist_ok=True)
+
+    return full_path
+
+
+def create_subfolder(parent_folder, subfolder_name):
+    """
+    Create a subfolder inside the results folder.
+
+    Args:
+        parent_folder (str): Path to the parent folder.
+        subfolder_name (str): Name of the subfolder to create.
+
+    Returns:
+        str: Full path to the created subfolder.
+    """
+    subfolder_path = os.path.join(parent_folder, subfolder_name)
+    os.makedirs(subfolder_path, exist_ok=True)
+
+    return subfolder_path

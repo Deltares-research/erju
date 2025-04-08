@@ -16,22 +16,20 @@ import matplotlib.colors as mcolors
 import plotly.graph_objs as go
 import plotly.io as pio
 
-from src.utils.file_utils import compute_psd
+from src.utils.file_utils import compute_psd, create_results_folder, create_subfolder
 
 
-def plot_accel_vs_fo(
-        save_dir,
-        event_id,
-        accel_time,
-        trace_x,
-        trace_y,
-        trace_z,
-        fo_time,
-        fo_data,
-        fo_channel=1194,
-        first_channel=1189,
-        save_interactive=False
-):
+def plot_sig_acc_fo(save_dir,
+                    event_id,
+                    accel_time,
+                    trace_x,
+                    trace_y,
+                    trace_z,
+                    fo_time,
+                    fo_data,
+                    fo_channel=1194,
+                    first_channel=1189,
+                    save_interactive=False):
     """
     Create a 3x2 plot comparing accelerometer data with FO data for a given event.
     Saves both a static PNG and optionally an interactive HTML using Plotly.
@@ -49,7 +47,7 @@ def plot_accel_vs_fo(
         first_channel (int): First FO channel in the data array.
         save_interactive (bool): Whether to also save as interactive HTML with Plotly.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "sig_acc_fo")
     ch_index = fo_channel - first_channel
     accel_traces = [trace_x, trace_y, trace_z]
     labels = ["Trace X", "Trace Y", "Trace Z"]
@@ -83,7 +81,7 @@ def plot_accel_vs_fo(
     png_path = os.path.join(save_dir, f"event_{event_id}_accel_vs_fo.png")
     fig.savefig(png_path, format='png')
     plt.close(fig)
-    print(f"Saved PNG to:   {png_path}")
+    # print(f"Saved PNG to:   {png_path}")
 
     # ----------- Interactive HTML (Plotly) -----------
     if save_interactive:
@@ -126,19 +124,17 @@ def plot_accel_vs_fo(
 
         html_path = os.path.join(save_dir, f"event_{event_id}_accel_vs_fo.html")
         pio.write_html(fig_plotly, file=html_path, auto_open=False)
-        print(f"Saved interactive HTML to: {html_path}")
+        # print(f"Saved interactive HTML to: {html_path}")
 
 
-def plot_fo_before_after(
-        save_dir,
-        event_id,
-        timestamps,
-        raw_signal_data,
-        processed_data,
-        fo_channel=1194,
-        first_channel=1189,
-        save_interactive=False
-):
+def plot_sig_fo_raw_and_processed(save_dir,
+                                  event_id,
+                                  timestamps,
+                                  raw_signal_data,
+                                  processed_data,
+                                  fo_channel=1194,
+                                  first_channel=1189,
+                                  save_interactive=False):
     """
     Plot FO signal before and after filtering/conversion to strain for a single channel.
     Saves both a static PNG and (optionally) an interactive HTML using Plotly.
@@ -153,7 +149,7 @@ def plot_fo_before_after(
         first_channel (int): First channel index in the FO data.
         save_interactive (bool): If True, also saves a Plotly HTML version.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "sig_fo_raw and processed")
     ch_index = fo_channel - first_channel
 
     # Get two colors from the viridis colormap
@@ -179,7 +175,7 @@ def plot_fo_before_after(
     png_path = os.path.join(save_dir, f"event_{event_id}_fo_before_after.png")
     fig.savefig(png_path, format="png")
     plt.close(fig)
-    print(f"Saved static FO plot to: {png_path}")
+    # print(f"Saved static FO plot to: {png_path}")
 
     # ----------- Interactive HTML (Plotly) -----------
     if save_interactive:
@@ -222,7 +218,7 @@ def plot_fo_before_after(
         html_path = os.path.join(save_dir, f"event_{event_id}_fo_before_after.html")
         pio.write_html(fig_plotly, file=html_path, auto_open=False)
 
-        print(f"Saved interactive FO plot to: {html_path}")
+        # print(f"Saved interactive FO plot to: {html_path}")
 
 
 def plot_psd_comparison(
@@ -273,7 +269,7 @@ def plot_psd_comparison(
     png_path = os.path.join(save_dir, f"event_{event_id}_psd_comparison.png")
     fig.savefig(png_path, format="png")
     plt.close(fig)
-    print(f"Saved static PSD plot to: {png_path}")
+    # print(f"Saved static PSD plot to: {png_path}")
 
     # ----------- Interactive HTML (Plotly) -----------
     if save_interactive:
@@ -304,10 +300,10 @@ def plot_psd_comparison(
 
         html_path = os.path.join(save_dir, f"event_{event_id}_psd_comparison.html")
         pio.write_html(fig_plotly, file=html_path, auto_open=False)
-        print(f"Saved interactive PSD plot to: {html_path}")
+        # print(f"Saved interactive PSD plot to: {html_path}")
 
 
-def plot_accel_signals_and_psd(
+def plot_sig_psd_acc(
         event_id,
         accel_time,
         trace_x,
@@ -328,7 +324,7 @@ def plot_accel_signals_and_psd(
         save_dir (str): Directory to save the output plot.
         freq_range (tuple): Frequency range to display in PSD plots (e.g., (0, 100)).
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "sig_psd_accel")
     labels = ["X", "Y", "Z"]
     traces = [trace_x, trace_y, trace_z]
 
@@ -357,7 +353,7 @@ def plot_accel_signals_and_psd(
     fig.savefig(os.path.join(save_dir, filename))
     plt.close(fig)
 
-    print(f"Saved accelerometer signal & PSD plot to: {os.path.join(save_dir, filename)}")
+    # print(f"Saved accelerometer signal & PSD plot to: {os.path.join(save_dir, filename)}")
 
 
 import os
@@ -366,22 +362,21 @@ import matplotlib.pyplot as plt
 from src.utils.file_utils import compute_psd
 
 
-def plot_accel_fo_with_psd(
-        event_id,
-        accel_time,
-        trace_x,
-        trace_y,
-        trace_z,
-        fo_time,
-        fo_trace,
-        fo_channel=1194,
-        first_channel=1189,
-        fs_accel=1000,
-        fs_fo=1000,
-        save_dir=".",
-        freq_range=(0, 100),
-        save_interactive=False
-):
+def plot_sig_psd_acc_fo(event_id,
+                        save_dir,
+                        accel_time,
+                        trace_x,
+                        trace_y,
+                        trace_z,
+                        fo_time,
+                        fo_trace,
+                        len_w,
+                        fo_channel=1194,
+                        first_channel=1189,
+                        fs_accel=1000,
+                        fs_fo=1000,
+                        freq_range=(0, 100),
+                        save_interactive=False):
     """
     Plot accelerometer (X, Y, Z) and FO signals with their PSDs in a 4x2 format.
     Optionally saves an interactive Plotly version as HTML.
@@ -397,8 +392,8 @@ def plot_accel_fo_with_psd(
         save_dir (str): Directory to save the output plot.
         freq_range (tuple): Frequency range for PSDs.
         save_interactive (bool): If True, also save an interactive Plotly version.
+        len_w (int): Length of the PSD window.
     """
-    os.makedirs(save_dir, exist_ok=True)
 
     ch_index = fo_channel - first_channel
     fo_trace = fo_trace[:, ch_index]
@@ -408,91 +403,93 @@ def plot_accel_fo_with_psd(
     time_axes = [accel_time] * 3 + [fo_time]
     sample_rates = [fs_accel] * 3 + [fs_fo]
 
-    # ---------- Matplotlib PNG Plot ----------
-    fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(14, 10), sharex='col')
+    original_save_dir = save_dir
+    for window in len_w:
+        save_dir = create_subfolder(original_save_dir, f"sig_psd_accel_fo_{window}")
 
-    for i in range(4):
-        freq, psd = compute_psd(traces[i], fs=sample_rates[i])
-
-        # Time-domain plot (left)
-        axes[i, 0].plot(time_axes[i], traces[i], alpha=0.8)
-        axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)" if labels[i] != "FO" else "FO")
-        axes[i, 0].grid(True)
-
-        # PSD (right)
-        axes[i, 1].plot(freq, psd, alpha=0.8)
-        axes[i, 1].set_ylabel(f"PSD {labels[i]}")
-        axes[i, 1].set_xlim(freq_range)
-        axes[i, 1].grid(True)
-
-    axes[3, 0].set_xlabel("Time [s]")
-    axes[3, 1].set_xlabel("Frequency [Hz]")
-
-    fig.suptitle(f"Accelerometer & FO Signals with PSD - Event {event_id}")
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-    filename = f"event_{event_id}_accel_fo_with_psd.png"
-    fig.savefig(os.path.join(save_dir, filename))
-    plt.close(fig)
-
-    print(f"Saved static accelerometer + FO signal & PSD plot to: {os.path.join(save_dir, filename)}")
-
-    # ---------- Plotly HTML Plot ----------
-    if save_interactive:
-        viridis = cm.get_cmap('viridis')
-        colors = [mcolors.to_hex(viridis(i)) for i in [0.1, 0.3, 0.6, 0.85]]
-
-        fig_plotly = make_subplots(rows=4, cols=2,
-                                   shared_xaxes=True,
-                                   column_widths=[0.5, 0.5],
-                                   horizontal_spacing=0.08,
-                                   subplot_titles=[f"{lbl} Signal" for lbl in labels] + [f"{lbl} PSD" for lbl in
-                                                                                         labels])
+        # ---------- Matplotlib PNG Plot ----------
+        fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(14, 10), sharex='col')
 
         for i in range(4):
-            freq, psd = compute_psd(traces[i], fs=sample_rates[i])
-            fig_plotly.add_trace(go.Scatter(x=time_axes[i], y=traces[i],
-                                            mode='lines',
-                                            name=f"{labels[i]} Signal",
-                                            line=dict(color=colors[i])),
-                                 row=i + 1, col=1)
+            freq, psd = compute_psd(traces[i], fs=sample_rates[i], length_w=window)
 
-            fig_plotly.add_trace(go.Scatter(x=freq, y=psd,
-                                            mode='lines',
-                                            name=f"{labels[i]} PSD",
-                                            line=dict(color=colors[i])),
-                                 row=i + 1, col=2)
+            # Time-domain plot (left)
+            axes[i, 0].plot(time_axes[i], traces[i], alpha=0.8)
+            axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)" if labels[i] != "FO" else "FO")
+            axes[i, 0].grid(True)
 
-        fig_plotly.update_layout(height=1000,
-                                 width=1200,
-                                 title_text=f"Accelerometer & FO Signals with PSD - Event {event_id}",
-                                 showlegend=False,
-                                 margin=dict(l=60, r=40, t=60, b=60))
+            # PSD (right)
+            axes[i, 1].plot(freq, psd, alpha=0.8)
+            axes[i, 1].set_ylabel(f"PSD {labels[i]}")
+            axes[i, 1].set_xlim(freq_range)
+            axes[i, 1].grid(True)
 
-        for i in range(1, 5):
-            fig_plotly.update_yaxes(title_text=labels[i - 1], row=i, col=1, showgrid=True)
-            fig_plotly.update_yaxes(title_text=f"PSD {labels[i - 1]}", row=i, col=2, showgrid=True,
-                                    type="linear")
-            fig_plotly.update_xaxes(title_text="Time", row=i, col=1)
-            fig_plotly.update_xaxes(title_text="Frequency [Hz]", row=i, col=2, range=freq_range)
+        axes[3, 0].set_xlabel("Time [s]")
+        axes[3, 1].set_xlabel("Frequency [Hz]")
 
-        html_path = os.path.join(save_dir, f"event_{event_id}_accel_fo_with_psd.html")
-        fig_plotly.write_html(html_path, auto_open=False)
+        fig.suptitle(f"Accelerometer & FO Signals with PSD - Event {event_id}")
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-        print(f"Saved interactive HTML plot to: {html_path}")
+        filename = f"event_{event_id}_accel_fo_with_psd.png"
+        fig.savefig(os.path.join(save_dir, filename))
+        plt.close(fig)
+
+        # print(f"Saved static accelerometer + FO signal & PSD plot to: {os.path.join(save_dir, filename)}")
+
+        # ---------- Plotly HTML Plot ----------
+        if save_interactive:
+            viridis = cm.get_cmap('viridis')
+            colors = [mcolors.to_hex(viridis(i)) for i in [0.1, 0.3, 0.6, 0.85]]
+
+            fig_plotly = make_subplots(rows=4, cols=2,
+                                       shared_xaxes=True,
+                                       column_widths=[0.5, 0.5],
+                                       horizontal_spacing=0.08,
+                                       subplot_titles=[f"{lbl} Signal" for lbl in labels] + [f"{lbl} PSD" for lbl in
+                                                                                             labels])
+
+            for i in range(4):
+                freq, psd = compute_psd(traces[i], fs=sample_rates[i])
+                fig_plotly.add_trace(go.Scatter(x=time_axes[i], y=traces[i],
+                                                mode='lines',
+                                                name=f"{labels[i]} Signal",
+                                                line=dict(color=colors[i])),
+                                     row=i + 1, col=1)
+
+                fig_plotly.add_trace(go.Scatter(x=freq, y=psd,
+                                                mode='lines',
+                                                name=f"{labels[i]} PSD",
+                                                line=dict(color=colors[i])),
+                                     row=i + 1, col=2)
+
+            fig_plotly.update_layout(height=1000,
+                                     width=1200,
+                                     title_text=f"Accelerometer & FO Signals with PSD - Event {event_id}",
+                                     showlegend=False,
+                                     margin=dict(l=60, r=40, t=60, b=60))
+
+            for i in range(1, 5):
+                fig_plotly.update_yaxes(title_text=labels[i - 1], row=i, col=1, showgrid=True)
+                fig_plotly.update_yaxes(title_text=f"PSD {labels[i - 1]}", row=i, col=2, showgrid=True,
+                                        type="linear")
+                fig_plotly.update_xaxes(title_text="Time", row=i, col=1)
+                fig_plotly.update_xaxes(title_text="Frequency [Hz]", row=i, col=2, range=freq_range)
+
+            html_path = os.path.join(save_dir, f"event_{event_id}_accel_fo_with_psd.html")
+            fig_plotly.write_html(html_path, auto_open=False)
+
+            # print(f"Saved interactive HTML plot to: {html_path}")
 
 
-def plot_accel_filtered_comparison(
-        event_id,
-        time,
-        trace_x,
-        trace_y,
-        trace_z,
-        trace_x_filt,
-        trace_y_filt,
-        trace_z_filt,
-        save_dir=".",
-):
+def plot_sig_acc_raw_and_processed(event_id,
+                                   time,
+                                   trace_x,
+                                   trace_y,
+                                   trace_z,
+                                   trace_x_filt,
+                                   trace_y_filt,
+                                   trace_z_filt,
+                                   save_dir):
     """
     Plot unfiltered vs bandpass-filtered accelerometer signals (X, Y, Z) in 3x2 format.
 
@@ -503,7 +500,7 @@ def plot_accel_filtered_comparison(
         trace_x/y/z_filt (np.array): Filtered accelerometer signals.
         save_dir (str): Directory to save the output plot.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "sig_acc_raw_and_processed")
     labels = ["X", "Y", "Z"]
     traces_raw = [trace_x, trace_y, trace_z]
     traces_filt = [trace_x_filt, trace_y_filt, trace_z_filt]
@@ -530,10 +527,10 @@ def plot_accel_filtered_comparison(
     fig.savefig(os.path.join(save_dir, filename))
     plt.close(fig)
 
-    print(f"Saved filtered comparison plot to: {os.path.join(save_dir, filename)}")
+    # print(f"Saved filtered comparison plot to: {os.path.join(save_dir, filename)}")
 
 
-def plot_signals_with_alignment_overlay(
+def plot_sig_acc_fo_align(
         event_id,
         time_axis,
         trace_x,
@@ -552,7 +549,7 @@ def plot_signals_with_alignment_overlay(
         fo_aligned (np.array): Aligned FO signal.
         save_dir (str): Directory to save the PNG plot.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "sig_acc_fo_align")
 
     # Normalize all signals (zero mean, unit variance)
     def normalize(signal):
@@ -582,14 +579,14 @@ def plot_signals_with_alignment_overlay(
     fig.savefig(os.path.join(save_dir, filename), format="png")
     plt.close(fig)
 
-    print(f"Saved normalized overlay plot to: {os.path.join(save_dir, filename)}")
+    # print(f"Saved normalized overlay plot to: {os.path.join(save_dir, filename)}")
 
 
 import os
 import matplotlib.pyplot as plt
 
 
-def plot_cosine_similarity_boxplot(sim_x, sim_y, sim_z, save_dir=".", filename="cosine_similarity_boxplot.png"):
+def plot_cosine_sim_boxplot(sim_x, sim_y, sim_z, save_dir="."):
     """
     Create and save a boxplot comparing cosine similarity distributions for X/Y/Z axes.
 
@@ -598,7 +595,7 @@ def plot_cosine_similarity_boxplot(sim_x, sim_y, sim_z, save_dir=".", filename="
         save_dir (str): Directory to save the figure.
         filename (str): Filename to save as.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "cosine_sim_boxplot")
     data = [sim_x, sim_y, sim_z]
     labels = ['Accel X', 'Accel Y', 'Accel Z']
 
@@ -609,10 +606,12 @@ def plot_cosine_similarity_boxplot(sim_x, sim_y, sim_z, save_dir=".", filename="
     plt.grid(True, axis='y', linestyle='--', alpha=0.6)
     plt.tight_layout()
 
+    filename = "cosine_similarity_boxplot.png"
+
     plot_path = os.path.join(save_dir, filename)
     plt.savefig(plot_path, dpi=300)
     plt.close()
-    print(f"Saved boxplot to: {plot_path}")
+    # print(f"Saved boxplot to: {plot_path}")
 
 
 import matplotlib.pyplot as plt
@@ -620,15 +619,12 @@ import os
 import numpy as np
 
 
-def save_aggregated_psd_subplot(
-        frequencies,
-        psds_x,
-        psds_y,
-        psds_z,
-        psds_fo,
-        save_dir,
-        filename="aggregated_psd_subplots.png"
-):
+def plot_psd_summary(frequencies,
+                     psds_x,
+                     psds_y,
+                     psds_z,
+                     psds_fo,
+                     save_dir):
     """
     Create subplots (1 per trace) showing mean ± std PSD across all events.
 
@@ -638,7 +634,7 @@ def save_aggregated_psd_subplot(
         save_dir (str): Where to save the figure.
         filename (str): Output image name.
     """
-    os.makedirs(save_dir, exist_ok=True)
+    save_dir = create_subfolder(save_dir, "psd_summary")
 
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
     psd_sets = [psds_x, psds_y, psds_z, psds_fo]
@@ -653,15 +649,18 @@ def save_aggregated_psd_subplot(
         ax.fill_between(frequencies, mean_psd - std_psd, mean_psd + std_psd, alpha=0.3, label="±1 STD")
         ax.set_ylabel("PSD")
         ax.set_title(label)
-        ax.set_yscale('log')
+        # ax.set_yscale('log')
         ax.grid(True)
         ax.legend()
+        ax.set_xlim(0, 100)
 
     axes[-1].set_xlabel("Frequency [Hz]")
     fig.suptitle("PSD Summary Across All Events")
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
+    filename = "aggregated_psd_subplots.png"
+
     output_path = os.path.join(save_dir, filename)
     plt.savefig(output_path, dpi=300)
     plt.close()
-    print(f"Saved subplot PSD summary to: {output_path}")
+    # print(f"Saved subplot PSD summary to: {output_path}")

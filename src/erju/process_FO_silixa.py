@@ -24,7 +24,6 @@ class SilixaFOdata(BaseFOdata):
         # Call the __init__ method of the BaseFindTrains class
         super().__init__(dir_path, first_channel, last_channel)
 
-
     def extract_properties(self):
         """
         Extract the file properties as a dictionary. In this function this is done only
@@ -43,13 +42,13 @@ class SilixaFOdata(BaseFOdata):
         tdms_files = [f for f in os.listdir(self.dir_path) if f.endswith('.tdms')]
         # Get the first file name
         # We choose the first file because all files have the same properties, thus it doesn't matter
-        #TODO: Now it matters, I need to use the initial time of each file...
+        # TODO: Now it matters, I need to use the initial time of each file...
         file_name = tdms_files[0]
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
 
-        #print('Extracting the properties...')
+        # print('Extracting the properties...')
         tdms_instance = TdmsReader(file_path)
         # Get the properties of the TDMS file
         properties = tdms_instance.get_properties()
@@ -79,7 +78,6 @@ class SilixaFOdata(BaseFOdata):
         self.properties = properties
 
         return properties
-
 
     def extract_properties_per_file(self, file_name: str):
         """
@@ -127,7 +125,6 @@ class SilixaFOdata(BaseFOdata):
 
         return self.properties
 
-
     def bandpass(self, data: np.array, freqmin: float, freqmax: float, fs: float, corners: int, zerophase=True):
         """
         Apply a bandpass filter to the data.
@@ -154,7 +151,6 @@ class SilixaFOdata(BaseFOdata):
             return sosfilt(sos, firstpass[::-1])[::-1]
         else:
             return sosfilt(sos, data)
-
 
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
@@ -187,7 +183,7 @@ class SilixaFOdata(BaseFOdata):
 
         # Construct the full file path
         file_path = os.path.join(self.dir_path, file_name)
-        #print('Extracting the data from file:', file_path, 'in extract_data')
+        # print('Extracting the data from file:', file_path, 'in extract_data')
 
         # Create the TDMS instance
         tdms_instance = TdmsReader(file_path)
@@ -198,13 +194,13 @@ class SilixaFOdata(BaseFOdata):
         # Store the data in the class instance
         self.data = data.T
 
-        filtered_data = self.bandpass(data = data,
+        filtered_data = self.bandpass(data=data,
                                       freqmin=1,
                                       freqmax=100,
                                       fs=frequency,
                                       corners=5)
 
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
-        #return data.T
+        # return data.T
 
         return self.data

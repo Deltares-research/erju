@@ -186,7 +186,7 @@ class OptasenseFOdata(BaseFOdata):
             # Filter the data
             for i in range(raw_signal_data.shape[1]):
                 filtered_data[:, i] = self.bandpass(data=raw_signal_data[:, i] * signal_window,
-                                                    freqmin=1,
+                                                    freqmin=10,
                                                     freqmax=100,
                                                     fs=self.properties['SamplingFrequency[Hz]'],
                                                     corners=5)
