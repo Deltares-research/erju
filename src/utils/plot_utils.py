@@ -50,7 +50,7 @@ def plot_sig_acc_fo(save_dir,
     save_dir = create_subfolder(save_dir, "sig_acc_fo")
     ch_index = fo_channel - first_channel
     accel_traces = [trace_x, trace_y, trace_z]
-    labels = ["Trace X", "Trace Y", "Trace Z"]
+    labels = ["Velocity X (mm/s)", "Velocity Y (mm/s)", "Velocity Z (mm/s)"]
 
     # Use viridis colormap
     viridis = cm.get_cmap('viridis')
@@ -72,6 +72,7 @@ def plot_sig_acc_fo(save_dir,
 
         # Right: FO
         axes[i, 1].plot(fo_time, fo_data[:, ch_index], color=fo_color, alpha=0.8)
+        axes[i, 1].set_ylabel("FO strain (ε)")
         axes[i, 1].set_title(f"FO Channel {fo_channel}")
         axes[i, 1].grid(True)
         if i == 2:
@@ -162,12 +163,12 @@ def plot_sig_fo_raw_and_processed(save_dir,
 
     axes[0].plot(timestamps, raw_signal_data[:, ch_index], color=color1, alpha=0.85)
     axes[0].set_title(f"Event {event_id} - FO Channel {fo_channel} (Before Filtering)")
-    axes[0].set_ylabel("Raw Signal")
+    axes[0].set_ylabel("Raw Signal (Optical phase)")
     axes[0].grid(True)
 
     axes[1].plot(timestamps, processed_data[:, ch_index], color=color2, alpha=0.85)
     axes[1].set_title(f"Event {event_id} - FO Channel {fo_channel} (After Filtering + Strain)")
-    axes[1].set_ylabel("Processed Signal")
+    axes[1].set_ylabel("Strain (ε)")
     axes[1].set_xlabel("Time")
     axes[1].grid(True)
 
@@ -248,7 +249,7 @@ def plot_psd_comparison(
     # Use viridis colormap
     viridis = cm.get_cmap('viridis')
     colors = [mcolors.to_hex(viridis(i)) for i in [0.2, 0.4, 0.6, 0.85]]
-    labels = ["Accel X", "Accel Y", "Accel Z", "FO"]
+    labels = ["Velocity X (mm/s)", "Velocity Y (mm/s)", "Velocity Z (mm/s)", "FO strain (ε)"]
 
     # ----------- Static PNG (Matplotlib) -----------
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
@@ -311,7 +312,8 @@ def plot_sig_psd_acc(
         trace_z,
         fs=1000,
         save_dir=".",
-        freq_range=(0, 100)
+        freq_range=(0, 100),
+        fo_for_crop=None,
 ):
     """
     Plot accelerometer signals and their PSDs (X, Y, Z) in 3x2 format.
@@ -332,13 +334,12 @@ def plot_sig_psd_acc(
 
     for i, trace in enumerate(traces):
         # Left: Time signal
-        axes[i, 0].plot(accel_time, trace, alpha=0.8)
-        axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)")
+        axes[i, 0].plot(accel_time, trace.signal[:len(fo_for_crop)], alpha=0.8)
+        axes[i, 0].set_ylabel(f"Velocity {labels[i]} (mm/s)")
         axes[i, 0].grid(True)
 
         # Right: PSD
-        freq, psd = compute_psd(trace, fs=fs)
-        axes[i, 1].plot(freq, psd, alpha=0.8)
+        axes[i, 1].plot(trace.frequency_Pxx, trace.Pxx, alpha=0.8)
         axes[i, 1].set_ylabel(f"PSD {labels[i]}")
         axes[i, 1].set_xlim(freq_range)
         axes[i, 1].grid(True)
@@ -415,7 +416,7 @@ def plot_sig_psd_acc_fo(event_id,
 
             # Time-domain plot (left)
             axes[i, 0].plot(time_axes[i], traces[i], alpha=0.8)
-            axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)" if labels[i] != "FO" else "FO")
+            axes[i, 0].set_ylabel(f"Velocity {labels[i]} (mm/s)" if labels[i] != "FO" else "FO strain (ε)")
             axes[i, 0].grid(True)
 
             # PSD (right)
@@ -509,7 +510,7 @@ def plot_sig_acc_raw_and_processed(event_id,
 
     for i in range(3):
         axes[i, 0].plot(time, traces_raw[i], alpha=0.8)
-        axes[i, 0].set_ylabel(f"{labels[i]} (m/s²)")
+        axes[i, 0].set_ylabel(f"Velocity {labels[i]} (mm/s)")
         axes[i, 0].set_title("Unfiltered")
         axes[i, 0].grid(True)
 
@@ -567,7 +568,7 @@ def plot_sig_acc_fo_align(
     for i in range(3):
         axes[i].plot(time_axis, traces[i], label=f"Accel {labels[i]}", alpha=0.8)
         axes[i].plot(time_axis, fo_norm, label="FO (aligned, norm)", alpha=0.6, linestyle='--')
-        axes[i].set_ylabel(f"{labels[i]} / FO")
+        axes[i].set_ylabel(f"Velocity {labels[i]} / FO")
         axes[i].legend()
         axes[i].grid(True)
 
@@ -597,7 +598,7 @@ def plot_cosine_sim_boxplot(sim_x, sim_y, sim_z, save_dir="."):
     """
     save_dir = create_subfolder(save_dir, "cosine_sim_boxplot")
     data = [sim_x, sim_y, sim_z]
-    labels = ['Accel X', 'Accel Y', 'Accel Z']
+    labels = ['Velocity X (mm/s)', 'Velocity Y (mm/s)', 'Velocity Z (mm/s)']
 
     plt.figure(figsize=(8, 6))
     plt.boxplot(data, labels=labels, notch=True, patch_artist=True)
@@ -638,7 +639,7 @@ def plot_psd_summary(frequencies,
 
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
     psd_sets = [psds_x, psds_y, psds_z, psds_fo]
-    labels = ["Accel X", "Accel Y", "Accel Z", "FO"]
+    labels = ["Velocity X (mm/s)", "Velocity Y (mm/s)", "Velocity Z (mm/s)", "FO strain (ε)"]
 
     for i, (ax, psd_list, label) in enumerate(zip(axes, psd_sets, labels)):
         all_psds = np.vstack(psd_list)

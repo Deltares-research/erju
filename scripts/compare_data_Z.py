@@ -63,6 +63,25 @@ def fetch_accel_data(db_path: str,
     return events, tim, mis
 
 
+def make_empty_trace(reference_trace, length=None):
+    if length is None:
+        length = len(reference_trace.time)
+    signal = np.zeros(length, dtype=float)  # explicitly zeros, no NaNs
+    return TimeSignalProcessing(
+        time=reference_trace.time[:length],
+        signal=signal,
+        Fs=reference_trace.Fs,
+        window=reference_trace.window,
+        window_size=reference_trace.window_size
+    )
+
+
+def ensure_valid_psd(trace):
+    if trace.Pxx is None or trace.frequency_Pxx is None:
+        trace.signal = np.nan_to_num(trace.signal, nan=0.0, posinf=0.0, neginf=0.0)
+        trace.psd()
+
+
 # Function to extract the time series data from the fetched data
 def unpack_timeseries(event: list, data: dict):
     """
@@ -84,16 +103,12 @@ def unpack_timeseries(event: list, data: dict):
     start_time_str = event[2]
     start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
 
-    # Extract time series traces
     relative_time = data["TIME"]
-    trace_x = data["TRACE_X"]
-    trace_y = data["TRACE_Y"]
-    trace_z = data["TRACE_Z"]
+    trace_x = data.get("TRACE_X", None)
+    trace_y = data.get("TRACE_Y", None)
+    trace_z = data["TRACE_Z"]  # This must be present
 
-    # Convert to absolute timestamps
     absolute_time = [start_time + timedelta(seconds=t) for t in relative_time]
-
-    # Define time window
     time_window = [absolute_time[0], absolute_time[-1]]
 
     return absolute_time, trace_x, trace_y, trace_z, time_window
@@ -129,15 +144,15 @@ if __name__ == "__main__":
     start_date = '2024-09-08 00:00:00'
     end_date = '2024-09-09 00:00:00'
     # Parameters for querying the database
-    locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
-    # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
+    # locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
+    locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
     # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
     traintype = "SPR(A)"  # ICM
     track = "1"
     # fo channels
     first_channel = 1187
-    center_channel = 1194
+    center_channel = 1192
     last_channel = 1197
 
     window_size = 512  # Size of the window for the PSD calculation
@@ -202,14 +217,22 @@ if __name__ == "__main__":
         # The frequency of the accelerometer data is 1000 Hz.
         freq_accel = estimate_sampling_frequency(absolute_time)
 
-        trace_x = TimeSignalProcessing(absolute_time, trace_x_raw, Fs=freq_accel, window=Windows.HAMMING,
-                                       window_size=window_size)
-        trace_y = TimeSignalProcessing(absolute_time, trace_y_raw, Fs=freq_accel, window=Windows.HAMMING,
-                                       window_size=window_size)
+        if trace_x_raw is not None:
+            trace_x = TimeSignalProcessing(absolute_time, trace_x_raw, Fs=freq_accel, window=Windows.HAMMING,
+                                           window_size=window_size)
+            trace_x.filter([1, 100], 4, type_filter="bandpass")
+        else:
+            trace_x = None
+
+        if trace_y_raw is not None:
+            trace_y = TimeSignalProcessing(absolute_time, trace_y_raw, Fs=freq_accel, window=Windows.HAMMING,
+                                           window_size=window_size)
+            trace_y.filter([1, 100], 4, type_filter="bandpass")
+        else:
+            trace_y = None
+
         trace_z = TimeSignalProcessing(absolute_time, trace_z_raw, Fs=freq_accel, window=Windows.HAMMING,
                                        window_size=window_size)
-        trace_x.filter([1, 100], 4, type_filter="bandpass")
-        trace_y.filter([1, 100], 4, type_filter="bandpass")
         trace_z.filter([1, 100], 4, type_filter="bandpass")
 
         # # Bandpass filter
@@ -277,8 +300,9 @@ if __name__ == "__main__":
         # fx, psd_x = compute_psd(trace_x, fs=1000)
         # fy, psd_y = compute_psd(trace_y, fs=1000)
         # fz, psd_z = compute_psd(trace_z, fs=1000)
-        trace_x.psd()
-        trace_y.psd()
+
+        # trace_x.psd()
+        # trace_y.psd()
         trace_z.psd()
         fibre_optics = TimeSignalProcessing(timestamps, fo_data[:, center_channel - first_channel],
                                             Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
@@ -289,8 +313,14 @@ if __name__ == "__main__":
         fo_trace = fo_data[:, ch_index]
         aligned_fo, lag = align_signals(trace_x.signal, fo_trace)
 
-        scores_x = compute_cosine_similarity_windows(trace_x.signal[:len(aligned_fo)], aligned_fo)
-        scores_y = compute_cosine_similarity_windows(trace_y.signal[:len(aligned_fo)], aligned_fo)
+        if trace_x:
+            scores_x = compute_cosine_similarity_windows(trace_x.signal[:len(aligned_fo)], aligned_fo)
+            similarity_scores_x.append(scores_x)
+            psd_x_all.append(trace_x.Pxx)
+        if trace_y:
+            scores_y = compute_cosine_similarity_windows(trace_y.signal[:len(aligned_fo)], aligned_fo)
+            similarity_scores_y.append(scores_y)
+            psd_y_all.append(trace_y.Pxx)
         scores_z = compute_cosine_similarity_windows(trace_z.signal[:len(aligned_fo)], aligned_fo)
 
         similarity_scores_x.append(scores_x)
@@ -316,6 +346,9 @@ if __name__ == "__main__":
         counter += 1
 
         # Plotting the results ########################################################
+
+        ensure_valid_psd(trace_x)
+        ensure_valid_psd(trace_y)
 
         # Plot the accelerometer vs FO data
         if PLOT_CONFIG["sig_acc_fo"]:
