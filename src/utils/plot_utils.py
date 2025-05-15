@@ -538,7 +538,7 @@ def plot_sig_acc_fo_align(
         trace_y,
         trace_z,
         fo_aligned,
-        save_dir=r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\new_analysis\check_data_align"
+        save_dir
 ):
     """
     Plot normalized aligned FO signal overlaid on the 3 accelerometer traces.
@@ -628,13 +628,17 @@ def plot_psd_summary(frequencies,
                      save_dir):
     """
     Create subplots (1 per trace) showing mean ± std PSD across all events.
+    Plots blank axes with 'No data' for missing inputs.
 
     Args:
         frequencies (np.array): Frequency bins (same for all).
-        psds_x/y/z/fo (list of np.array): PSDs from each event.
+        psds_x/y/z/fo (list of np.array or None): PSDs from each event.
         save_dir (str): Where to save the figure.
-        filename (str): Output image name.
     """
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+
     save_dir = create_subfolder(save_dir, "psd_summary")
 
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
@@ -642,17 +646,31 @@ def plot_psd_summary(frequencies,
     labels = ["Velocity X (mm/s)", "Velocity Y (mm/s)", "Velocity Z (mm/s)", "FO strain (ε)"]
 
     for i, (ax, psd_list, label) in enumerate(zip(axes, psd_sets, labels)):
-        all_psds = np.vstack(psd_list)
-        mean_psd = np.mean(all_psds, axis=0)
-        std_psd = np.std(all_psds, axis=0)
+        # Filter out None entries if any
+        if psd_list is None:
+            psd_list = []
+        psd_list = [p for p in psd_list if p is not None]
 
-        ax.plot(frequencies, mean_psd, label="Mean PSD")
-        ax.fill_between(frequencies, mean_psd - std_psd, mean_psd + std_psd, alpha=0.3, label="±1 STD")
+        if len(psd_list) > 0:
+            try:
+                all_psds = np.vstack(psd_list)
+                mean_psd = np.mean(all_psds, axis=0)
+                std_psd = np.std(all_psds, axis=0)
+
+                ax.plot(frequencies, mean_psd, label="Mean PSD")
+                ax.fill_between(frequencies, mean_psd - std_psd, mean_psd + std_psd,
+                                alpha=0.3, label="±1 STD")
+                ax.legend()
+            except Exception as e:
+                ax.text(0.5, 0.5, f"Error plotting\n{str(e)}", transform=ax.transAxes,
+                        ha='center', va='center', fontsize=10, color='red')
+        else:
+            ax.text(0.5, 0.5, 'No data', transform=ax.transAxes,
+                    ha='center', va='center', fontsize=12, color='gray')
+
         ax.set_ylabel("PSD")
         ax.set_title(label)
-        # ax.set_yscale('log')
         ax.grid(True)
-        ax.legend()
         ax.set_xlim(0, 100)
 
     axes[-1].set_xlabel("Frequency [Hz]")
@@ -660,8 +678,6 @@ def plot_psd_summary(frequencies,
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     filename = "aggregated_psd_subplots.png"
-
     output_path = os.path.join(save_dir, filename)
     plt.savefig(output_path, dpi=300)
     plt.close()
-    # print(f"Saved subplot PSD summary to: {output_path}")

@@ -212,15 +212,9 @@ if __name__ == "__main__":
         trace_y.filter([1, 100], 4, type_filter="bandpass")
         trace_z.filter([1, 100], 4, type_filter="bandpass")
 
-        # # Bandpass filter
-        # trace_x_filt = bandpass(trace_x, 1, 100, 1000, 4)
-        # trace_y_filt = bandpass(trace_y, 1, 100, 1000, 4)
-        # trace_z_filt = bandpass(trace_z, 1, 100, 1000, 4)
-
         # 2 Lets look at the FO data ##########################################
 
         # Lets create an instance of the BaseFOdata class
-
         fo = BaseFOdata.create_instance(dir_path=path_fo,
                                         first_channel=first_channel,
                                         last_channel=last_channel,
@@ -274,16 +268,12 @@ if __name__ == "__main__":
         super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
         # Compute PSDs
-        # fx, psd_x = compute_psd(trace_x, fs=1000)
-        # fy, psd_y = compute_psd(trace_y, fs=1000)
-        # fz, psd_z = compute_psd(trace_z, fs=1000)
         trace_x.psd()
         trace_y.psd()
         trace_z.psd()
         fibre_optics = TimeSignalProcessing(timestamps, fo_data[:, center_channel - first_channel],
                                             Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
         fibre_optics.psd()
-        # ff, psd_fo = compute_psd(fo_data[:, center_channel - first_channel], fs=sampling_frequency)
 
         ch_index = center_channel - first_channel
         fo_trace = fo_data[:, ch_index]
@@ -296,13 +286,6 @@ if __name__ == "__main__":
         similarity_scores_x.append(scores_x)
         similarity_scores_y.append(scores_y)
         similarity_scores_z.append(scores_z)
-
-        # Compute PSDs with fixed frequency bins (shared across events)
-        #
-        # fx, psd_x = compute_psd_fixed(trace_x_filt, fs=1000)
-        # fy, psd_y = compute_psd_fixed(trace_y_filt, fs=1000)
-        # fz, psd_z = compute_psd_fixed(trace_z_filt, fs=1000)
-        # ff, psd_fo = compute_psd_fixed(aligned_fo, fs=sampling_frequency)
 
         # Save frequencies once
         if freqs_shared is None:
@@ -392,7 +375,8 @@ if __name__ == "__main__":
                                   trace_x.signal[:len(aligned_fo)],
                                   trace_y.signal[:len(aligned_fo)],
                                   trace_z.signal[:len(aligned_fo)],
-                                  aligned_fo)
+                                  aligned_fo,
+                                  save_dir=results_folder, )
 
     # PLOT THE COSINE SIMILARITY BOXPLOT
     if PLOT_CONFIG["cosine_boxplot"]:
