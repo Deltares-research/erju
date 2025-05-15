@@ -5,6 +5,8 @@ import time
 from datetime import datetime, timedelta
 from DatabaseUtils import get_commands
 
+from SignalProcessingTools.time_signal import TimeSignalProcessing, IntegrationRules, Windows
+
 from src.erju.process_FO_base import BaseFOdata
 from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass, align_signals, \
     compute_cosine_similarity_windows, compute_psd_fixed, create_results_folder
@@ -129,7 +131,7 @@ if __name__ == "__main__":
     # Parameters for querying the database
     locations = ['Meetjournal_MP8_Holten_zuid_4m_C']
     campaigns = None
-    traintype = "SPR(A)"
+    traintype = "SPR(A)"  # ICM
     track = "1"
     # fo channels
     first_channel = 1189
@@ -141,7 +143,7 @@ if __name__ == "__main__":
         "sig_fo_raw_and_processed": True,
         "sig_psd_acc": True,
         "sig_psd_acc_fo": True,
-        "sig_acc_raw_and_processed": True,
+        "sig_acc_raw_and_processed": False,
         "sig_acc_fo_align": True,
         "cosine_boxplot": True,
         "psd_summary": True,
@@ -196,10 +198,21 @@ if __name__ == "__main__":
         # The frequency of the accelerometer data is 1000 Hz.
         freq_accel = estimate_sampling_frequency(absolute_time)
 
-        # Bandpass filter
-        trace_x_filt = bandpass(trace_x, 1, 100, 1000, 4)
-        trace_y_filt = bandpass(trace_y, 1, 100, 1000, 4)
-        trace_z_filt = bandpass(trace_z, 1, 100, 1000, 4)
+        window_size = 256
+        trace_x = TimeSignalProcessing(absolute_time, trace_x, Fs=freq_accel, window=Windows.HAMMING,
+                                       window_size=window_size)
+        trace_y = TimeSignalProcessing(absolute_time, trace_y, Fs=freq_accel, window=Windows.HAMMING,
+                                       window_size=window_size)
+        trace_z = TimeSignalProcessing(absolute_time, trace_z, Fs=freq_accel, window=Windows.HAMMING,
+                                       window_size=window_size)
+        trace_x.filter([1, 100], 4, type_filter="bandpass")
+        trace_y.filter([1, 100], 4, type_filter="bandpass")
+        trace_z.filter([1, 100], 4, type_filter="bandpass")
+
+        # # Bandpass filter
+        # trace_x_filt = bandpass(trace_x, 1, 100, 1000, 4)
+        # trace_y_filt = bandpass(trace_y, 1, 100, 1000, 4)
+        # trace_z_filt = bandpass(trace_z, 1, 100, 1000, 4)
 
         # 2 Lets look at the FO data ##########################################
 
@@ -258,37 +271,44 @@ if __name__ == "__main__":
         super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
         # Compute PSDs
-        fx, psd_x = compute_psd(trace_x, fs=1000)
-        fy, psd_y = compute_psd(trace_y, fs=1000)
-        fz, psd_z = compute_psd(trace_z, fs=1000)
-        ff, psd_fo = compute_psd(fo_data[:, center_channel - first_channel], fs=sampling_frequency)
+        # fx, psd_x = compute_psd(trace_x, fs=1000)
+        # fy, psd_y = compute_psd(trace_y, fs=1000)
+        # fz, psd_z = compute_psd(trace_z, fs=1000)
+        trace_x.psd()
+        trace_y.psd()
+        trace_z.psd()
+        fibre_optics = TimeSignalProcessing(timestamps, fo_data[:, center_channel - first_channel],
+                                            Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
+        fibre_optics.psd()
+        # ff, psd_fo = compute_psd(fo_data[:, center_channel - first_channel], fs=sampling_frequency)
 
         ch_index = center_channel - first_channel
         fo_trace = fo_data[:, ch_index]
-        aligned_fo, lag = align_signals(trace_x, fo_trace)
+        aligned_fo, lag = align_signals(trace_x.signal, fo_trace)
 
-        scores_x = compute_cosine_similarity_windows(trace_x, aligned_fo)
-        scores_y = compute_cosine_similarity_windows(trace_y, aligned_fo)
-        scores_z = compute_cosine_similarity_windows(trace_z, aligned_fo)
+        scores_x = compute_cosine_similarity_windows(trace_x.signal[:len(aligned_fo)], aligned_fo)
+        scores_y = compute_cosine_similarity_windows(trace_y.signal[:len(aligned_fo)], aligned_fo)
+        scores_z = compute_cosine_similarity_windows(trace_z.signal[:len(aligned_fo)], aligned_fo)
 
         similarity_scores_x.append(scores_x)
         similarity_scores_y.append(scores_y)
         similarity_scores_z.append(scores_z)
 
         # Compute PSDs with fixed frequency bins (shared across events)
-        fx, psd_x = compute_psd_fixed(trace_x_filt, fs=1000)
-        fy, psd_y = compute_psd_fixed(trace_y_filt, fs=1000)
-        fz, psd_z = compute_psd_fixed(trace_z_filt, fs=1000)
-        ff, psd_fo = compute_psd_fixed(aligned_fo, fs=sampling_frequency)
+        #
+        # fx, psd_x = compute_psd_fixed(trace_x_filt, fs=1000)
+        # fy, psd_y = compute_psd_fixed(trace_y_filt, fs=1000)
+        # fz, psd_z = compute_psd_fixed(trace_z_filt, fs=1000)
+        # ff, psd_fo = compute_psd_fixed(aligned_fo, fs=sampling_frequency)
 
         # Save frequencies once
         if freqs_shared is None:
-            freqs_shared = fx
+            freqs_shared = trace_x.frequency_Pxx
 
-        psd_x_all.append(psd_x)
-        psd_y_all.append(psd_y)
-        psd_z_all.append(psd_z)
-        psd_fo_all.append(psd_fo)
+        psd_x_all.append(trace_x.Pxx)
+        psd_y_all.append(trace_y.Pxx)
+        psd_z_all.append(trace_z.Pxx)
+        psd_fo_all.append(fibre_optics.Pxx)
 
         counter += 1
 
@@ -299,9 +319,9 @@ if __name__ == "__main__":
             plot_sig_acc_fo(save_dir=results_folder,
                             event_id=event_id,
                             accel_time=absolute_time,
-                            trace_x=trace_x,
-                            trace_y=trace_y,
-                            trace_z=trace_z,
+                            trace_x=trace_x.signal[:len(aligned_fo)],
+                            trace_y=trace_y.signal[:len(aligned_fo)],
+                            trace_z=trace_z.signal[:len(aligned_fo)],
                             fo_time=timestamps,
                             fo_data=fo_data,
                             fo_channel=1194,
@@ -324,9 +344,9 @@ if __name__ == "__main__":
         if PLOT_CONFIG["sig_psd_acc"]:
             plot_sig_psd_acc(event_id,
                              absolute_time,
-                             trace_x,
-                             trace_y,
-                             trace_z,
+                             trace_x.signal[:len(aligned_fo)],
+                             trace_y.signal[:len(aligned_fo)],
+                             trace_z.signal[:len(aligned_fo)],
                              fs=1000,
                              save_dir=results_folder,
                              freq_range=(0, 100))
@@ -336,9 +356,9 @@ if __name__ == "__main__":
             plot_sig_psd_acc_fo(event_id=event_id,
                                 save_dir=results_folder,
                                 accel_time=absolute_time,
-                                trace_x=trace_x,
-                                trace_y=trace_y,
-                                trace_z=trace_z,
+                                trace_x=trace_x.signal[:len(aligned_fo)],
+                                trace_y=trace_y.signal[:len(aligned_fo)],
+                                trace_z=trace_z.signal[:len(aligned_fo)],
                                 fo_time=timestamps,
                                 fo_trace=fo_data,
                                 len_w=[128, 256, 512],
@@ -356,7 +376,7 @@ if __name__ == "__main__":
                                            trace_x=trace_x,
                                            trace_y=trace_y,
                                            trace_z=trace_z,
-                                           trace_x_filt=trace_x_filt,
+                                           trace_x_filt=trace_x_filt,  # With Brunos new clas I dont save the raw data
                                            trace_y_filt=trace_y_filt,
                                            trace_z_filt=trace_z_filt,
                                            save_dir=results_folder)
@@ -365,9 +385,9 @@ if __name__ == "__main__":
         if PLOT_CONFIG["sig_acc_fo_align"]:
             plot_sig_acc_fo_align(event_id,
                                   timestamps,
-                                  trace_x,
-                                  trace_y,
-                                  trace_z,
+                                  trace_x.signal[:len(aligned_fo)],
+                                  trace_y.signal[:len(aligned_fo)],
+                                  trace_z.signal[:len(aligned_fo)],
                                   aligned_fo)
 
     # PLOT THE COSINE SIMILARITY BOXPLOT

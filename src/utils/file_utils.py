@@ -532,6 +532,9 @@ def create_results_folder(base_path, start_date, end_date, traintype, center_cha
     full_path = os.path.join(base_path, folder_name)
     os.makedirs(full_path, exist_ok=True)
 
+    # Print the path for debugging
+    print(f"Results folder created at: {full_path}")
+
     return full_path
 
 
