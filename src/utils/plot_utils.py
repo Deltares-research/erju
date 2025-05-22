@@ -16,7 +16,9 @@ import matplotlib.colors as mcolors
 import plotly.graph_objs as go
 import plotly.io as pio
 
-from src.utils.file_utils import compute_psd, create_results_folder, create_subfolder
+from src.utils.file_utils import compute_psd, create_results_folder, create_subfolder, timewindow
+
+from SignalProcessingTools.time_signal import FilterDesign
 
 
 def plot_sig_acc_fo(save_dir,
@@ -27,8 +29,8 @@ def plot_sig_acc_fo(save_dir,
                     trace_z,
                     fo_time,
                     fo_data,
-                    fo_channel=1194,
-                    first_channel=1189,
+                    fo_channel,
+                    first_channel,
                     save_interactive=False):
     """
     Create a 3x2 plot comparing accelerometer data with FO data for a given event.
@@ -133,8 +135,8 @@ def plot_sig_fo_raw_and_processed(save_dir,
                                   timestamps,
                                   raw_signal_data,
                                   processed_data,
-                                  fo_channel=1194,
-                                  first_channel=1189,
+                                  fo_channel,
+                                  first_channel,
                                   save_interactive=False):
     """
     Plot FO signal before and after filtering/conversion to strain for a single channel.
@@ -372,8 +374,8 @@ def plot_sig_psd_acc_fo(event_id,
                         fo_time,
                         fo_trace,
                         len_w,
-                        fo_channel=1194,
-                        first_channel=1189,
+                        fo_channel,
+                        first_channel,
                         fs_accel=1000,
                         fs_fo=1000,
                         freq_range=(0, 100),
@@ -567,7 +569,7 @@ def plot_sig_acc_fo_align(
 
     for i in range(3):
         axes[i].plot(time_axis, traces[i], label=f"Accel {labels[i]}", alpha=0.8)
-        axes[i].plot(time_axis, fo_norm, label="FO (aligned, norm)", alpha=0.6, linestyle='--')
+        axes[i].plot(time_axis, fo_norm, label="FO (aligned, norm)", alpha=0.6)
         axes[i].set_ylabel(f"Velocity {labels[i]} / FO")
         axes[i].legend()
         axes[i].grid(True)
@@ -681,3 +683,219 @@ def plot_psd_summary(frequencies,
     output_path = os.path.join(save_dir, filename)
     plt.savefig(output_path, dpi=300)
     plt.close()
+
+
+def plot_fo_window_and_psd_grid(
+        event_id: str,
+        timestamps: list,
+        super_raw_data: np.ndarray,
+        sampling_frequency: int,
+        center_channel: int,
+        first_channel: int,
+        last_channel: int,
+        window_size: int,
+        save_dir: str,
+        step: int = 5,
+        freq_range: tuple = (0, 100)
+):
+    """
+    Plot FO time signal and PSD using TimeSignalProcessing for every Nth channel from center.
+
+    Args:
+        event_id (str): Event ID for filename.
+        timestamps (list of datetime): Time axis.
+        super_raw_data (np.ndarray): Raw FO data, shape (T, C).
+        sampling_frequency (int): Sampling frequency of FO.
+        center_channel (int): Physical center channel number.
+        first_channel (int): First physical channel number.
+        last_channel (int): Last physical channel number.
+        window_size (int): Window size for PSD.
+        save_dir (str): Folder to save figure.
+        step (int): Step size between channels (default 5).
+        freq_range (tuple): Frequency axis limits for PSD.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import os
+    from SignalProcessingTools.time_signal import TimeSignalProcessing, Windows
+
+    save_dir = create_subfolder(save_dir, f"fo_grid_signal_psd_{step}m")
+
+    total_channels = last_channel - first_channel + 1
+    center_idx = center_channel - first_channel
+
+    # Select symmetrical channels around center every `step`
+    offsets = []
+    i = 0
+    while True:
+        up = center_idx + i * step
+        down = center_idx - i * step
+        if up < total_channels:
+            offsets.append(up)
+        if down >= 0 and down != up:
+            offsets.append(down)
+        i += 1
+        if len(offsets) >= 10:
+            break
+
+    offsets = sorted(offsets)
+    n_rows = len(offsets)
+
+    fig, axes = plt.subplots(nrows=n_rows, ncols=2, figsize=(12, 2.5 * n_rows), sharex=False)
+    if n_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row_idx, ch_idx in enumerate(offsets):
+        ch_number = ch_idx + first_channel
+        raw_signal = super_raw_data[:, ch_idx]
+
+        # Create TimeSignalProcessing object and compute PSD
+        signal = TimeSignalProcessing(
+            time=timestamps,
+            signal=raw_signal,
+            Fs=sampling_frequency,
+            window=Windows.HAMMING,
+            window_size=window_size
+        )
+
+        signal.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+
+        from scipy.signal import iirfilter, zpk2sos, sosfilt, windows
+
+        # timewindowtukey = windows.tukey(M=signal.signal.shape[0], alpha=0.25)
+        timewindowtukey = windows.tukey(M=len(signal.signal), alpha=0.5)
+
+        # plot the tukey for a quick visualization but clear it or close it after each to avoind messing with the other plots
+        # plt.figure()
+        # plt.plot(timewindowtukey)
+        # plt.title(f"Tukey Window for Channel {ch_number}")
+        # plt.show()
+        # plt.close()
+
+        signal.signal = signal.signal * timewindowtukey
+
+        signal.psd()
+
+        # crop the signal to the same length as the timestamps
+        if len(signal.signal) > len(timestamps):
+            signal.signal = signal.signal[:len(timestamps)]
+        elif len(signal.signal) < len(timestamps):
+            signal.signal = np.pad(signal.signal, (0, len(timestamps) - len(signal.signal)), 'edge')
+
+        # Determine color: red for center channel, blue for others
+        color_sig = "tab:red" if ch_number == center_channel else "tab:blue"
+        color_psd = "tab:red" if ch_number == center_channel else "tab:blue"
+
+        # Left: signal in time
+        ax_sig = axes[row_idx, 0]
+        ax_sig.plot(timestamps, signal.signal, color=color_sig, lw=0.8)
+        ax_sig.set_title(f"FO Signal - Channel {ch_number}")
+        ax_sig.set_ylabel("Strain (ε)")
+        ax_sig.grid(True)
+
+        # Right: PSD
+        ax_psd = axes[row_idx, 1]
+        ax_psd.plot(signal.frequency_Pxx, signal.Pxx, color=color_psd, lw=0.8)
+        ax_psd.set_xlim(*freq_range)
+        ax_psd.set_title(f"PSD - Channel {ch_number}")
+        ax_psd.set_ylabel("Power")
+        ax_psd.grid(True)
+
+    axes[-1, 0].set_xlabel("Time")
+    axes[-1, 1].set_xlabel("Frequency (Hz)")
+    fig.suptitle(f"FO Signals and PSDs around Center Channel {center_channel} — Event {event_id}")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    filename = f"event_{event_id}_fo_signal_psd_grid.png"
+    fig.savefig(os.path.join(save_dir, filename), dpi=300)
+    plt.close(fig)
+
+
+def plot_sig_fft_acc_fo(event_id,
+                        save_dir,
+                        trace_x,
+                        trace_y,
+                        trace_z,
+                        accel_time,
+                        fo_trace,
+                        fo_time,
+                        fo_channel,
+                        first_channel,
+                        fs_accel=1000,
+                        fs_fo=1000,
+                        freq_range=(0, 100),
+                        fo_for_crop=None,
+                        ):
+    """
+    Plot accelerometer (X, Y, Z) and FO signals with their PSDs in a 4x2 format.
+    Optionally saves an interactive Plotly version as HTML.
+
+    Args:
+        event_id (str/int): Identifier for the event (used in filename).
+        accel_time (list of datetime): Time axis for the accelerometer.
+        trace_x/y/z (np.array): Accelerometer signals.
+        fo_time (list of datetime): Time axis for the FO signal.
+        fo_trace (np.array): FO signal array (2D: time x channels).
+        fs_accel (int): Accelerometer sampling frequency.
+        fs_fo (int): FO sampling frequency.
+        save_dir (str): Directory to save the output plot.
+        freq_range (tuple): Frequency range for PSDs.
+        save_interactive (bool): If True, also save an interactive Plotly version.
+        len_w (int): Length of the PSD window.
+    """
+    trace_x.reset()
+    trace_y.reset()
+    trace_z.reset()
+    fo_trace.reset()
+    trace_x.filter([1, 100], 4, type_filter="bandpass")
+    trace_y.filter([1, 100], 4, type_filter="bandpass")
+    trace_z.filter([1, 100], 4, type_filter="bandpass")
+    fo_trace.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+    trace_x.fft(half_representation=True)
+    trace_y.fft(half_representation=True)
+    trace_z.fft(half_representation=True)
+    fo_trace.fft(half_representation=True)
+
+    fft_x = trace_x.amplitude
+    fft_y = trace_y.amplitude
+    fft_z = trace_z.amplitude
+    fft_fo = fo_trace.amplitude
+    freq = trace_x.frequency
+
+    ch_index = fo_channel - first_channel
+
+    traces = [trace_x.signal[:len(fo_for_crop)], trace_y.signal[:len(fo_for_crop)], trace_z.signal[:len(fo_for_crop)],
+              fo_trace.signal]
+    fft_list = [fft_x, fft_y, fft_z, fft_fo]
+
+    labels = ["X", "Y", "Z", "FO"]
+    time_axes = [accel_time] * 3 + [fo_time]
+
+    original_save_dir = save_dir
+
+    save_dir = create_subfolder(original_save_dir, f"sig_fft_accel_fo")
+
+    # ---------- Matplotlib PNG Plot ----------
+    fig, axes = plt.subplots(nrows=4, ncols=2, figsize=(14, 10), sharex='col')
+
+    for i in range(4):
+        # Time-domain plot (left)
+        axes[i, 0].plot(time_axes[i], traces[i], alpha=0.8)
+        axes[i, 0].set_ylabel(f"Velocity {labels[i]} (mm/s)" if labels[i] != "FO" else "FO strain (ε)")
+        axes[i, 0].grid(True)
+
+        # FFT (right)
+        axes[i, 1].plot(freq, fft_list[i], alpha=0.8)
+        axes[i, 1].set_ylabel(f"FFT {labels[i]}")
+        axes[i, 1].set_xlim(freq_range)
+        axes[i, 1].grid(True)
+
+    axes[3, 0].set_xlabel("Time [s]")
+    axes[3, 1].set_xlabel("Frequency [Hz]")
+
+    fig.suptitle(f"Accelerometer & FO Signals with PSD - Event {event_id}")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    filename = f"event_{event_id}_accel_fo_with_psd.png"
+    fig.savefig(os.path.join(save_dir, filename))
+    plt.close(fig)

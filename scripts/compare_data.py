@@ -12,7 +12,10 @@ from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass,
     compute_cosine_similarity_windows, compute_psd_fixed, create_results_folder
 from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed, \
     plot_sig_psd_acc, plot_sig_psd_acc_fo, plot_sig_acc_raw_and_processed, \
-    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary
+    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_window_and_psd_grid, plot_sig_fft_acc_fo, \
+    plot_sig_fft_acc_fo
+
+from SignalProcessingTools.time_signal import FilterDesign
 
 
 # Function to fetch the data from the database based on some given conditions
@@ -136,17 +139,18 @@ if __name__ == "__main__":
     traintype = "SPR(A)"  # ICM
     track = "1"
     # fo channels
-    first_channel = 1187
+    first_channel = 800
     center_channel = 1194
-    last_channel = 1197
+    last_channel = 1400
 
-    window_size = 512  # Size of the window for the PSD calculation
+    window_size = 1024  # Size of the window for the PSD calculation
 
     PLOT_CONFIG = {
         "sig_acc_fo": True,
         "sig_fo_raw_and_processed": True,
         "sig_psd_acc": True,
         "sig_psd_acc_fo": True,
+        "sig_fft_acc_fo": True,
         "sig_acc_raw_and_processed": False,
         "sig_acc_fo_align": True,
         "cosine_boxplot": True,
@@ -244,7 +248,7 @@ if __name__ == "__main__":
             # In the original code, the data is transposed, so we will un-transpose it
             # Append the data to the list
             fo_data.append(processed_data.T)
-            super_raw_data.append(raw_signal_data)
+            super_raw_data.append(raw_signal_data.T)
 
         # Concatenate FO data from multiple files
         fo_data = np.concatenate(fo_data, axis=0)
@@ -267,12 +271,28 @@ if __name__ == "__main__":
         fo_data = fo_data[start_index:end_index + 1, :]
         super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
+        plot_fo_window_and_psd_grid(
+            event_id=event_id,
+            timestamps=timestamps,
+            super_raw_data=super_raw_data,
+            sampling_frequency=sampling_frequency,
+            center_channel=center_channel,
+            first_channel=first_channel,
+            last_channel=last_channel,
+            window_size=window_size,
+            save_dir=results_folder,
+            step=50
+        )
+
+        fibre_optics = TimeSignalProcessing(timestamps, super_raw_data[:, center_channel - first_channel],
+                                            Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
+
+        fibre_optics.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+
         # Compute PSDs
         trace_x.psd()
         trace_y.psd()
         trace_z.psd()
-        fibre_optics = TimeSignalProcessing(timestamps, fo_data[:, center_channel - first_channel],
-                                            Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
         fibre_optics.psd()
 
         ch_index = center_channel - first_channel
@@ -296,6 +316,23 @@ if __name__ == "__main__":
         psd_z_all.append(trace_z.Pxx)
         psd_fo_all.append(fibre_optics.Pxx)
 
+        # trace_x.reset()
+        # trace_y.reset()
+        # trace_z.reset()
+        # fibre_optics.reset()
+        # trace_x.fft(half_representation=True)
+        # trace_y.fft(half_representation=True)
+        # trace_z.fft(half_representation=True)
+        # fibre_optics.fft(half_representation=True)
+        # fft_x = trace_x.amplitude
+        # fft_y = trace_y.amplitude
+        # fft_z = trace_z.amplitude
+        # fft_fo = fibre_optics.amplitude
+        # freq = trace_x.frequency
+
+        traces = [trace_x.signal[:len(aligned_fo)], trace_y.signal[:len(aligned_fo)], trace_z.signal[:len(aligned_fo)],
+                  fibre_optics.signal]
+
         counter += 1
 
         # Plotting the results ########################################################
@@ -310,7 +347,7 @@ if __name__ == "__main__":
                             trace_z=trace_z.signal[:len(aligned_fo)],
                             fo_time=timestamps,
                             fo_data=fo_data,
-                            fo_channel=1194,
+                            fo_channel=center_channel,
                             first_channel=first_channel,
                             save_interactive=False)
 
@@ -322,7 +359,7 @@ if __name__ == "__main__":
                 timestamps=timestamps,
                 raw_signal_data=super_raw_data,
                 processed_data=fo_data,
-                fo_channel=1194,
+                fo_channel=center_channel,
                 first_channel=first_channel,
                 save_interactive=False)
 
@@ -349,12 +386,25 @@ if __name__ == "__main__":
                                 fo_time=timestamps,
                                 fo_trace=fo_data,
                                 len_w=[128, 256, 512, 1024],
-                                fo_channel=1194,
+                                fo_channel=center_channel,
                                 first_channel=first_channel,
                                 fs_accel=1000,
                                 fs_fo=sampling_frequency,
                                 freq_range=(0, 100),
                                 save_interactive=False)
+
+        if PLOT_CONFIG["sig_fft_acc_fo"]:
+            plot_sig_fft_acc_fo(event_id=event_id,
+                                save_dir=results_folder,
+                                trace_x=trace_x,
+                                trace_y=trace_y,
+                                trace_z=trace_z,
+                                accel_time=absolute_time,
+                                fo_trace=fibre_optics,
+                                fo_time=timestamps,
+                                fo_channel=center_channel,
+                                first_channel=first_channel,
+                                fo_for_crop=aligned_fo)
 
         # Plot the filtered accelerometer data and the raw accelerometer dat
         if PLOT_CONFIG["sig_acc_raw_and_processed"]:

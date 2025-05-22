@@ -191,11 +191,13 @@ class OptasenseFOdata(BaseFOdata):
                                                     fs=self.properties['SamplingFrequency[Hz]'],
                                                     corners=5)
 
-        # Convert the raw data to strain
-        data = self.from_opticalphase_to_strain(filtered_data)
+        # Convert data to strain
+        data_filtered_to_strain = self.from_opticalphase_to_strain(filtered_data)
+        data_raw_to_strain = self.from_opticalphase_to_strain(raw_signal_data)
 
         # Store the data in the class instance and transpose it to make it fit the other code
-        self.data = data.T
+        self.data = data_filtered_to_strain.T
+        raw_signal_data = data_raw_to_strain.T
 
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
         return self.data, raw_signal_data

@@ -145,15 +145,15 @@ if __name__ == "__main__":
     end_date = '2024-09-09 00:00:00'
     # Parameters for querying the database
     # locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
-    locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
-    # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
+    # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
+    locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
     traintype = "SPR(A)"  # ICM
     track = "1"
     # fo channels
-    first_channel = 1187
-    center_channel = 1192
-    last_channel = 1197
+    first_channel = 1196
+    center_channel = 1196
+    last_channel = 1196
 
     window_size = 512  # Size of the window for the PSD calculation
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
                             trace_z=trace_z.signal[:len(aligned_fo)],
                             fo_time=timestamps,
                             fo_data=fo_data,
-                            fo_channel=1194,
+                            fo_channel=center_channel,
                             first_channel=first_channel,
                             save_interactive=False)
 
@@ -372,7 +372,7 @@ if __name__ == "__main__":
                 timestamps=timestamps,
                 raw_signal_data=super_raw_data,
                 processed_data=fo_data,
-                fo_channel=1194,
+                fo_channel=center_channel,
                 first_channel=first_channel,
                 save_interactive=False)
 
@@ -399,7 +399,7 @@ if __name__ == "__main__":
                                 fo_time=timestamps,
                                 fo_trace=fo_data,
                                 len_w=[128, 256, 512, 1024],
-                                fo_channel=1194,
+                                fo_channel=center_channel,
                                 first_channel=first_channel,
                                 fs_accel=1000,
                                 fs_fo=sampling_frequency,
@@ -425,7 +425,8 @@ if __name__ == "__main__":
                                   trace_x.signal[:len(aligned_fo)],
                                   trace_y.signal[:len(aligned_fo)],
                                   trace_z.signal[:len(aligned_fo)],
-                                  aligned_fo)
+                                  aligned_fo,
+                                  save_dir=results_folder, )
 
     # PLOT THE COSINE SIMILARITY BOXPLOT
     if PLOT_CONFIG["cosine_boxplot"]:

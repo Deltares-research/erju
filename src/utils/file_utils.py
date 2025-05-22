@@ -526,7 +526,7 @@ def create_results_folder(base_path, start_date, end_date, traintype, center_cha
         traintype_clean = traintype.replace("(", "").replace(")", "").replace(" ", "")
 
     # Compose folder name
-    folder_name = f"results_{start_str}_{end_str}_{traintype_clean}_{center_channel}_{track}"
+    folder_name = f"res-{start_str}_{end_str}-{traintype_clean}-ch_{center_channel}-dir_{track}"
 
     # Full path
     full_path = os.path.join(base_path, folder_name)
@@ -553,3 +553,66 @@ def create_subfolder(parent_folder, subfolder_name):
     os.makedirs(subfolder_path, exist_ok=True)
 
     return subfolder_path
+
+
+def timewindow(t, Tf1, Tf2=-1):
+    """
+    This function creates a time window for tapering a time function.
+    By: Paul Holscher
+
+    Args:
+        t (np.ndarray): Time array, in increasing order.
+        Tf1 (float): Duration of the tapering at start.
+        Tf2 (float, optional): Duration of the tapering at end. If not given, Tf1 is used.
+
+    Returns:
+        wt (np.ndarray): Tapering array with the length of the time array.
+    """
+    # packages
+    from numpy import ones, cos, floor, ceil, pi
+
+    # check the input
+    # Nt is the length of the signal
+    Nt = len(t)
+
+    # Tmax is the duration of the signal
+    Tmax = t[-1] - t[0]
+
+    # dt is the time step in the array
+    dt = Tmax / (len(t) - 1)
+
+    # be sure that the time array starts at zero
+    th = t - t[0]
+
+    # set the end tapering if not given
+    if Tf2 < 0:
+        Tf2 = Tf1
+
+    # set tapering sizes
+    N2 = int(ceil((Tmax - Tf2) / dt))
+    N1 = int(floor(Tf1 / dt))
+
+    # check the values
+    if N1 <= 1:
+        print("timewindow: start tapering to short")
+        exit
+    if N2 + 1 >= Nt:
+        print("timewindow: end tapering to short")
+        exit
+
+    # check realistic tapering length
+    if Tf1 + Tf2 > 0.8 * Tmax:
+        print("timewindow: duration of tapering above 80%")
+        if Tf1 + Tf2 > Tmax:
+            print("timewindow: duration of tapering above 100%")
+            exit
+
+    # generate the tapering array
+    wt = ones(len(t))
+    # adjust the start part
+    wt[0:N1] = 0.5 * (1.0 - cos(pi * th[0:N1] / Tf1))
+    # adjust the end part
+    wt[N2:Nt] = 0.5 * (1.0 - cos(pi * (Tmax - th[N2:Nt]) / Tf2))
+    # end
+
+    return wt
