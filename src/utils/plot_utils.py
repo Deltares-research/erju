@@ -893,7 +893,7 @@ def plot_sig_fft_acc_fo(event_id,
     axes[3, 0].set_xlabel("Time [s]")
     axes[3, 1].set_xlabel("Frequency [Hz]")
 
-    fig.suptitle(f"Accelerometer & FO Signals with PSD - Event {event_id}")
+    fig.suptitle(f"Accelerometer & FO Signals with FFT - Event {event_id}")
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     filename = f"event_{event_id}_accel_fo_with_psd.png"

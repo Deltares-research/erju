@@ -129,14 +129,14 @@ if __name__ == "__main__":
     path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten"
 
     # Time range for extracting events
-    start_date = '2024-09-08 00:00:00'
-    end_date = '2024-09-09 00:00:00'
+    start_date = '2024-09-07 00:00:00'
+    end_date = '2024-09-08 00:00:00'
     # Parameters for querying the database
     locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
     # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
     # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
-    traintype = "SPR(A)"  # ICM
+    traintype = "ICM"  # ICM
     track = "1"
     # fo channels
     first_channel = 800
@@ -205,6 +205,7 @@ if __name__ == "__main__":
 
         # The frequency of the accelerometer data is 1000 Hz.
         freq_accel = estimate_sampling_frequency(absolute_time)
+        print(f"Estimated sampling frequency: {freq_accel} Hz")
 
         trace_x = TimeSignalProcessing(absolute_time, trace_x_raw, Fs=freq_accel, window=Windows.HAMMING,
                                        window_size=window_size)
@@ -316,6 +317,36 @@ if __name__ == "__main__":
         psd_z_all.append(trace_z.Pxx)
         psd_fo_all.append(fibre_optics.Pxx)
 
+        # === SAVE TIME SERIES AND PSD TO CSV ===
+        import pandas as pd
+        import os
+
+        if counter == 1:  # only on first loop, create folder
+            csv_folder = os.path.join(results_folder, "csv_exports")
+            os.makedirs(csv_folder, exist_ok=True)
+
+        # Save synchronized time series
+        min_len = len(aligned_fo)
+        df_time_series = pd.DataFrame({
+            "acc_time": absolute_time[:min_len],
+            "acc_x": trace_x.signal[:min_len],
+            "acc_y": trace_y.signal[:min_len],
+            "acc_z": trace_z.signal[:min_len],
+            "fo_time": timestamps[:min_len],
+            "fo_signal": fibre_optics.signal[:min_len],
+        })
+        df_time_series.to_csv(os.path.join(csv_folder, f"time_series_event_{event_id}.csv"), index=False)
+
+        # Save PSDs for this event
+        df_psd = pd.DataFrame({
+            "freq": freqs_shared,
+            "psd_x": trace_x.Pxx,
+            "psd_y": trace_y.Pxx,
+            "psd_z": trace_z.Pxx,
+            "psd_fo": fibre_optics.Pxx,
+        })
+        df_psd.to_csv(os.path.join(csv_folder, f"psd_event_{event_id}.csv"), index=False)
+
         # trace_x.reset()
         # trace_y.reset()
         # trace_z.reset()
@@ -349,7 +380,7 @@ if __name__ == "__main__":
                             fo_data=fo_data,
                             fo_channel=center_channel,
                             first_channel=first_channel,
-                            save_interactive=False)
+                            save_interactive=True)
 
         # Plot FO data before and after filtering
         if PLOT_CONFIG["sig_fo_raw_and_processed"]:
@@ -361,7 +392,7 @@ if __name__ == "__main__":
                 processed_data=fo_data,
                 fo_channel=center_channel,
                 first_channel=first_channel,
-                save_interactive=False)
+                save_interactive=True)
 
         # Accelerometer data and PSD's
         if PLOT_CONFIG["sig_psd_acc"]:
@@ -391,7 +422,7 @@ if __name__ == "__main__":
                                 fs_accel=1000,
                                 fs_fo=sampling_frequency,
                                 freq_range=(0, 100),
-                                save_interactive=False)
+                                save_interactive=True)
 
         if PLOT_CONFIG["sig_fft_acc_fo"]:
             plot_sig_fft_acc_fo(event_id=event_id,
