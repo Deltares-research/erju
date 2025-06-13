@@ -12,14 +12,17 @@ from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt, iirfilter, sosfilt, zpk2sos
 
-
 # from src.erju.extract_signals import center_channel
 
 
 # Old script to get the files in a directory
+import os
+
+
 def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = True):
     """
-    Get a list of unique file names inside the given folder path that match the given file format.
+    Get a list of unique file names inside the given folder path that match the given file format,
+    excluding hidden/system files (e.g., files starting with a dot).
 
     Args:
         folder_path (str): The path to the folder containing the files.
@@ -35,10 +38,12 @@ def get_files_in_dir(folder_path: str, file_format: str, keep_extension: bool = 
     if not file_format.startswith('.'):
         raise ValueError("The file format should start with a dot (e.g., '.txt').")
 
-    # Get the list of files in the folder with the specified extension
-    file_list = [f for f in os.listdir(folder_path) if f.endswith(file_format)]
+    # Filter files: correct extension and not starting with '.'
+    file_list = [
+        f for f in os.listdir(folder_path)
+        if f.endswith(file_format) and not f.startswith('.')
+    ]
 
-    # Remove the file extension if keep_extension is False
     if not keep_extension:
         file_list = [os.path.splitext(f)[0] for f in file_list]
 
@@ -314,6 +319,12 @@ def from_window_get_fo_file(fo_data_path: str, time_window: list):
 
     # Get a list of all the .h5 file names in the folder (assumed sorted alphabetically, which also sorts them timewise)
     file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.h5')
+
+    file_timestamps = [pd.Timestamp(ts) for ts in extract_timestamp_from_name(file_names)]
+
+    # Zip and sort by timestamp
+    file_info = sorted(zip(file_timestamps, file_names), key=lambda x: x[0])
+    fo_timestamps, file_names = zip(*file_info)  # unpack sorted lists
 
     # Extract timestamps from the file names.
     # This function should return a list of timestamps in a format that can be converted to pd.Timestamp.

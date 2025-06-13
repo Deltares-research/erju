@@ -125,18 +125,18 @@ def estimate_sampling_frequency(time_vector):
 if __name__ == "__main__":
     # Define the paths
     path_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
-    path_fo = r'E:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels'
-    path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten"
+    path_fo = r"E:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+    path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
 
     # Time range for extracting events
-    start_date = '2024-09-07 00:00:00'
-    end_date = '2024-09-08 00:00:00'
+    start_date = '2024-08-26 13:30:00'
+    end_date = '2024-08-27 13:30:00'
     # Parameters for querying the database
     locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
     # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
     # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
-    traintype = "ICM"  # ICM
+    traintype = None  # ICM
     track = "1"
     # fo channels
     first_channel = 800
@@ -145,6 +145,7 @@ if __name__ == "__main__":
 
     window_size = 1024  # Size of the window for the PSD calculation
 
+    interactive_plots = False  # Set to True if you want to save interactive plots
     PLOT_CONFIG = {
         "sig_acc_fo": True,
         "sig_fo_raw_and_processed": True,
@@ -380,7 +381,7 @@ if __name__ == "__main__":
                             fo_data=fo_data,
                             fo_channel=center_channel,
                             first_channel=first_channel,
-                            save_interactive=True)
+                            save_interactive=interactive_plots)
 
         # Plot FO data before and after filtering
         if PLOT_CONFIG["sig_fo_raw_and_processed"]:
@@ -392,7 +393,7 @@ if __name__ == "__main__":
                 processed_data=fo_data,
                 fo_channel=center_channel,
                 first_channel=first_channel,
-                save_interactive=True)
+                save_interactive=interactive_plots)
 
         # Accelerometer data and PSD's
         if PLOT_CONFIG["sig_psd_acc"]:
@@ -422,7 +423,7 @@ if __name__ == "__main__":
                                 fs_accel=1000,
                                 fs_fo=sampling_frequency,
                                 freq_range=(0, 100),
-                                save_interactive=True)
+                                save_interactive=interactive_plots)
 
         if PLOT_CONFIG["sig_fft_acc_fo"]:
             plot_sig_fft_acc_fo(event_id=event_id,
