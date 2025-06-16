@@ -129,14 +129,18 @@ if __name__ == "__main__":
     path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
 
     # Time range for extracting events
-    start_date = '2024-08-26 13:30:00'
-    end_date = '2024-08-27 13:30:00'
+    start_date = '2024-08-27 13:45:00'
+    end_date = '2024-08-27 14:00:00'
+
+    # start_date = '2024-08-27 15:00:00'
+    # end_date = '2024-08-27 15:30:00'
+
     # Parameters for querying the database
     locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
     # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
     # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
-    traintype = None  # ICM
+    traintype = "ICM"  # ICM
     track = "1"
     # fo channels
     first_channel = 800
@@ -145,7 +149,7 @@ if __name__ == "__main__":
 
     window_size = 1024  # Size of the window for the PSD calculation
 
-    interactive_plots = False  # Set to True if you want to save interactive plots
+    interactive_plots = True  # Set to True if you want to save interactive plots
     PLOT_CONFIG = {
         "sig_acc_fo": True,
         "sig_fo_raw_and_processed": True,
@@ -292,10 +296,10 @@ if __name__ == "__main__":
         fibre_optics.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
 
         # Compute PSDs
-        trace_x.psd()
-        trace_y.psd()
-        trace_z.psd()
-        fibre_optics.psd()
+        trace_x.psd(nb_points=10000)
+        trace_y.psd(nb_points=10000)
+        trace_z.psd(nb_points=10000)
+        fibre_optics.psd(nb_points=10000)
 
         ch_index = center_channel - first_channel
         fo_trace = fo_data[:, ch_index]
@@ -366,6 +370,23 @@ if __name__ == "__main__":
                   fibre_optics.signal]
 
         counter += 1
+
+        # Save the processed data to a file
+        import pickle
+
+        with open(os.path.join(results_folder, f"processed_data_event_{event_id}.pickle"), 'wb') as fo:
+            pickle.dump({
+                "PSD_x": [p.tolist() for p in psd_x_all],
+                "PSD_y": [p.tolist() for p in psd_y_all],
+                "PSD_z": [p.tolist() for p in psd_z_all],
+                "PSD_fo": [p.tolist() for p in psd_fo_all],
+                "trace_x": [trace_x.signal[:len(aligned_fo)].tolist()],
+                "trace_y": [trace_y.signal[:len(aligned_fo)].tolist()],
+                "trace_z": [trace_z.signal[:len(aligned_fo)].tolist()],
+                "trace_fo": [p.tolist() for p in fibre_optics.signal[:min_len]],
+                "freq": [p.tolist() for p in fibre_optics.frequency_Pxx],
+                "time": timestamps,
+            }, fo)
 
         # Plotting the results ########################################################
 

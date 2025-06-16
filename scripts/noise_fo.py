@@ -10,7 +10,7 @@ from src.erju.process_FO_base import BaseFOdata
 from src.utils.file_utils import get_files_in_dir
 
 # === Parameters ===
-path_fo = r"E:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+path_fo = r"E:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
 save_path = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\noise"
 os.makedirs(save_path, exist_ok=True)
 
