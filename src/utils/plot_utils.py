@@ -685,7 +685,7 @@ def plot_psd_summary(frequencies,
     plt.close()
 
 
-def plot_fo_window_and_psd_grid(
+def plot_fo_psd_ch_compare(
         event_id: str,
         timestamps: list,
         super_raw_data: np.ndarray,

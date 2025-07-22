@@ -52,7 +52,7 @@ def main():
 
     # Save to GeoPackage
     interpolated_rdnew.to_file(output_gpkg, layer=output_layer, driver="GPKG")
-    print(f"✅ Saved interpolated points with spacing {channel_spacing} m to:")
+    print(f"Saved interpolated points with spacing {channel_spacing} m to:")
     print(f"   {output_gpkg} (layer: {output_layer})")
 
 

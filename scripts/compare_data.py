@@ -12,7 +12,7 @@ from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass,
     compute_cosine_similarity_windows, compute_psd_fixed, create_results_folder
 from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed, \
     plot_sig_psd_acc, plot_sig_psd_acc_fo, plot_sig_acc_raw_and_processed, \
-    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_window_and_psd_grid, plot_sig_fft_acc_fo, \
+    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_psd_ch_compare, plot_sig_fft_acc_fo, \
     plot_sig_fft_acc_fo
 
 from SignalProcessingTools.time_signal import FilterDesign
@@ -229,6 +229,7 @@ if __name__ == "__main__":
                                         first_channel=first_channel,
                                         last_channel=last_channel,
                                         reader='optasense')
+
         # For each event, find the files in the time window
         fo_files_in_event = from_window_get_fo_file(path_fo, time_window)
 
@@ -277,7 +278,7 @@ if __name__ == "__main__":
         fo_data = fo_data[start_index:end_index + 1, :]
         super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
-        plot_fo_window_and_psd_grid(
+        plot_fo_psd_ch_compare(
             event_id=event_id,
             timestamps=timestamps,
             super_raw_data=super_raw_data,

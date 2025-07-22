@@ -1,3 +1,9 @@
+"""
+Old script to compute the accelerometer data from the STEM database, use each event time to
+extract from the FO a piece of signal from a given channel, and then compute the PSD of both signals.
+Later plot them. There appear to be something wrong with the FO data. The working script is in "compare_data.py"
+"""
+
 import os
 import h5py
 import numpy as np
@@ -33,11 +39,6 @@ channel_range = 5
 start_channel = max(0, center_channel - channel_range)  # Ensure start channel is not negative
 end_channel = center_channel + channel_range
 relative_center_channel = channel_range * 2 // 2  # Calculate the center in the new channel selection
-
-# Bandpass filter parameters
-freq_min = 0.1  # Minimum frequency for bandpass filter
-freq_max = 100  # Maximum frequency for bandpass filter
-filter_order = 4  # Filter order
 
 # PSD computation parameters
 length_w = 128  # Window length for PSD computation
@@ -103,23 +104,28 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
                 # Extract metadata from the first FO file
                 if fo_file == fo_files_in_event[0]:
                     raw_data_time = file['Acquisition']['Raw[0]']['RawDataTime']
-                    file_start_time = datetime.fromtimestamp(raw_data_time[0] * 1e-6, UTC)  # ✅ FIXED
+                    file_start_time = datetime.fromtimestamp(raw_data_time[0] * 1e-6, UTC)
                     sampling_frequency = calculate_sampling_frequency(file)
 
         # Concatenate FO data
-        raw_data = np.concatenate(fo_data, axis=0)
+        fo_data = np.concatenate(fo_data, axis=0)
 
         # Compute timestamps for FO data
-        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(raw_data.shape[0])]
-        timestamps_unix = np.array([t.timestamp() for t in timestamps])
+        timestamps = [file_start_time + timedelta(seconds=i / sampling_frequency) for i in range(fo_data.shape[0])]
 
-        raw_data = raw_data.astype(np.float64)
-        # **Fix FO Scaling**: Normalize before resampling
-        raw_data[:, relative_center_channel] -= np.mean(raw_data[:, relative_center_channel])
-        raw_data[:, relative_center_channel] /= np.std(raw_data[:, relative_center_channel])
+        # Convert timestamps to NumPy datetime64 for indexing
+        timestamps_array = np.array(timestamps, dtype='datetime64[ns]')
 
-        # Resample FO data
-        fo_resampled = np.interp(absolute_time_unix, timestamps_unix, raw_data[:, relative_center_channel])
+        # Find closest start and end indices within the FO timestamps
+        start_time_np = np.datetime64(time_window[0])
+        end_time_np = np.datetime64(time_window[1])
+        start_index = np.argmin(np.abs(timestamps_array - start_time_np))
+        end_index = np.argmin(np.abs(timestamps_array - end_time_np))
+
+        # Crop FO data to the time window
+        timestamps = timestamps[start_index:end_index + 1]
+        fo_data = fo_data[start_index:end_index + 1, :]
+        # super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
     # ---------------------- PLOT AND SAVE RAW SIGNALS WITH PSD ----------------------
 
@@ -131,8 +137,8 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
         ax2 = ax1.twinx()  # Dual Y-axis for FO data
         ax1.plot(absolute_time, trace, label=f"Accelerometer {label}", color='b', alpha=0.7)
 
-        if fo_resampled is not None:
-            ax2.plot(absolute_time, fo_resampled, label="FO Data", color='r', alpha=0.7)
+        if fo_data is not None:
+            ax2.plot(absolute_time, fo_data, label="FO Data", color='r', alpha=0.7)
 
         ax1.set_ylabel(f"{label}")
         ax1.legend(loc="upper left")
@@ -147,8 +153,8 @@ for event_index, (event, (inner_key, data)) in enumerate(zip(events, list(tim.va
         freq, psd_trace = compute_psd(trace, fs=1000, length_w=length_w)
         ax3.semilogx(freq, psd_trace, label=f"Accel {label} PSD", color='b', alpha=0.7)
 
-        if fo_resampled is not None:
-            freq, psd_fo = compute_psd(fo_resampled, fs=sampling_frequency, length_w=length_w)
+        if fo_data is not None:
+            freq, psd_fo = compute_psd(fo_data, fs=sampling_frequency, length_w=length_w)
             ax4.semilogx(freq, psd_fo, label="FO PSD", color='r', alpha=0.7)
 
         ax3.set_ylabel(f"PSD {label}")

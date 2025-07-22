@@ -12,7 +12,7 @@ from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass,
     compute_cosine_similarity_windows, compute_psd_fixed, create_results_folder
 from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed, \
     plot_sig_psd_acc, plot_sig_psd_acc_fo, plot_sig_acc_raw_and_processed, \
-    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_window_and_psd_grid
+    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_psd_ch_compare
 
 from src.utils.db_utils import fetch_accel_data, unpack_timeseries, estimate_sampling_frequency
 
