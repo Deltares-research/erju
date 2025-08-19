@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 from obspy.signal.trigger import recursive_sta_lta, trigger_onset
 
 
-
-
 class AccelDataTimeWindows():
     """
     This class creates the windows of time in which a train passing by is detected.
@@ -96,7 +94,6 @@ class AccelDataTimeWindows():
 
         return accel_data
 
-
     def extract_settings(self, file_name: str) -> dict:
         """
         From the settings file (.set) with the same file names,
@@ -139,10 +136,9 @@ class AccelDataTimeWindows():
 
         # Store the settings for this file in the settings dictionary
         self.settings["set_" + file_name] = file_settings
-        #print(f"Settings for {file_name} stored successfully")
+        # print(f"Settings for {file_name} stored successfully")
 
         return self.settings
-
 
     def create_windows_indices_and_times_threshold(self, accel_data: pd.DataFrame):
         """
@@ -194,7 +190,6 @@ class AccelDataTimeWindows():
 
         return windows_indices, windows_times
 
-
     def detect_accel_events_sta_lta(self, accel_data: pd.DataFrame, nsta: int, nlta: int,
                                     trigger_on: float, trigger_off: float):
         """
@@ -240,13 +235,11 @@ class AccelDataTimeWindows():
             windows_indices.append((start_index, end_index))
             windows_times.append((start_time, end_time))
 
-
-        #print(f"Windows indices: {windows_indices}")
-        #print(f"Windows times: {windows_times}")
-        #print(f"Number of windows with sta/lta: {len(windows_indices)}")
+        # print(f"Windows indices: {windows_indices}")
+        # print(f"Windows times: {windows_times}")
+        # print(f"Number of windows with sta/lta: {len(windows_indices)}")
 
         return windows_indices, windows_times
-
 
     def plot_accel_signal_and_windows(self, accel_data: pd.DataFrame, windows_indices: list, nsta: int = None,
                                       nlta: int = None, trigger_on: float = None, trigger_off: float = None):
@@ -305,7 +298,6 @@ class AccelDataTimeWindows():
 
         plt.tight_layout()
         plt.show()
-
 
     def filter_windows_with_logbook(self, window_indices: list, window_times: list, time_buffer: int = 5):
         """
@@ -375,10 +367,10 @@ class AccelDataTimeWindows():
                     matched = True
                     break
 
-            #if matched:
-                #print(f"Match: YES --> {total_windows_processed}/{len(window_indices)}")
-            #else:
-                #print(f"Match: NO --> {total_windows_processed}/{len(window_indices)}")
+            # if matched:
+            # print(f"Match: YES --> {total_windows_processed}/{len(window_indices)}")
+            # else:
+            # print(f"Match: NO --> {total_windows_processed}/{len(window_indices)}")
 
         # Check for repeated times in the used logbook times list
         used_logbook_dict = {}
@@ -398,7 +390,7 @@ class AccelDataTimeWindows():
                 closest_window = min(windows, key=lambda x: abs((x[1][0] - logbook_time).total_seconds()))
                 final_filtered_windows_indices.append(closest_window[0])
                 final_filtered_windows_times.append(closest_window[1])
-                #print(f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
+                # print(f"Logbook time {logbook_time} is repeated, keeping window {closest_window[1]} and removing others.")
 
         # Print the number of windows after filtering
         print(f"Number of windows before filtering: {len(window_indices)}")

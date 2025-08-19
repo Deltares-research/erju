@@ -142,11 +142,9 @@ class CreateDatabase:
 
         return self.database
 
-
     #############################################################################################################
     # The previous 3 functions look like I dont use anymore. Keep them there in case I do need them later.
     # From here on out, I will use the following functions to create the database.
-
 
     def extract_accel_windows(self, file_name: str, nsta: int = 1, nlta: int = 8):
         """
@@ -193,7 +191,6 @@ class CreateDatabase:
 
         return accel_windows_indices, accel_windows_times, accel_data_per_file
 
-
     def find_matching_fo_files(self, accel_windows_times: list, buffer_seconds: int = 35, file_time_coverage: int = 30):
         """
         Finds the FO files that match the given time windows. We give the accelerometer time windows a buffer to
@@ -238,7 +235,7 @@ class CreateDatabase:
                 # Get the start and end times of the fo files
                 file_times = [(extract_timestamp_from_name([file])[0],
                                extract_timestamp_from_name([file])[0] + timedelta(seconds=file_time_coverage))
-                               for file in sorted_files]
+                              for file in sorted_files]
 
                 # Determine the coverage
                 coverage_start = file_times[0][0]
@@ -256,8 +253,7 @@ class CreateDatabase:
 
         return fo_file_names_per_window
 
-
-    def extract_and_join_fo_data(self, fo_file_names:str, channel_no: int = 4270):
+    def extract_and_join_fo_data(self, fo_file_names: str, channel_no: int = 4270):
         """
         This function uses the BaseFindTrains class to extract the data from the FO files.
         It uses the get_data_per_file method to extract the data from each file and store it in a
@@ -272,7 +268,7 @@ class CreateDatabase:
         """
         # The FO data path is already defined in the CreateDatabase class instance
         # Get the list of file names in the FO data path
-        #file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
+        # file_names = get_files_in_dir(folder_path=self.fo_data_path, file_format='.tdms')
         file_names = fo_file_names
 
         # Create an instance of the BaseFindTrains class to extract the data
@@ -293,7 +289,7 @@ class CreateDatabase:
 
         # Loop through the files and extract the data
         for file in file_names:
-            #print(f'Processing file: {file}')
+            # print(f'Processing file: {file}')
 
             # Extract the data from the file
             signal_data_dict = file_instance.get_data_per_file([file])
@@ -324,7 +320,6 @@ class CreateDatabase:
 
         return data_df
 
-
     def create_pickle_database(self, channel_no: int = 4270, save_path: str = None):
         """
         This function takes as input the channel number of interest, and creates a pickle database from the
@@ -347,7 +342,8 @@ class CreateDatabase:
             print(f"Processing file: {accel_file} ....................................................................")
 
             # Get accelerometer time windows and indices for a specific file
-            accel_window_indices, accel_window_times, accel_data_per_file = self.extract_accel_windows(file_name=accel_file)
+            accel_window_indices, accel_window_times, accel_data_per_file = self.extract_accel_windows(
+                file_name=accel_file)
             # Find the matching FO file names for each time window
             fo_file_names_per_window = self.find_matching_fo_files(accel_window_times)
 
@@ -356,7 +352,7 @@ class CreateDatabase:
             for i, accel_window in enumerate(accel_window_times):
                 # Check if fo_file_names_per_window is empty
                 if not fo_file_names_per_window[i]:
-                    print(f"No FO data available for window {i+1}/{len(accel_window_times)}")
+                    print(f"No FO data available for window {i + 1}/{len(accel_window_times)}")
                     continue
 
                 # Join the selected list of FO files into a single signal dataframe
@@ -373,8 +369,7 @@ class CreateDatabase:
 
                 # Trim the accelerometer data to match exactly the FO signal data
                 accel_data_in_window = accel_data_per_file[(accel_data_per_file['T(ms)'] >= start_time) &
-                                                              (accel_data_per_file['T(ms)'] <= end_time)].copy()
-
+                                                           (accel_data_per_file['T(ms)'] <= end_time)].copy()
 
                 # Create a dictionary with the data to save in the pickle file
                 data_dict = {
@@ -399,8 +394,7 @@ class CreateDatabase:
                     pickle.dump(data_dict, file)
 
                 # Print the file name that was saved
-                print(f"Saved pickle file: {pickle_file_name}, for window {i+1}/{len(accel_window_times)}")
-
+                print(f"Saved pickle file: {pickle_file_name}, for window {i + 1}/{len(accel_window_times)}")
 
     def create_netcdf_file(self, output_folder, data_dict):
         """
@@ -426,7 +420,6 @@ class CreateDatabase:
             # Create the variables with compression (zlib)
             timeseries_var = dataset.createVariable('signal', np.float32, ('time',), zlib=True, complevel=9)
 
-
             # Assign data to variables
             timeseries_var[:] = data_dict['fo_data']
 
@@ -438,7 +431,6 @@ class CreateDatabase:
             dataset.frequency = data_dict['frequency']
 
         print(f"Compressed NetCDF file created: {netcdf_file_path}")
-
 
     def extract_all_events(self, selected_channel: int = 4270, threshold: int = 500):
         """
@@ -470,18 +462,20 @@ class CreateDatabase:
         properties = file_instance.extract_properties()
 
         # For a given channel, get the average signal to later find the files above the threshold
-        signal_mean = file_instance.signal_averaging(channel=selected_channel,
+        signal_mean = file_instance.signal_averaging(file_type='.tdms',
+                                                     channel=selected_channel,
                                                      threshold=threshold,
                                                      plot=True,
                                                      save_to_path=self.output_path)
 
         # Find the file names above the threshold
-        files_with_trains = file_instance.get_files_above_threshold(signal=signal_mean, threshold=threshold)
+        files_with_trains = file_instance.get_files_above_threshold(file_type='.tdms', signal=signal_mean,
+                                                                    threshold=threshold)
         print('Selected files: ', files_with_trains)
 
         # Save the name of the files with trains in a txt
         file_instance.save_txt_with_file_names(save_to_path=self.output_path, selected_files=files_with_trains,
-                                                   file_names=file_names, include_indexes=True)
+                                               file_names=file_names, include_indexes=True)
 
         # 2. Extract the data from the selected files ##################################################################
         # Go file by file and extract the data. Join the data from the file before and after the selected file.
@@ -497,15 +491,16 @@ class CreateDatabase:
             file_after = file_names[index + 1]
             # Join the data from the selected file with the data from the file before and after
             extended_signal = self.extract_and_join_fo_data(fo_file_names=[file_before, file, file_after],
-                                                     channel_no=selected_channel)
+                                                            channel_no=selected_channel)
 
             # Find the events with sta/lta method from the extended signal data
-            window_indices, window_times, stalta_ratio = file_instance.detect_FO_events_sta_lta(FO_signal=extended_signal,
-                                                                                  window_buffer=10,
-                                                                                  nsta=0.5,
-                                                                                  nlta=20,
-                                                                                  trigger_on=5,
-                                                                                  trigger_off=0.5)
+            window_indices, window_times, stalta_ratio = file_instance.detect_FO_events_sta_lta(
+                FO_signal=extended_signal,
+                window_buffer=10,
+                nsta=0.5,
+                nlta=20,
+                trigger_on=5,
+                trigger_off=0.5)
 
             # Plot the signal and STA/LTA ratio with detected events using the STA/LTA method
             plot_signals_and_stalta(signal=extended_signal,
@@ -541,32 +536,29 @@ class CreateDatabase:
                 # Sanitize the start_time to create a valid file name
                 safe_start_time = start_time.strftime('%Y%m%d_%H%M%S%f')  # Format to safe filename
 
-                # 5. Save the fo_data_in_window as a pickle file ########################################################
-                # Save the fo_data_in_window as a pickle file
-                # 5. Save the fo_data_in_window as a compressed pickle fil ########################################################
-                # Save the fo_data_in_window as a compressed pickle file
-                pickle_file_name = f'{safe_start_time}.pkl.gz'  # Use .pkl.gz for the compressed file
-                with gzip.open(os.path.join(self.output_path, pickle_file_name), 'wb') as f:
-                    pickle.dump(data_dict, f)
+                # # 5. Save the fo_data_in_window as a pickle file ########################################################
+                # # Save the fo_data_in_window as a pickle file
+                # # 5. Save the fo_data_in_window as a compressed pickle fil ########################################################
+                # # Save the fo_data_in_window as a compressed pickle file
+                # pickle_file_name = f'{safe_start_time}.pkl.gz'  # Use .pkl.gz for the compressed file
+                # with gzip.open(os.path.join(self.output_path, pickle_file_name), 'wb') as f:
+                #     pickle.dump(data_dict, f)
 
                 # 6. Save the fo_data_in_window as a NetCDF file ########################################################
                 self.create_netcdf_file(output_folder=self.output_path, data_dict=data_dict)
+                print(f"Saved NetCDF file: {safe_start_time}.nc")
 
-
+        print("All events extracted and saved as netCDF files.")
 
         return None
 
 
-
-
-
-
 ##### TEST THE CODE ###################################################################################################
 # Define the paths to the FO and accelerometer data
-fo_data_path = r'C:\Projects\erju\data\culemborg\das_20201120'
-acc_data_path = r'C:\Projects\erju\data\accel_data'
-logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
-path_save_database = r'C:\Projects\erju\outputs\culemborg'
+fo_data_path = r'D:\culemborg\culemborg_2020\20112020\subset'
+# acc_data_path = r'C:\Projects\erju\data\accel_data'
+# logbook_path = r'C:\Projects\erju\data\logbook_20201109_20201111.xlsx'
+path_save_database = r'C:\culemborg'
 
 # Create an instance of the CreateDatabase class
 database = CreateDatabase(fo_data_path=fo_data_path,
@@ -575,9 +567,7 @@ database = CreateDatabase(fo_data_path=fo_data_path,
 fo_file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.tdms')
 
 # Join all the FO data from a single channel into a single signal
-#all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names, channel_no=4270)
+# all_data = database.extract_and_join_fo_data(fo_file_names=fo_file_names, channel_no=4270)
 
 # Find the events with sta/lta method
 database.extract_all_events(selected_channel=4270, threshold=550)
-
-

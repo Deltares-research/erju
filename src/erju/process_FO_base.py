@@ -67,7 +67,6 @@ class BaseFOdata:
         else:
             raise ValueError(f'Invalid reader: {reader}')
 
-
     def extract_properties(self, file_name: str = None):
         """
         Extract the file properties and the measurement data as a dictionary and an array respectively
@@ -80,7 +79,6 @@ class BaseFOdata:
         """
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
-
 
     def extract_properties_per_file(self, file_name: str):
         """
@@ -95,7 +93,6 @@ class BaseFOdata:
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
 
-
     def extract_data(self, file_name: str = None, first_channel: int = None, last_channel: int = None,
                      start_time: int = None, end_time: int = None, frequency: int = None):
         """
@@ -109,7 +106,6 @@ class BaseFOdata:
         """
         # If the file_name is None, raise a ValueError, else the reader method will be called
         raise NotImplementedError('Subclass must implement abstract method')
-
 
     def _calculate_cutoff_times(self, start_rate: float = 0.2, end_rate: float = 0.8):
         """
@@ -129,13 +125,10 @@ class BaseFOdata:
         # in the culemborg data this is 30 seconds
         measurement_time = self.properties['measurement_time']
         # Calculate the start and end times
-        start_time = round(measurement_time * start_rate) # 30 * 0.2 = 6
-        end_time = round(measurement_time * end_rate) # 30 * 0.8 = 24
-
-
+        start_time = round(measurement_time * start_rate)  # 30 * 0.2 = 6
+        end_time = round(measurement_time * end_rate)  # 30 * 0.8 = 24
 
         return start_time, end_time
-
 
     def search_params(self):
         """
@@ -155,14 +148,14 @@ class BaseFOdata:
         middle_channel = int(np.mean([self.first_channel, self.last_channel]))
 
         # Define the time window for the search
-        #start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
+        # start_time, end_time = self._calculate_cutoff_times(start_rate=0.3, end_rate=0.7)
         # 0 and 1 means the start and end of the data is the same as 0 and 30 seconds
         start_time, end_time = self._calculate_cutoff_times(start_rate=0, end_rate=1)
 
         return middle_channel, start_time, end_time
 
-
-    def signal_averaging(self, file_type: str, plot: bool = False, save_to_path: str = None, channel: int = None, threshold: int = 500):
+    def signal_averaging(self, file_type: str, plot: bool = False, save_to_path: str = None, channel: int = None,
+                         threshold: int = 500):
         """
         Look in a folder for all the TDMS files and extract the mean signal
         value from the search parameters
@@ -198,7 +191,8 @@ class BaseFOdata:
         for file in tdms_files:
             # Get the mean signal for each file in the relative scan channel
             # and using the start_index and end_index, and get them in a list
-            data = self.extract_data(file, relative_scan_channel, relative_scan_channel + 1, start_time, end_time)
+            data = self.extract_data(file_name=file, first_channel=relative_scan_channel,
+                                     last_channel=relative_scan_channel + 1)
             mean_signal.append(np.mean(np.abs(data)))
         # Convert the list to a numpy array
         mean_signal = np.array(mean_signal)
@@ -224,7 +218,6 @@ class BaseFOdata:
 
         return mean_signal
 
-
     def get_files_above_threshold(self, file_type: str, signal: np.ndarray, threshold: float):
         """
         Get the list of file names based on a threshold value
@@ -246,7 +239,6 @@ class BaseFOdata:
             tdms_files, signal) if mean_value >= threshold]
 
         return selected_files
-
 
     def get_data_per_file(self, selected_files: list, resample: bool = False, new_n_channels=None,
                           new_sampling_frequency=None):
@@ -270,7 +262,7 @@ class BaseFOdata:
 
         # Loop through the selected files and extract the data
         for file_name in selected_files:
-            #print(f'Extracting data from {file_name} in get_data_per_file')
+            # print(f'Extracting data from {file_name} in get_data_per_file')
             data = self.extract_data(file_name)
 
             # Resample the data if resampling is True
@@ -281,7 +273,6 @@ class BaseFOdata:
             all_selected_data[file_name] = data
 
         return all_selected_data
-
 
     def get_data_with_window(self, file_name: str, window_before: int, window_after: int,
                              resample: bool = False, new_n_channels=None, new_sampling_frequency=None):
@@ -352,7 +343,6 @@ class BaseFOdata:
 
         return signal_data
 
-
     def save_txt_with_file_names(self, save_to_path: str, selected_files: list, file_names: list,
                                  include_indexes: bool = True):
         """
@@ -384,8 +374,7 @@ class BaseFOdata:
 
         return None
 
-
-    def plot_array_channels(self, file_to_plot: str,  save_to_path: str = None, save_figure: bool = False,
+    def plot_array_channels(self, file_to_plot: str, save_to_path: str = None, save_figure: bool = False,
                             window_before: int = 30, window_after: int = 30,
                             resample: bool = False, new_sampling_frequency: int = 100):
         """
@@ -408,10 +397,12 @@ class BaseFOdata:
         """
         # If resample is True, resample the data
         if resample:
-            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after,
-                                         resample=resample, new_sampling_frequency=new_sampling_frequency)
+            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before,
+                                             window_after=window_after,
+                                             resample=resample, new_sampling_frequency=new_sampling_frequency)
         else:
-            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before, window_after=window_after)
+            data = self.get_data_with_window(file_name=file_to_plot, window_before=window_before,
+                                             window_after=window_after)
 
         # Create a figure and axes
         fig, ax = plt.subplots(figsize=(10, 15))
@@ -446,10 +437,10 @@ class BaseFOdata:
         if save_figure:
             file_name_suffix = 'Figure_2D'
             full_file_name = f'{file_name_suffix}_{file_to_plot}.jpg'
-            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path, full_file_name)
+            save_path = os.path.join(save_to_path, full_file_name) if save_to_path else os.path.join(save_to_path,
+                                                                                                     full_file_name)
             plt.savefig(save_path, dpi=300)
         plt.close()
-
 
     def resample_data(self, data: np.array, new_n_channels: int = None, new_sampling_frequency: int = None):
         """
@@ -477,9 +468,8 @@ class BaseFOdata:
 
         return data_resampled
 
-
     def detect_FO_events_sta_lta(self, FO_signal: pd.DataFrame, window_buffer: int, nsta: int, nlta: int,
-                                    trigger_on: float, trigger_off: float):
+                                 trigger_on: float, trigger_off: float):
         """
         Detect events using the STA/LTA method and create windows around these events. This method
         uses the recursive_sta_lta function from ObsPy to compute the STA/LTA ratio and the trigger_onset
@@ -531,7 +521,6 @@ class BaseFOdata:
             windows_times.append((start_time, end_time))
 
         return windows_indices, windows_times, sta_lta_ratio
-
 
     def plot_fo_signal_and_windows(self, fo_data: pd.DataFrame, windows_indices: list, nsta: int = None,
                                    nlta: int = None, trigger_on: float = None, trigger_off: float = None):
@@ -590,4 +579,3 @@ class BaseFOdata:
 
         plt.tight_layout()
         plt.show()
-

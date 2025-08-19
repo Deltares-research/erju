@@ -1,4 +1,6 @@
 from DatabaseUtils import get_commands
+from datetime import datetime, timedelta
+import numpy as np
 
 
 # Function to fetch the data from the database based on some given conditions
@@ -47,6 +49,38 @@ def fetch_accel_data(db_path: str,
     print(f"Number of events fetched: {len(events)}")
 
     return events, tim, mis
+
+
+def unpack_accel_data(path_db: str, start_date: str, end_date: str, location: str, campaign: str,
+                      traintype: str = None, track: str = None, get_timeseries: bool = True):
+    """
+
+    """
+    # Fetch the accelerometer data
+    events, tim, mis = fetch_accel_data(db_path=path_db, start_date=start_date, end_date=end_date, locations=location,
+                                        campaigns=campaign, traintype=traintype, track=track, get_timeseries=True)
+
+    # Get the event time series dictionary (assuming one location)
+    event_series = list(tim.values())[0]
+
+    records = []
+
+    # Loop through each event and its corresponding time series
+    for event, (event_id, data) in zip(events, event_series.items()):
+        # Unpack the time series data
+        absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(event, data)
+
+        record = {
+            "event_id": event_id,
+            "absolute_time": absolute_time,
+            "trace_x": trace_x,
+            "trace_y": trace_y,
+            "trace_z": trace_z,
+            "time_window": time_window
+        }
+        records.append(record)
+
+    return records
 
 
 # Function to extract the time series data from the fetched data

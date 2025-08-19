@@ -1,11 +1,12 @@
 import numpy as np
 from loguru import logger
 import time
+import os
 
 from datetime import datetime, timedelta
-from DatabaseUtils import get_commands
+from src.utils.db_utils import fetch_accel_data, unpack_timeseries, unpack_accel_data, estimate_sampling_frequency
 
-from SignalProcessingTools.time_signal import TimeSignalProcessing, IntegrationRules, Windows
+from SignalProcessingTools.time_signal import TimeSignalProcessing, IntegrationRules, Windows, FilterDesign
 
 from src.erju.process_FO_base import BaseFOdata
 from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass, align_signals, \
@@ -15,137 +16,35 @@ from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed,
     plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_psd_ch_compare, plot_sig_fft_acc_fo, \
     plot_sig_fft_acc_fo
 
-from SignalProcessingTools.time_signal import FilterDesign
-
-
-# Function to fetch the data from the database based on some given conditions
-def fetch_accel_data(db_path: str,
-                     start_date: str,
-                     end_date: str,
-                     locations: list,
-                     campaigns: list = None,
-                     get_timeseries: bool = False,
-                     traintype: str = None,
-                     track: str = None):
-    """
-    Connects to SQLite STEM database and fetches the accelerometer data
-
-    Args:
-        db_path (str): Path to the SQLite database
-        start_date (str): Start date in the format 'YYYY-MM-DD HH:MM:SS'
-        end_date (str): End date in the format 'YYYY-MM-DD HH:MM:SS'
-        locations (list): List of locations i.e. ['Meetjournal_MP8_Holten_zuid_4m_C', 'location2']
-        campaigns (list): List of campaigns
-        get_timeseries (bool): Whether to get the timeseries of the events, default is False
-        traintype (str): Filter by traintype (optional)
-        track (str): Filter by track (optional)
-
-    Returns:
-        events (list): List of events
-        tim (dict): Dictionary of timeseries
-        mis (list): List of missing files
-
-    """
-    # Connect to the database and fetch event data
-    conn = get_commands.connect_to_db(db_path)
-    # Fetch the events between the given dates and other conditions
-    events, tim, mis = get_commands.get_events_between_dates(conn=conn,
-                                                             start_date=start_date,
-                                                             end_date=end_date,
-                                                             locations=locations,
-                                                             campaigns=campaigns,
-                                                             get_timeseries=get_timeseries,
-                                                             traintype=traintype,
-                                                             track=track)
-    # Close the connection
-    get_commands.close_connection(conn)
-
-    # Print the number of events fetched in a given time range
-    print(f"Number of events fetched: {len(events)}")
-
-    return events, tim, mis
-
-
-# Function to extract the time series data from the fetched data
-def unpack_timeseries(event: list, data: dict):
-    """
-    Unpacks accelerometer time series data and returns absolute time and XYZ traces.
-
-    Args:
-        event (list/tuple): Event record from the database (event[2] is the start time string)
-        data (dict): Dictionary containing 'TIME', 'TRACE_X', 'TRACE_Y', 'TRACE_Z'
-
-    Returns:
-        start_time (datetime): Parsed start time of the event
-        absolute_time (list of datetime): Absolute timestamps for each data point
-        trace_x (np.array): Accelerometer trace in X
-        trace_y (np.array): Accelerometer trace in Y
-        trace_z (np.array): Accelerometer trace in Z
-        time_window (list of datetime): [start, end] of the absolute time range
-    """
-    # Extract absolute start time of the event
-    start_time_str = event[2]
-    start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
-
-    # Extract time series traces
-    relative_time = data["TIME"]
-    trace_x = data["TRACE_X"]
-    trace_y = data["TRACE_Y"]
-    trace_z = data["TRACE_Z"]
-
-    # Convert to absolute timestamps
-    absolute_time = [start_time + timedelta(seconds=t) for t in relative_time]
-
-    # Define time window
-    time_window = [absolute_time[0], absolute_time[-1]]
-
-    return absolute_time, trace_x, trace_y, trace_z, time_window
-
-
-def estimate_sampling_frequency(time_vector):
-    """
-    Estimate the sampling frequency [Hz] from a list of datetime timestamps.
-
-    Args:
-        time_vector (list of datetime): List of datetime objects representing time axis.
-
-    Returns:
-        float: Estimated sampling frequency in Hz.
-    """
-    if len(time_vector) < 2:
-        raise ValueError("Need at least two timestamps to compute sampling frequency.")
-
-    # Calculate time differences in seconds
-    time_deltas = np.diff([t.timestamp() for t in time_vector])
-    avg_delta = np.mean(time_deltas)
-
-    return 1.0 / avg_delta
-
-
 if __name__ == "__main__":
     # Define the paths
-    path_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
-    path_fo = r"E:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
-    path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
+    path_stem_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
+    path_fo_data = r"E:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
+    # path_fo_data = r"C:\fo_samples\holten"
+    # path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
+    path_save_res = r"C:\holten\10m_GL"
 
     # Time range for extracting events
-    start_date = '2024-08-27 13:45:00'
-    end_date = '2024-08-27 14:00:00'
 
-    # start_date = '2024-08-27 15:00:00'
-    # end_date = '2024-08-27 15:30:00'
+    # 2 m GL
+    # start_date = '2024-08-26 13:00:00'
+    # end_date = '2024-08-29 07:59:00'
+
+    # 10 m GL
+    start_date = '2024-08-29 08:10:00'
+    end_date = '2024-08-31 09:00:00'
 
     # Parameters for querying the database
-    locations = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
-    # locations = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
-    # locations = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
+    location_name = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
+    # location_name = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
+    # location_name = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
     campaigns = None
-    traintype = "ICM"  # ICM
+    traintype = "SPR(A)"  # ICM
     track = "1"
     # fo channels
-    first_channel = 800
+    first_channel = 0
     center_channel = 1194
-    last_channel = 1400
+    last_channel = 2900
 
     window_size = 1024  # Size of the window for the PSD calculation
 
@@ -164,18 +63,18 @@ if __name__ == "__main__":
 
     #################################################################
     # Create the dynamically named results folder
-    results_folder = create_results_folder(base_path=path_plots,
+    results_folder = create_results_folder(base_path=path_save_res,
                                            start_date=start_date,
                                            end_date=end_date,
                                            traintype=traintype,
                                            center_channel=center_channel,
                                            track=track)
 
-    # Fetch the accelerometer data
-    events, tim, mis = fetch_accel_data(db_path=path_db,
+    # # Fetch the accelerometer data
+    events, tim, mis = fetch_accel_data(db_path=path_stem_db,
                                         start_date=start_date,
                                         end_date=end_date,
-                                        locations=locations,
+                                        locations=location_name,
                                         campaigns=campaigns,
                                         traintype=traintype,
                                         track=track,
@@ -225,13 +124,13 @@ if __name__ == "__main__":
         # 2 Lets look at the FO data ##########################################
 
         # Lets create an instance of the BaseFOdata class
-        fo = BaseFOdata.create_instance(dir_path=path_fo,
+        fo = BaseFOdata.create_instance(dir_path=path_fo_data,
                                         first_channel=first_channel,
                                         last_channel=last_channel,
                                         reader='optasense')
 
         # For each event, find the files in the time window
-        fo_files_in_event = from_window_get_fo_file(path_fo, time_window)
+        fo_files_in_event = from_window_get_fo_file(path_fo_data, time_window)
 
         # Now we loop through the fo files one by one and extract the data
         # First lets create a container to store the fo data
@@ -278,18 +177,18 @@ if __name__ == "__main__":
         fo_data = fo_data[start_index:end_index + 1, :]
         super_raw_data = super_raw_data[start_index:end_index + 1, :]
 
-        plot_fo_psd_ch_compare(
-            event_id=event_id,
-            timestamps=timestamps,
-            super_raw_data=super_raw_data,
-            sampling_frequency=sampling_frequency,
-            center_channel=center_channel,
-            first_channel=first_channel,
-            last_channel=last_channel,
-            window_size=window_size,
-            save_dir=results_folder,
-            step=50
-        )
+        # plot_fo_psd_ch_compare(
+        #     event_id=event_id,
+        #     timestamps=timestamps,
+        #     super_raw_data=super_raw_data,
+        #     sampling_frequency=sampling_frequency,
+        #     center_channel=center_channel,
+        #     first_channel=first_channel,
+        #     last_channel=last_channel,
+        #     window_size=window_size,
+        #     save_dir=results_folder,
+        #     step=50
+        # )
 
         fibre_optics = TimeSignalProcessing(timestamps, super_raw_data[:, center_channel - first_channel],
                                             Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
@@ -322,6 +221,43 @@ if __name__ == "__main__":
         psd_y_all.append(trace_y.Pxx)
         psd_z_all.append(trace_z.Pxx)
         psd_fo_all.append(fibre_optics.Pxx)
+
+        import matplotlib.pyplot as plt
+
+        # Inside the event loop, after computing FO PSDs:
+        max_psd_per_channel = []
+
+        # Loop through each channel in the FO data
+        for ch in range(last_channel - first_channel + 1):
+            ch_trace = super_raw_data[:, ch]  # FO time series for this channel
+
+            # Create TimeSignalProcessing object
+            ch_tsp = TimeSignalProcessing(
+                timestamps, ch_trace,
+                Fs=sampling_frequency,
+                window=Windows.HAMMING,
+                window_size=window_size
+            )
+            ch_tsp.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+            ch_tsp.psd(nb_points=10000)
+
+            # Take the maximum PSD value over all frequencies
+            max_psd_per_channel.append(np.max(ch_tsp.Pxx))
+
+        # Create channel position array
+        channel_positions = np.arange(first_channel, last_channel + 1)
+
+        # Plot scatter
+        plt.figure(figsize=(10, 6))
+        plt.scatter(channel_positions, max_psd_per_channel, color='dodgerblue')
+        plt.xlabel("FO Channel")
+        plt.ylabel("Max PSD value")
+        plt.title(f"Max PSD per FO Channel - Event {event_id}")
+        plt.grid(True)
+
+        # Save plot to results folder
+        plt.savefig(os.path.join(results_folder, f"max_psd_per_channel_event_{event_id}.png"), dpi=300)
+        plt.close()
 
         # === SAVE TIME SERIES AND PSD TO CSV ===
         import pandas as pd

@@ -1,5 +1,11 @@
+"""
+This script demonstrates how to use the AccelDataTimeWindows class to extract accelerometer data, using the
+STA/LTA method for event detection, and visualize the results with matplotlib. This is a legacy script for
+visualizing accelerometer data processing steps, particularly for the Culemborg dataset.
+"""
+
 import matplotlib.pyplot as plt
-from src.erju import AccelDataTimeWindows
+from src.erju.create_accel_windows import AccelDataTimeWindows
 from src.utils.file_utils import get_files_in_dir
 
 # Define file paths and parameters
@@ -35,15 +41,9 @@ windows_indices_sta_lta, windows_times_sta_lta = time_windows.detect_accel_event
     accel_data_df, nsta, nlta, trigger_on, trigger_off
 )
 
-
 # Step 5: Plot signal and event windows using the STA/LTA method
 time_windows.plot_accel_signal_and_windows(accel_data_df, windows_indices_sta_lta,
                                            nsta, nlta, trigger_on=trigger_on, trigger_off=trigger_off)
 
 # Display the plots
-plt.show()
-
-
-
-# Display the final plots
 plt.show()

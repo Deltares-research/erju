@@ -1,3 +1,18 @@
+"""
+This script interpolates geographic coordinates along a known set of channel points.
+
+It reads a GeoPackage containing channel coordinates (from ProRail), generates new evenly spaced channel points
+at a user-defined interval, and interpolates their latitude and longitude based on the known data.
+The interpolated points are reprojected to EPSG:28992 (RD New) and saved to a new GeoPackage layer.
+
+Main steps:
+1. Load known channel coordinates from a GeoPackage layer.
+2. Define a range of new channel values at the desired spacing (e.g., 1 m).
+3. Interpolate geographic positions for the new channels.
+4. Reproject the results and save them to a new GeoPackage layer.
+
+Useful for creating intermediate channel coordinates for fiber optic or linear sensor datasets.
+"""
 import geopandas as gpd
 import pandas as pd
 import numpy as np

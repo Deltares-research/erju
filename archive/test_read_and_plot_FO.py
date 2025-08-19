@@ -8,10 +8,10 @@ from src.utils.file_utils import get_files_in_dir
 ##### USER INPUT #######################################################################################################
 
 # Define the path to the TDMS file
-dir_path = r'C:\Projects\erju\data\holten\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
+dir_path = r'E:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels'
 
 # Define the path to save the figures
-save_to_path = r'C:\Projects\erju\outputs\holten'
+save_to_path = r'P:\11210064-erju\holten'
 
 # Define the first and last channel to be extracted
 first_channel = 0
@@ -50,10 +50,12 @@ else:
 print('Properties: ', properties)
 
 # Get the average signal
-signal_mean = file_cul_instance.signal_averaging(file_type=file_format, plot=True, save_to_path=save_to_path, threshold=threshold)
+signal_mean = file_cul_instance.signal_averaging(file_type=file_format, plot=True, save_to_path=save_to_path,
+                                                 threshold=threshold)
 
 # Find the file names above the threshold
-selected_files = file_cul_instance.get_files_above_threshold(file_type=file_format, signal=signal_mean, threshold=threshold)
+selected_files = file_cul_instance.get_files_above_threshold(file_type=file_format, signal=signal_mean,
+                                                             threshold=threshold)
 
 print('Selected files: ', selected_files)
 
@@ -67,7 +69,6 @@ all_data = file_cul_instance.get_data_per_file(file_names)
 # Stop the timer
 stop_timer = time.time()
 print('Elapsed time: ', stop_timer - start_timer, 'seconds')
-
 
 ########################################################################################################################
 # PLOTTING THE DATA
@@ -107,12 +108,11 @@ file_cul_instance.plot_array_channels(file_to_plot=selected_files[0],
 """
 
 # Plot a single channel
-file_index = 1          # File index to plot (from the selected_files list)
-channel_index = channel    # Channel from the file to plot
+file_index = 1  # File index to plot (from the selected_files list)
+channel_index = channel  # Channel from the file to plot
 
 # Create the instance for a given file index
 single_ch_plot = PlotData(selected_files[file_index], all_data)
-
 
 # Plot the data
 single_ch_plot.plot_single_channel(channel_index=channel_index,
@@ -120,7 +120,6 @@ single_ch_plot.plot_single_channel(channel_index=channel_index,
                                    end_time=properties['FileEndTime'],
                                    save_to_path=save_to_path,
                                    save_figure=True)
-
 
 """
 
