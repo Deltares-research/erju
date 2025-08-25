@@ -2,6 +2,7 @@ import numpy as np
 from loguru import logger
 import time
 import os
+import matplotlib.pyplot as plt
 
 from datetime import datetime, timedelta
 from src.utils.db_utils import fetch_accel_data, unpack_timeseries, unpack_accel_data, estimate_sampling_frequency
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     path_fo_data = r"E:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
     # path_fo_data = r"C:\fo_samples\holten"
     # path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
-    path_save_res = r"C:\holten\10m_GL"
+    path_save_res = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\10m GL\vel"
 
     # Time range for extracting events
 
@@ -38,26 +39,27 @@ if __name__ == "__main__":
     location_name = ['Meetjournal_MP8_Holten_zuid_4m_C']  # centre accelerometer
     # location_name = ['Meetjournal_MP7_Holten_zuid_4m_B']  # left accelerometer
     # location_name = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
+
     campaigns = None
     traintype = "SPR(A)"  # ICM
     track = "1"
+
     # fo channels
-    first_channel = 0
+    first_channel = 1184
     center_channel = 1194
-    last_channel = 2900
+    last_channel = 1204
 
     window_size = 1024  # Size of the window for the PSD calculation
+    Fpass = [1, 100]
 
-    interactive_plots = True  # Set to True if you want to save interactive plots
+    interactive_plots = False  # Set to True if you want to save interactive plots
     PLOT_CONFIG = {
         "sig_acc_fo": True,
-        "sig_fo_raw_and_processed": True,
-        "sig_psd_acc": True,
+        "sig_fo_raw_and_processed": False,
+        "sig_psd_acc": False,
         "sig_psd_acc_fo": True,
-        "sig_fft_acc_fo": True,
-        "sig_acc_raw_and_processed": False,
+        "sig_fft_acc_fo": False,
         "sig_acc_fo_align": True,
-        "cosine_boxplot": True,
         "psd_summary": True,
     }
 
@@ -68,7 +70,8 @@ if __name__ == "__main__":
                                            end_date=end_date,
                                            traintype=traintype,
                                            center_channel=center_channel,
-                                           track=track)
+                                           track=track,
+                                           Fpass=Fpass)
 
     # # Fetch the accelerometer data
     events, tim, mis = fetch_accel_data(db_path=path_stem_db,
@@ -83,16 +86,8 @@ if __name__ == "__main__":
     # Get the event time series dictionary (assuming one location)
     event_series = list(tim.values())[0]
 
-    # Initialize storage for similarities
-    similarity_scores_x = []
-    similarity_scores_y = []
-    similarity_scores_z = []
-
     # Initialize storage for PSDs
-    psd_x_all = []
-    psd_y_all = []
-    psd_z_all = []
-    psd_fo_all = []
+    psd_x_all, psd_y_all, psd_z_all, psd_fo_all = [], [], [], []
     freqs_shared = None
 
     start_time = time.time()
@@ -117,9 +112,9 @@ if __name__ == "__main__":
                                        window_size=window_size)
         trace_z = TimeSignalProcessing(absolute_time, trace_z_raw, Fs=freq_accel, window=Windows.HAMMING,
                                        window_size=window_size)
-        trace_x.filter([1, 100], 4, type_filter="bandpass")
-        trace_y.filter([1, 100], 4, type_filter="bandpass")
-        trace_z.filter([1, 100], 4, type_filter="bandpass")
+        trace_x.filter(Fpass=Fpass, N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+        trace_y.filter(Fpass=Fpass, N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+        trace_z.filter(Fpass=Fpass, N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
 
         # 2 Lets look at the FO data ##########################################
 
@@ -193,7 +188,7 @@ if __name__ == "__main__":
         fibre_optics = TimeSignalProcessing(timestamps, super_raw_data[:, center_channel - first_channel],
                                             Fs=sampling_frequency, window=Windows.HAMMING, window_size=window_size)
 
-        fibre_optics.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+        fibre_optics.filter(Fpass=Fpass, N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
 
         # Compute PSDs
         trace_x.psd(nb_points=10000)
@@ -205,14 +200,6 @@ if __name__ == "__main__":
         fo_trace = fo_data[:, ch_index]
         aligned_fo, lag = align_signals(trace_x.signal, fo_trace)
 
-        scores_x = compute_cosine_similarity_windows(trace_x.signal[:len(aligned_fo)], aligned_fo)
-        scores_y = compute_cosine_similarity_windows(trace_y.signal[:len(aligned_fo)], aligned_fo)
-        scores_z = compute_cosine_similarity_windows(trace_z.signal[:len(aligned_fo)], aligned_fo)
-
-        similarity_scores_x.append(scores_x)
-        similarity_scores_y.append(scores_y)
-        similarity_scores_z.append(scores_z)
-
         # Save frequencies once
         if freqs_shared is None:
             freqs_shared = trace_x.frequency_Pxx
@@ -221,8 +208,6 @@ if __name__ == "__main__":
         psd_y_all.append(trace_y.Pxx)
         psd_z_all.append(trace_z.Pxx)
         psd_fo_all.append(fibre_optics.Pxx)
-
-        import matplotlib.pyplot as plt
 
         # Inside the event loop, after computing FO PSDs:
         max_psd_per_channel = []
@@ -238,7 +223,7 @@ if __name__ == "__main__":
                 window=Windows.HAMMING,
                 window_size=window_size
             )
-            ch_tsp.filter(Fpass=[10, 100], N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
+            ch_tsp.filter(Fpass=Fpass, N=5, type_filter="bandpass", filter_design=FilterDesign.BUTTERWORTH)
             ch_tsp.psd(nb_points=10000)
 
             # Take the maximum PSD value over all frequencies
@@ -288,20 +273,6 @@ if __name__ == "__main__":
             "psd_fo": fibre_optics.Pxx,
         })
         df_psd.to_csv(os.path.join(csv_folder, f"psd_event_{event_id}.csv"), index=False)
-
-        # trace_x.reset()
-        # trace_y.reset()
-        # trace_z.reset()
-        # fibre_optics.reset()
-        # trace_x.fft(half_representation=True)
-        # trace_y.fft(half_representation=True)
-        # trace_z.fft(half_representation=True)
-        # fibre_optics.fft(half_representation=True)
-        # fft_x = trace_x.amplitude
-        # fft_y = trace_y.amplitude
-        # fft_z = trace_z.amplitude
-        # fft_fo = fibre_optics.amplitude
-        # freq = trace_x.frequency
 
         traces = [trace_x.signal[:len(aligned_fo)], trace_y.signal[:len(aligned_fo)], trace_z.signal[:len(aligned_fo)],
                   fibre_optics.signal]
@@ -396,18 +367,6 @@ if __name__ == "__main__":
                                 first_channel=first_channel,
                                 fo_for_crop=aligned_fo)
 
-        # Plot the filtered accelerometer data and the raw accelerometer dat
-        if PLOT_CONFIG["sig_acc_raw_and_processed"]:
-            plot_sig_acc_raw_and_processed(event_id=event_id,
-                                           time=absolute_time,
-                                           trace_x=trace_x,
-                                           trace_y=trace_y,
-                                           trace_z=trace_z,
-                                           trace_x_filt=trace_x_filt,  # With Brunos new clas I dont save the raw data
-                                           trace_y_filt=trace_y_filt,
-                                           trace_z_filt=trace_z_filt,
-                                           save_dir=results_folder)
-
         # IN ORDER TO CHECK ALLIGNMENT BETWEEN FO AND ACCELEROMETER DATA
         if PLOT_CONFIG["sig_acc_fo_align"]:
             plot_sig_acc_fo_align(event_id,
@@ -417,13 +376,6 @@ if __name__ == "__main__":
                                   trace_z.signal[:len(aligned_fo)],
                                   aligned_fo,
                                   save_dir=results_folder, )
-
-    # PLOT THE COSINE SIMILARITY BOXPLOT
-    if PLOT_CONFIG["cosine_boxplot"]:
-        plot_cosine_sim_boxplot(sim_x=similarity_scores_x,
-                                sim_y=similarity_scores_y,
-                                sim_z=similarity_scores_z,
-                                save_dir=results_folder)
 
     # PLOT THE AGGREGATED PSD SUBPLOT
     if PLOT_CONFIG["psd_summary"]:

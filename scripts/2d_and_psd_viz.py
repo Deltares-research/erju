@@ -107,6 +107,11 @@ def apply_scaling(strain: np.ndarray, fs: float, nm_per_m_per_sec: float = 11600
     return (strain * (nm_per_m_per_sec / fs) * 1e-9).astype(np.float32)
 
 
+def strain_to_velocity(strain_2d, wave_speed=300.0, sign=-1.0):
+    # strain (ε, dimensionless) -> particle velocity v (m/s)
+    return sign * wave_speed * np.asarray(strain_2d, dtype=np.float32)
+
+
 # =============== FAST VECTORIZED FILTERING ===============
 
 def design_sos(Fpass, N, fs, design="butter", rp=0.01, rs=60.0, btype="bandpass"):
@@ -160,7 +165,7 @@ def load_tdms(path):
 # =============== USER CONFIG ===============
 
 INPUT_DIR = Path(r"D:\culemborg\culemborg_2020\20112020\subset")  # folder with .h5 / .tdms
-OUT_DIR = Path(r"D:\fo_test\batch_out")
+OUT_DIR = Path(r"D:\fo_test\cul_GL10_bandpass1-100_ch3500")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Plot toggles
@@ -177,15 +182,18 @@ PLOT_STRIDE_T = 4  # << increase for much faster heatmaps
 PLOT_STRIDE_X = 2  # << increase for much faster heatmaps
 
 # Processing params
-channel_idx = 2000
-Fpass = [1, 100]  # Hz
+channel_idx = 3500
+Fpass = [4.5, 100]  # Hz
 N = 5  # IIR order
 design = "butter"  # 'butter' | 'elliptic' | 'cheby1'
 taper_alpha = 0.04  # Tukey alpha
 
 # =============== SIMPLE LOOP OVER FILES ===============
 
-files = [p for p in INPUT_DIR.iterdir() if p.suffix.lower() in (".h5", ".tdms")]
+files = sorted(
+    [p for p in INPUT_DIR.iterdir() if p.suffix.lower() in (".h5", ".tdms")],
+    key=lambda p: p.name  # lexicographic by filename
+)
 
 for FILE in files:
     stem = FILE.stem
@@ -222,9 +230,15 @@ for FILE in files:
     else:
         raise ValueError(f"Unknown source: {source}")
 
+    # 5) make strain to velocity (optional)
+    velocity = strain_to_velocity(strain, wave_speed=300.0, sign=-1.0)  # m/s
+
     # 4) band-pass on strain (vectorized)
     sos = design_sos(Fpass=Fpass, N=N, fs=fs, design=design, btype="bandpass")
-    filtered = apply_SOS_filter_2d(strain, sos)
+    if velocity is not None:
+        filtered = apply_SOS_filter_2d(velocity, sos)
+    else:
+        filtered = apply_SOS_filter_2d(strain, sos)
 
     # ---- PLOTS (downsampled heatmaps)
     if PLOTS["raw2d"]:
@@ -253,7 +267,6 @@ for FILE in files:
 
     if PLOTS["psd_ch_double"]:
         save_channel_psd_doubleplot(
-            time_arr=t,
             trace=filtered[:, ch],  # already filtered -> no extra filter here
             fs=fs,
             out_path=OUT_DIR / f"{stem}__ch{ch}_psd.png",

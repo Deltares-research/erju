@@ -176,28 +176,37 @@ class OptasenseFOdata(BaseFOdata):
 
         # Open the .h5 file
         with h5py.File(file_path, 'r') as file:
-            # Create an instance of the raw data for easier access with the slicing of the channels
+            # 1. Create an instance of the raw data for easier access with the slicing of the channels
             raw_signal_data = file['Acquisition']['Raw[0]']['RawData'][:, first_channel:last_channel + 1]
 
+            # 2. Remove the mean of the data
+            demeaned_data = raw_signal_data - np.mean(raw_signal_data, axis=0)
+
+            # 3.  taper
+            w = windows.tukey(M=demeaned_data.shape[0], alpha=0.1).astype(np.float32)
+            tapered = demeaned_data * w[:, None]
+
+            # 4. Convert to strain
+            strain = self.from_opticalphase_to_strain(tapered)
+
             # Apply the tukey window to the raw data in order to reduce the edge effects prior to filtering
-            signal_window = windows.tukey(M=raw_signal_data.shape[0], alpha=0.1)
+            signal_window = windows.tukey(M=demeaned_data.shape[0], alpha=0.1)
             # Create a new array to store the filtered data
             filtered_data = np.zeros(np.shape(raw_signal_data))
             # Filter the data
-            for i in range(raw_signal_data.shape[1]):
-                filtered_data[:, i] = self.bandpass(data=raw_signal_data[:, i] * signal_window,
-                                                    freqmin=10,
+            for i in range(demeaned_data.shape[1]):
+                filtered_data[:, i] = self.bandpass(data=demeaned_data[:, i] * signal_window,
+                                                    freqmin=1,
                                                     freqmax=100,
                                                     fs=self.properties['SamplingFrequency[Hz]'],
                                                     corners=5)
 
         # Convert data to strain
         data_filtered_to_strain = self.from_opticalphase_to_strain(filtered_data)
-        data_raw_to_strain = self.from_opticalphase_to_strain(raw_signal_data)
 
         # Store the data in the class instance and transpose it to make it fit the other code
         self.data = data_filtered_to_strain.T
-        raw_signal_data = data_raw_to_strain.T
+        strain = strain.T
 
         # TO NOTE: The data is returned with shape (n_samples_per_ch, n_channels)
-        return self.data, raw_signal_data
+        return self.data, strain

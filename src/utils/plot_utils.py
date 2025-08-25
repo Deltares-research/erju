@@ -637,10 +637,6 @@ def plot_psd_summary(frequencies,
         psds_x/y/z/fo (list of np.array or None): PSDs from each event.
         save_dir (str): Where to save the figure.
     """
-    import os
-    import numpy as np
-    import matplotlib.pyplot as plt
-
     save_dir = create_subfolder(save_dir, "psd_summary")
 
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(10, 10), sharex=True)
@@ -674,6 +670,67 @@ def plot_psd_summary(frequencies,
         ax.set_title(label)
         ax.grid(True)
         ax.set_xlim(0, 100)
+
+    axes[-1].set_xlabel("Frequency [Hz]")
+    fig.suptitle("PSD Summary Across All Events")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    filename = "aggregated_psd_subplots.png"
+    output_path = os.path.join(save_dir, filename)
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+
+
+def plot_psd_summary_small(frequencies,
+                           psds_x,
+                           psds_y,
+                           psds_z,
+                           psds_fo,
+                           save_dir):
+    save_dir = create_subfolder(save_dir, "psd_summary")
+
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(4, 10), sharex=True)
+    psd_sets = [psds_x, psds_y, psds_z, psds_fo]
+    labels = ["Velocity X (mm/s)", "Velocity Y (mm/s)", "Velocity Z (mm/s)", "FO strain (ε)"]
+
+    # <<< EDIT THESE ONCE: (ymin, ymax) for subplots 1..4 >>>
+    FIXED_YLIMS = [
+        (0.0, 0.020),  # subplot 1: X
+        (0.0, 0.020),  # subplot 2: Y
+        (0.0, 0.05),  # subplot 3: Z
+        (0.0, 1.0e-15),  # subplot 4: FO strain
+    ]
+
+    for i, (ax, psd_list, label) in enumerate(zip(axes, psd_sets, labels)):
+        if psd_list is None:
+            psd_list = []
+        psd_list = [p for p in psd_list if p is not None]
+
+        if len(psd_list) > 0:
+            try:
+                all_psds = np.vstack(psd_list)
+                mean_psd = np.mean(all_psds, axis=0)
+                std_psd = np.std(all_psds, axis=0)
+
+                ax.plot(frequencies, mean_psd, label="Mean PSD")
+                ax.fill_between(frequencies, mean_psd - std_psd, mean_psd + std_psd,
+                                alpha=0.3, label="±1 STD")
+                ax.legend()
+            except Exception as e:
+                ax.text(0.5, 0.5, f"Error plotting\n{str(e)}", transform=ax.transAxes,
+                        ha='center', va='center', fontsize=10, color='red')
+        else:
+            ax.text(0.5, 0.5, 'No data', transform=ax.transAxes,
+                    ha='center', va='center', fontsize=12, color='gray')
+
+        ax.set_ylabel("PSD")
+        ax.set_title(label)
+        ax.grid(True)
+        ax.set_xlim(0, 100)
+
+        # >>> Fix the Y axis here:
+        ymin, ymax = FIXED_YLIMS[i]
+        ax.set_ylim(ymin, ymax)
 
     axes[-1].set_xlabel("Frequency [Hz]")
     fig.suptitle("PSD Summary Across All Events")

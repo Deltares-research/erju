@@ -523,7 +523,7 @@ import os
 import os
 
 
-def create_results_folder(base_path, start_date, end_date, traintype, center_channel, track):
+def create_results_folder(base_path, start_date, end_date, traintype, center_channel, track, Fpass):
     """
     Create and return the path to the results folder based on parameters.
     """
@@ -537,7 +537,7 @@ def create_results_folder(base_path, start_date, end_date, traintype, center_cha
         traintype_clean = traintype.replace("(", "").replace(")", "").replace(" ", "")
 
     # Compose folder name
-    folder_name = f"res-{start_str}_{end_str}-{traintype_clean}-ch_{center_channel}-dir_{track}"
+    folder_name = f"res-{start_str}_{end_str}-{traintype_clean}-ch_{center_channel}-dir_{track}_Fpass_{Fpass[0]}-{Fpass[1]}Hz"
 
     # Full path
     full_path = os.path.join(base_path, folder_name)
