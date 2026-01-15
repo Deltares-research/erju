@@ -164,8 +164,9 @@ def load_tdms(path):
 
 # =============== USER CONFIG ===============
 
-INPUT_DIR = Path(r"D:\culemborg\culemborg_2020\20112020\subset")  # folder with .h5 / .tdms
-OUT_DIR = Path(r"D:\fo_test\cul_GL10_bandpass1-100_ch3500")
+INPUT_DIR = Path(
+    r"F:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels")  # folder with .h5 / .tdms
+OUT_DIR = Path(r"D:\fo_test\cul_GL10_bandpass1-100_ch1194")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Plot toggles
@@ -182,8 +183,8 @@ PLOT_STRIDE_T = 4  # << increase for much faster heatmaps
 PLOT_STRIDE_X = 2  # << increase for much faster heatmaps
 
 # Processing params
-channel_idx = 3500
-Fpass = [4.5, 100]  # Hz
+channel_idx = 1194
+Fpass = [1, 100]  # Hz
 N = 5  # IIR order
 design = "butter"  # 'butter' | 'elliptic' | 'cheby1'
 taper_alpha = 0.04  # Tukey alpha

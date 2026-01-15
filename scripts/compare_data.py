@@ -1,35 +1,29 @@
+import os
+import time
 import numpy as np
 from loguru import logger
-import time
-import os
 import matplotlib.pyplot as plt
+from datetime import timedelta
 
-from datetime import datetime, timedelta
-from src.utils.db_utils import fetch_accel_data, unpack_timeseries, unpack_accel_data, estimate_sampling_frequency
+from src.utils.db_utils import fetch_accel_data, unpack_timeseries, estimate_sampling_frequency
+from src.erju.process_FO_base import BaseFOdata
+from src.utils.file_utils import from_window_get_fo_file, align_signals, create_results_folder
+from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed, plot_sig_psd_acc, plot_sig_psd_acc_fo, \
+    plot_sig_acc_fo_align, plot_psd_summary, plot_sig_fft_acc_fo
 
 from SignalProcessingTools.time_signal import TimeSignalProcessing, IntegrationRules, Windows, FilterDesign
-
-from src.erju.process_FO_base import BaseFOdata
-from src.utils.file_utils import from_window_get_fo_file, compute_psd, bandpass, align_signals, \
-    compute_cosine_similarity_windows, compute_psd_fixed, create_results_folder
-from src.utils.plot_utils import plot_sig_acc_fo, plot_sig_fo_raw_and_processed, \
-    plot_sig_psd_acc, plot_sig_psd_acc_fo, plot_sig_acc_raw_and_processed, \
-    plot_sig_acc_fo_align, plot_cosine_sim_boxplot, plot_psd_summary, plot_fo_psd_ch_compare, plot_sig_fft_acc_fo, \
-    plot_sig_fft_acc_fo
 
 if __name__ == "__main__":
     # Define the paths
     path_stem_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
-    path_fo_data = r"E:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
-    # path_fo_data = r"C:\fo_samples\holten"
-    # path_plots = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\2m GL"
-    path_save_res = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\10m GL\vel"
+    path_fo_data = r"F:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
+    path_save_res = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\10m GL"
 
     # Time range for extracting events
 
     # 2 m GL
     # start_date = '2024-08-26 13:00:00'
-    # end_date = '2024-08-29 07:59:00'
+    # end_date = '2024-08-29 07:00:00'
 
     # 10 m GL
     start_date = '2024-08-29 08:10:00'
@@ -41,13 +35,13 @@ if __name__ == "__main__":
     # location_name = ['Meetjournal_MP9_Holten_zuid_4m_D']  # right accelerometer
 
     campaigns = None
-    traintype = "SPR(A)"  # ICM
+    traintype = 'VIRM'  # ICM
     track = "1"
 
     # fo channels
     first_channel = 1184
-    center_channel = 1194
-    last_channel = 1204
+    center_channel = 1190
+    last_channel = 1200
 
     window_size = 1024  # Size of the window for the PSD calculation
     Fpass = [1, 100]
@@ -284,17 +278,30 @@ if __name__ == "__main__":
 
         with open(os.path.join(results_folder, f"processed_data_event_{event_id}.pickle"), 'wb') as fo:
             pickle.dump({
-                "PSD_x": [p.tolist() for p in psd_x_all],
-                "PSD_y": [p.tolist() for p in psd_y_all],
-                "PSD_z": [p.tolist() for p in psd_z_all],
-                "PSD_fo": [p.tolist() for p in psd_fo_all],
-                "trace_x": [trace_x.signal[:len(aligned_fo)].tolist()],
-                "trace_y": [trace_y.signal[:len(aligned_fo)].tolist()],
-                "trace_z": [trace_z.signal[:len(aligned_fo)].tolist()],
-                "trace_fo": [p.tolist() for p in fibre_optics.signal[:min_len]],
-                "freq": [p.tolist() for p in fibre_optics.frequency_Pxx],
-                "time": timestamps,
+                "PSD_x": trace_x.Pxx.tolist(),
+                "PSD_y": trace_y.Pxx.tolist(),
+                "PSD_z": trace_z.Pxx.tolist(),
+                "PSD_fo": fibre_optics.Pxx.tolist(),
+                "trace_x": trace_x.signal[:min_len].tolist(),
+                "trace_y": trace_y.signal[:min_len].tolist(),
+                "trace_z": trace_z.signal[:min_len].tolist(),
+                "trace_fo": fibre_optics.signal[:min_len].tolist(),
+                "freq": fibre_optics.frequency_Pxx.tolist(),  # cleaner
+                "time": timestamps[:min_len],
             }, fo)
+            # OLD WAY
+            # pickle.dump({
+            #     "PSD_x": [p.tolist() for p in psd_x_all],
+            #     "PSD_y": [p.tolist() for p in psd_y_all],
+            #     "PSD_z": [p.tolist() for p in psd_z_all],
+            #     "PSD_fo": [p.tolist() for p in psd_fo_all],
+            #     "trace_x": [trace_x.signal[:len(aligned_fo)].tolist()],
+            #     "trace_y": [trace_y.signal[:len(aligned_fo)].tolist()],
+            #     "trace_z": [trace_z.signal[:len(aligned_fo)].tolist()],
+            #     "trace_fo": [p.tolist() for p in fibre_optics.signal[:min_len]],
+            #     "freq": [p.tolist() for p in fibre_optics.frequency_Pxx],
+            #     "time": timestamps,
+            # }, fo)
 
         # Plotting the results ########################################################
 
