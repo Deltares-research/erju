@@ -7,70 +7,177 @@ Project: Rail4Earth - Subtask 3.3.3
 Date: February 2026
 """
 
-import os
-
 # ==============================================================================
-# INPUT/OUTPUT PATHS - MAIN CONFIGURATION
+# SITE + TIME REFERENCE
 # ==============================================================================
 
 # Site from where the data is recorded. Used for metadata and file organization.
 SITE_NAME = "Holten"
 
+# IMPORTANT:
+# Define the time basis of ACCEL_START_DATE / ACCEL_END_DATE.
+# Use "UTC" if your database timestamps are UTC; use "Europe/Amsterdam" if local.
+TIMEZONE = "UTC"
+
+# ==============================================================================
+# INPUT/OUTPUT PATHS - MAIN CONFIGURATION
+# ==============================================================================
+
 # Path to folder containing fiber optic H5 files (.h5 format)
+# (Not used yet if you are building accelerometer-only NetCDF files first)
 FO_DATA_PATH = (
     r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
 )
 
+# Path to accelerometer SQLite database
+ACCEL_DB_PATH = r"P:\archivedprojects\11207352-stem\database\Wielrondheid_132887.db"
+
 # Output folder where database files will be saved
 OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 
-
 # ==============================================================================
-# ACCELEROMETER DATABASE CONFIGURATION
+# ACCELEROMETER EVENT EXTRACTION CONFIGURATION
 # ==============================================================================
-
-# Path to accelerometer SQLite database
-ACCEL_DB_PATH = r"P:\archivedprojects\11207352-stem\database\Wielrondheid_132887.db"
 
 # Time range for extracting accelerometer events
 ACCEL_START_DATE = "2024-08-26 13:00:00"
 ACCEL_END_DATE = "2024-08-29 07:00:00"
 
-# Location name(s) for accelerometer data
-# List of measurement points to extract. Each MP will be stored in separate groups.
-ACCEL_MEASUREMENT_POINTS = [
-    "Meetjournal_MP8_Holten_zuid_4m_C",  # Centre, 4m from track
-    "Meetjournal_MP9_Holten_zuid_4m_D",  # Right, 4m from track
-    "Meetjournal_MP10_Holten_zuid_8m_C",  # Centre, 8m from track
-]
-
 # Campaign name (set to None to include all campaigns)
 ACCEL_CAMPAIGNS = None
 
-# Train type filter (e.g., 'VIRM', 'ICM', or None for all)
+# Train type filter (e.g., "VIRM", "ICM", or None for all)
 ACCEL_TRAINTYPE = "VIRM"
 
-# Track filter (e.g., '1', '2', or None for all)
-ACCEL_TRACK = "1"
+# Track filter (recommend integer for consistent metadata typing)
+# (Set to None for all tracks)
+ACCEL_TRACK = 1
 
+# ==============================================================================
+# ACCELEROMETER SENSOR SELECTION + STANDARDIZED IDS
+# ==============================================================================
+
+# Raw measurement point names as they appear in the accelerometer database.
+ACCEL_MEASUREMENT_POINTS = [
+    "Meetjournal_MP1_Holten_zuid_16m_C",
+    "Meetjournal_MP2_Holten_zuid_25m_C",
+    "Meetjournal_MP3_Holten_noord_2m_C",
+    "Meetjournal_MP4_Holten_zuid_2m_C",
+    "Meetjournal_MP5_Holten_noord_4m_C",
+    "Meetjournal_MP6_Holten_noord_4m_D",
+    "Meetjournal_MP7_Holten_zuid_4m_B",
+    "Meetjournal_MP8_Holten_zuid_4m_C",
+    "Meetjournal_MP9_Holten_zuid_4m_D",
+    "Meetjournal_MP10_Holten_zuid_8m_C",
+    "Meetjournal_MP11_Holten_gebouw",
+    "Meetjournal_MP12_Holten_zuid_5m_A",
+    "Meetjournal_MP13_Holten_zuid_5m_E",
+    "Meetjournal_MP14_Holten_sleeper_A",
+    "Meetjournal_MP15_Holten_sleeper_C",
+    "Meetjournal_MP16_Holten_sleeper_D_noord",
+    "Meetjournal_MP17_Holten_sleeper_D_zuid",
+    "Meetjournal_MP18_Holten_sleeper_E",
+    "Meetjournal_MP19_Holten_sleeper_G",
+
+]
+
+# Stable short sensor IDs used in the NetCDF structure:
+# - /geometry/acc_sensor_id
+# - /acc/<SENSOR_ID>/...
+ACCEL_SENSOR_ID_MAP = {
+    "Meetjournal_MP8_Holten_zuid_4m_C": "MP8",
+    "Meetjournal_MP9_Holten_zuid_4m_D": "MP9",
+    "Meetjournal_MP10_Holten_zuid_8m_C": "MP10",
+}
+
+# Distance from each accelerometer to the track centerline (meters).
+# These values must match the IDs used in ACCEL_SENSOR_ID_MAP.
+ACCEL_DISTANCE_TO_TRACK_M = {
+    "MP8": 4.0,
+    "MP9": 4.0,
+    "MP10": 8.0,
+}
+
+# Optional: side of track convention for each sensor:
+# -1 = left, +1 = right, 0 = unknown.
+# If you don't trust this information, set all to 0 and fill later.
+ACCEL_SIDE_OF_TRACK = {
+    "MP8": 0,
+    "MP9": 0,
+    "MP10": 0,
+}
+
+# Optional: axis availability mask per sensor (x,y,z).
+# Use this if some sensors are Z-only.
+# If not specified, your writer can infer it from the data.
+ACCEL_AXIS_MASK = {
+    "MP8": [1, 1, 1],
+    "MP9": [1, 1, 1],
+    "MP10": [1, 1, 1],
+}
 
 # ==============================================================================
 # DATABASE OUTPUT CONFIGURATION
 # ==============================================================================
 
 # Output file format: "netcdf", "pickle", or "both"
-# NetCDF is recommended for long-term storage and sharing
 DATABASE_FORMAT = "netcdf"
 
 # Enable compression to reduce file size (recommended)
 DATABASE_COMPRESSION = True
 
+# Compression level (1-9, higher = smaller files but slower)
+DATABASE_COMPRESSION_LEVEL = 9
+
 # File naming format for NetCDF files (e.g., EVENT_0001, EVENT_0002, etc.)
 NAME_FORMAT = "EVENT_{:04d}"
 
-# Compression level (1-9, higher = smaller files but slower)
-# 9 is maximum compression (recommended for archival storage)
-DATABASE_COMPRESSION_LEVEL = 9
-
-# Include rich metadata in output files (timestamps, source files, etc.)
+# Include rich metadata in output files (timestamps, source filters, etc.)
 DATABASE_INCLUDE_METADATA = True
+
+# Pipeline version (for reproducibility tracking)
+PIPELINE_VERSION = "1.0.0"
+
+# ==============================================================================
+# NETCDF VARIABLE NAMING + METADATA
+# ==============================================================================
+
+# Accelerometer axis labels (order must match acceleration_mps2 columns)
+ACCEL_AXIS_LABELS = ["x", "y", "z"]
+
+# Variable names and metadata (recommend using NetCDF/CF-style "long_name")
+VAR_TIME = {
+    "name": "time_s",
+    "units": "s",
+    "long_name": "Time relative to t0_utc",
+}
+
+VAR_FREQUENCY = {
+    "name": "fs_hz",
+    "units": "Hz",
+    "long_name": "Sampling frequency",
+}
+
+VAR_ACCELERATION = {
+    "name": "acceleration_mps2",
+    "units": "m/s^2",
+    "long_name": "Acceleration time series (x, y, z)",
+}
+
+VAR_DISTANCE = {
+    "name": "acc_distance_to_track_m",
+    "units": "m",
+    "long_name": "Distance from accelerometer to track centerline",
+}
+
+VAR_SPEED = {
+    "name": "train_speed_mps",
+    "units": "m/s",
+    "long_name": "Train speed during passage",
+}
+
+VAR_AXIS_MASK = {
+    "name": "axis_mask",
+    "units": "-",
+    "long_name": "Axis availability (1=present, 0=missing)",
+}

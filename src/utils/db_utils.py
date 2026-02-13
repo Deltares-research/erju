@@ -49,9 +49,6 @@ def fetch_accel_data(
     # Close the connection
     get_commands.close_connection(conn)
 
-    # Print the number of events fetched in a given time range
-    print(f"Number of events fetched: {len(events)}")
-
     return events, tim, mis
 
 
@@ -164,6 +161,7 @@ def fetch_multi_mp_accel_data(
     start_date: str,
     end_date: str,
     measurement_points: list,
+    sensor_id_map: dict,
     campaigns: list = None,
     traintype: str = None,
     track: str = None,
@@ -181,6 +179,8 @@ def fetch_multi_mp_accel_data(
         end_date: End date in the format 'YYYY-MM-DD HH:MM:SS'
         measurement_points: List of measurement point names (e.g.,
                            ['Meetjournal_MP8_Holten_zuid_4m_C', ...])
+        sensor_id_map: Dictionary mapping measurement point names to sensor IDs
+                      (e.g., {'Meetjournal_MP8_Holten_zuid_4m_C': 'MP8', ...})
         campaigns: List of campaigns (optional)
         traintype: Filter by traintype (optional)
         track: Filter by track (optional)
@@ -224,8 +224,13 @@ def fetch_multi_mp_accel_data(
         # Get the event timeseries dictionary for this MP
         event_series = list(tim.values())[0] if tim else {}
 
-        # Extract short MP identifier (e.g., "MP8" from "Meetjournal_MP8_Holten_zuid_4m_C")
-        mp_id = mp_name.split("_")[1] if "_" in mp_name else mp_name
+        # Get sensor ID from mapping (no string parsing)
+        if mp_name not in sensor_id_map:
+            raise ValueError(
+                f"Measurement point '{mp_name}' not found in sensor_id_map. "
+                f"Available keys: {list(sensor_id_map.keys())}"
+            )
+        sensor_id = sensor_id_map[mp_name]
 
         # Process each event
         for event, (event_id, data) in zip(events, event_series.items()):
@@ -251,9 +256,9 @@ def fetch_multi_mp_accel_data(
                 }
 
             # Add this MP's data to the event
-            events_by_id[event_id]["measurement_points"][mp_id] = {
+            events_by_id[event_id]["measurement_points"][sensor_id] = {
                 "mp_name": mp_name,
-                "mp_id": mp_id,
+                "sensor_id": sensor_id,
                 "absolute_time": absolute_time,
                 "trace_x": np.array(trace_x),
                 "trace_y": np.array(trace_y),

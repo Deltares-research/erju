@@ -46,6 +46,7 @@ def main():
         start_date=config.ACCEL_START_DATE,
         end_date=config.ACCEL_END_DATE,
         measurement_points=config.ACCEL_MEASUREMENT_POINTS,
+        sensor_id_map=config.ACCEL_SENSOR_ID_MAP,
         campaigns=config.ACCEL_CAMPAIGNS,
         traintype=config.ACCEL_TRAINTYPE,
         track=config.ACCEL_TRACK,
@@ -67,6 +68,7 @@ def main():
         events_dict=events_dict,
         output_folder=output_subfolder,
         site_name=config.SITE_NAME,
+        config=config,
         name_format=config.NAME_FORMAT,
         compression_level=9 if config.DATABASE_COMPRESSION else 0,
     )

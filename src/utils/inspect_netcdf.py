@@ -9,8 +9,43 @@ import netCDF4 as nc
 from pathlib import Path
 
 
-def print_group(group, indent=0):
-    """Recursively print group contents."""
+def print_raw_structure(group, indent=0, group_path="ROOT"):
+    """Print raw NetCDF structure (what's actually stored in the file)."""
+    prefix = "  " * indent
+
+    # Group attributes (STORED)
+    if len(group.ncattrs()) > 0:
+        for attr in group.ncattrs():
+            value = getattr(group, attr)
+            print(f"{prefix}[ATTR] {group_path}.{attr} = {value}")
+
+    # Dimensions (STORED)
+    if len(group.dimensions) > 0:
+        for dim_name, dim in group.dimensions.items():
+            size = len(dim) if not dim.isunlimited() else "UNLIMITED"
+            print(f"{prefix}[DIM]  {group_path}.{dim_name} = {size}")
+
+    # Variables (STORED)
+    if len(group.variables) > 0:
+        for var_name, var in group.variables.items():
+            shape_str = str(var.shape)
+            dtype_str = str(var.dtype)
+            print(f"{prefix}[VAR]  {group_path}.{var_name} [{dtype_str}, {shape_str}]")
+            # Variable attributes (STORED)
+            for attr in var.ncattrs():
+                val = getattr(var, attr)
+                print(f"{prefix}       .{attr} = {val}")
+
+    # Recurse into subgroups (STORED)
+    if len(group.groups) > 0:
+        for group_name, subgroup in group.groups.items():
+            subgroup_path = f"{group_path}/{group_name}"
+            print(f"{prefix}[GRP]  {subgroup_path}")
+            print_raw_structure(subgroup, indent + 1, subgroup_path)
+
+
+def print_formatted_view(group, indent=0):
+    """Print formatted view with sample data for understanding."""
     prefix = "  " * indent
 
     # Group attributes
@@ -40,7 +75,7 @@ def print_group(group, indent=0):
             for attr in var.ncattrs():
                 val = getattr(var, attr)
                 print(f"{prefix}    {attr}: {val}")
-            # Show first/last values
+            # Show first/last values (COMPUTED FOR DISPLAY)
             if var.size > 0:
                 if var.ndim == 1:
                     print(f"{prefix}    First: {var[0]}")
@@ -53,8 +88,8 @@ def print_group(group, indent=0):
     if len(group.groups) > 0:
         for group_name, subgroup in group.groups.items():
             print(f"{prefix}Group: {group_name}")
-            print(f"{prefix}{'=' * 60}")
-            print_group(subgroup, indent + 1)
+            print(f"{prefix}{'-' * 60}")
+            print_formatted_view(subgroup, indent + 1)
 
 
 def inspect_netcdf(file_path: str):
@@ -70,12 +105,21 @@ def inspect_netcdf(file_path: str):
     print("=" * 80 + "\n")
 
     with nc.Dataset(file_path, "r") as dataset:
-        print("ROOT GROUP")
+        # PART 1: RAW NETCDF STRUCTURE (what's actually in the file)
+        print("RAW NETCDF STRUCTURE (what's stored in file)")
         print("=" * 80)
-        print_group(dataset)
+        print("Legend: [ATTR]=Attribute, [DIM]=Dimension, [VAR]=Variable, [GRP]=Group")
+        print("-" * 80)
+        print_raw_structure(dataset)
+        print()
+
+        # PART 2: FORMATTED VIEW (human-readable with sample values)
+        print("\nFORMATTED VIEW (for understanding)")
+        print("=" * 80)
+        print_formatted_view(dataset)
 
     # File info
-    print("FILE INFO")
+    print("\nFILE INFORMATION")
     print("=" * 80)
     print(f"  Path:       {file_path}")
     print(f"  Size:       {file_path.stat().st_size / 1024:.2f} KB")
@@ -84,5 +128,5 @@ def inspect_netcdf(file_path: str):
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260213_155741\EVENT_0001.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260213_170828\EVENT_0002.nc"
     inspect_netcdf(file_path)
