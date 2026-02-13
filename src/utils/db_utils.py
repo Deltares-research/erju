@@ -4,14 +4,16 @@ import numpy as np
 
 
 # Function to fetch the data from the database based on some given conditions
-def fetch_accel_data(db_path: str,
-                     start_date: str,
-                     end_date: str,
-                     locations: list,
-                     campaigns: list = None,
-                     get_timeseries: bool = False,
-                     traintype: str = None,
-                     track: str = None):
+def fetch_accel_data(
+    db_path: str,
+    start_date: str,
+    end_date: str,
+    locations: list,
+    campaigns: list = None,
+    get_timeseries: bool = False,
+    traintype: str = None,
+    track: str = None,
+):
     """
     Connects to SQLite STEM database and fetches the accelerometer data
 
@@ -34,14 +36,16 @@ def fetch_accel_data(db_path: str,
     # Connect to the database and fetch event data
     conn = get_commands.connect_to_db(db_path)
     # Fetch the events between the given dates and other conditions
-    events, tim, mis = get_commands.get_events_between_dates(conn=conn,
-                                                             start_date=start_date,
-                                                             end_date=end_date,
-                                                             locations=locations,
-                                                             campaigns=campaigns,
-                                                             get_timeseries=get_timeseries,
-                                                             traintype=traintype,
-                                                             track=track)
+    events, tim, mis = get_commands.get_events_between_dates(
+        conn=conn,
+        start_date=start_date,
+        end_date=end_date,
+        locations=locations,
+        campaigns=campaigns,
+        get_timeseries=get_timeseries,
+        traintype=traintype,
+        track=track,
+    )
     # Close the connection
     get_commands.close_connection(conn)
 
@@ -51,14 +55,28 @@ def fetch_accel_data(db_path: str,
     return events, tim, mis
 
 
-def unpack_accel_data(path_db: str, start_date: str, end_date: str, location: str, campaign: str,
-                      traintype: str = None, track: str = None, get_timeseries: bool = True):
-    """
-
-    """
+def unpack_accel_data(
+    path_db: str,
+    start_date: str,
+    end_date: str,
+    location: str,
+    campaign: str,
+    traintype: str = None,
+    track: str = None,
+    get_timeseries: bool = True,
+):
+    """ """
     # Fetch the accelerometer data
-    events, tim, mis = fetch_accel_data(db_path=path_db, start_date=start_date, end_date=end_date, locations=location,
-                                        campaigns=campaign, traintype=traintype, track=track, get_timeseries=True)
+    events, tim, mis = fetch_accel_data(
+        db_path=path_db,
+        start_date=start_date,
+        end_date=end_date,
+        locations=location,
+        campaigns=campaign,
+        traintype=traintype,
+        track=track,
+        get_timeseries=True,
+    )
 
     # Get the event time series dictionary (assuming one location)
     event_series = list(tim.values())[0]
@@ -68,7 +86,9 @@ def unpack_accel_data(path_db: str, start_date: str, end_date: str, location: st
     # Loop through each event and its corresponding time series
     for event, (event_id, data) in zip(events, event_series.items()):
         # Unpack the time series data
-        absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(event, data)
+        absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(
+            event, data
+        )
 
         record = {
             "event_id": event_id,
@@ -76,7 +96,7 @@ def unpack_accel_data(path_db: str, start_date: str, end_date: str, location: st
             "trace_x": trace_x,
             "trace_y": trace_y,
             "trace_z": trace_z,
-            "time_window": time_window
+            "time_window": time_window,
         }
         records.append(record)
 
@@ -137,3 +157,110 @@ def estimate_sampling_frequency(time_vector):
     avg_delta = np.mean(time_deltas)
 
     return 1.0 / avg_delta
+
+
+def fetch_multi_mp_accel_data(
+    path_db: str,
+    start_date: str,
+    end_date: str,
+    measurement_points: list,
+    campaigns: list = None,
+    traintype: str = None,
+    track: str = None,
+):
+    """
+    Fetch accelerometer data from multiple measurement points and group by event.
+
+    This function queries the database for each measurement point separately,
+    then groups the results by event_id (same train passing creates same event_id
+    across all measurement points).
+
+    Args:
+        path_db: Path to the SQLite database
+        start_date: Start date in the format 'YYYY-MM-DD HH:MM:SS'
+        end_date: End date in the format 'YYYY-MM-DD HH:MM:SS'
+        measurement_points: List of measurement point names (e.g.,
+                           ['Meetjournal_MP8_Holten_zuid_4m_C', ...])
+        campaigns: List of campaigns (optional)
+        traintype: Filter by traintype (optional)
+        track: Filter by track (optional)
+
+    Returns:
+        dict: Dictionary organized by event_id, with each event containing
+              data from all measurement points:
+              {
+                  "event_id_1": {
+                      "event_metadata": {...},  # Common event info
+                      "measurement_points": {
+                          "MP8": {time, x, y, z, fs_hz, ...},
+                          "MP9": {time, x, y, z, fs_hz, ...},
+                          ...
+                      }
+                  },
+                  ...
+              }
+    """
+    print(f"\nFetching data from {len(measurement_points)} measurement points...")
+
+    # Dictionary to store data grouped by event_id
+    events_by_id = {}
+
+    # Fetch data for each measurement point
+    for mp_name in measurement_points:
+        print(f"  - {mp_name}...")
+
+        # Fetch events and timeseries for this MP
+        events, tim, mis = fetch_accel_data(
+            db_path=path_db,
+            start_date=start_date,
+            end_date=end_date,
+            locations=[mp_name],
+            campaigns=campaigns,
+            traintype=traintype,
+            track=track,
+            get_timeseries=True,
+        )
+
+        # Get the event timeseries dictionary for this MP
+        event_series = list(tim.values())[0] if tim else {}
+
+        # Extract short MP identifier (e.g., "MP8" from "Meetjournal_MP8_Holten_zuid_4m_C")
+        mp_id = mp_name.split("_")[1] if "_" in mp_name else mp_name
+
+        # Process each event
+        for event, (event_id, data) in zip(events, event_series.items()):
+            # Unpack timeseries
+            absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(
+                event, data
+            )
+
+            # Estimate sampling frequency
+            fs_hz = estimate_sampling_frequency(absolute_time)
+
+            # If this is a new event, create entry with metadata
+            if event_id not in events_by_id:
+                events_by_id[event_id] = {
+                    "event_metadata": {
+                        "event_id": event_id,
+                        "start_time": event[2],  # Event start time string
+                        "traintype": event[3] if len(event) > 3 else None,
+                        "track": event[4] if len(event) > 4 else None,
+                        "time_window": time_window,
+                    },
+                    "measurement_points": {},
+                }
+
+            # Add this MP's data to the event
+            events_by_id[event_id]["measurement_points"][mp_id] = {
+                "mp_name": mp_name,
+                "mp_id": mp_id,
+                "absolute_time": absolute_time,
+                "trace_x": np.array(trace_x),
+                "trace_y": np.array(trace_y),
+                "trace_z": np.array(trace_z),
+                "fs_hz": fs_hz,
+                "n_samples": len(absolute_time),
+            }
+
+    print(f"\nGrouped data into {len(events_by_id)} unique events")
+    return events_by_id

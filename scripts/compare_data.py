@@ -15,7 +15,7 @@ from SignalProcessingTools.time_signal import TimeSignalProcessing, IntegrationR
 
 if __name__ == "__main__":
     # Define the paths
-    path_stem_db = r"P:/11207352-stem/database/Wielrondheid_132887.db"
+    path_stem_db = r"P:\archivedprojects\11207352-stem\database\Wielrondheid_132887.db"
     path_fo_data = r"F:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
     path_save_res = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten\10m GL"
 
