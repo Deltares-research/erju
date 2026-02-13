@@ -1,0 +1,185 @@
+{
+    "site_name": "Holten",
+    "description": "Holten measurement site configuration",
+    "measurement_points": [
+        "Meetjournal_MP1_Holten_zuid_16m_C",
+        "Meetjournal_MP2_Holten_zuid_25m_C",
+        "Meetjournal_MP3_Holten_noord_2m_C",
+        "Meetjournal_MP4_Holten_zuid_2m_C",
+        "Meetjournal_MP5_Holten_noord_4m_C",
+        "Meetjournal_MP6_Holten_noord_4m_D",
+        "Meetjournal_MP7_Holten_zuid_4m_B",
+        "Meetjournal_MP8_Holten_zuid_4m_C",
+        "Meetjournal_MP9_Holten_zuid_4m_D",
+        "Meetjournal_MP10_Holten_zuid_8m_C",
+        "Meetjournal_MP11_Holten_gebouw",
+        "Meetjournal_MP12_Holten_zuid_5m_A",
+        "Meetjournal_MP13_Holten_zuid_5m_E",
+        "Meetjournal_MP14_Holten_sleeper_A",
+        "Meetjournal_MP15_Holten_sleeper_C",
+        "Meetjournal_MP16_Holten_sleeper_D_noord",
+        "Meetjournal_MP17_Holten_sleeper_D_zuid",
+        "Meetjournal_MP18_Holten_sleeper_E",
+        "Meetjournal_MP19_Holten_sleeper_G"
+    ],
+    "sensor_id_map": {
+        "Meetjournal_MP1_Holten_zuid_16m_C": "MP1",
+        "Meetjournal_MP2_Holten_zuid_25m_C": "MP2",
+        "Meetjournal_MP3_Holten_noord_2m_C": "MP3",
+        "Meetjournal_MP4_Holten_zuid_2m_C": "MP4",
+        "Meetjournal_MP5_Holten_noord_4m_C": "MP5",
+        "Meetjournal_MP6_Holten_noord_4m_D": "MP6",
+        "Meetjournal_MP7_Holten_zuid_4m_B": "MP7",
+        "Meetjournal_MP8_Holten_zuid_4m_C": "MP8",
+        "Meetjournal_MP9_Holten_zuid_4m_D": "MP9",
+        "Meetjournal_MP10_Holten_zuid_8m_C": "MP10",
+        "Meetjournal_MP11_Holten_gebouw": "MP11",
+        "Meetjournal_MP12_Holten_zuid_5m_A": "MP12",
+        "Meetjournal_MP13_Holten_zuid_5m_E": "MP13",
+        "Meetjournal_MP14_Holten_sleeper_A": "MP14",
+        "Meetjournal_MP15_Holten_sleeper_C": "MP15",
+        "Meetjournal_MP16_Holten_sleeper_D_noord": "MP16",
+        "Meetjournal_MP17_Holten_sleeper_D_zuid": "MP17",
+        "Meetjournal_MP18_Holten_sleeper_E": "MP18",
+        "Meetjournal_MP19_Holten_sleeper_G": "MP19"
+    },
+    "distance_to_track_m": {
+        "MP1": 16.0,
+        "MP2": 25.0,
+        "MP3": 2.0,
+        "MP4": 2.0,
+        "MP5": 4.0,
+        "MP6": 4.0,
+        "MP7": 4.0,
+        "MP8": 4.0,
+        "MP9": 4.0,
+        "MP10": 8.0,
+        "MP11": 0.0,
+        "MP12": 5.0,
+        "MP13": 5.0,
+        "MP14": 0.0,
+        "MP15": 0.0,
+        "MP16": 0.0,
+        "MP17": 0.0,
+        "MP18": 0.0,
+        "MP19": 0.0
+    },
+    "side_of_track": {
+        "MP1": 0,
+        "MP2": 0,
+        "MP3": 0,
+        "MP4": 0,
+        "MP5": 0,
+        "MP6": 0,
+        "MP7": 0,
+        "MP8": 0,
+        "MP9": 0,
+        "MP10": 0,
+        "MP11": 0,
+        "MP12": 0,
+        "MP13": 0,
+        "MP14": 0,
+        "MP15": 0,
+        "MP16": 0,
+        "MP17": 0,
+        "MP18": 0,
+        "MP19": 0
+    },
+    "axis_mask": {
+        "MP1": [
+            1,
+            1,
+            1
+        ],
+        "MP2": [
+            1,
+            1,
+            1
+        ],
+        "MP3": [
+            1,
+            1,
+            1
+        ],
+        "MP4": [
+            1,
+            1,
+            1
+        ],
+        "MP5": [
+            1,
+            1,
+            1
+        ],
+        "MP6": [
+            1,
+            1,
+            1
+        ],
+        "MP7": [
+            1,
+            1,
+            1
+        ],
+        "MP8": [
+            1,
+            1,
+            1
+        ],
+        "MP9": [
+            1,
+            1,
+            1
+        ],
+        "MP10": [
+            1,
+            1,
+            1
+        ],
+        "MP11": [
+            1,
+            1,
+            1
+        ],
+        "MP12": [
+            1,
+            1,
+            1
+        ],
+        "MP13": [
+            1,
+            1,
+            1
+        ],
+        "MP14": [
+            1,
+            1,
+            1
+        ],
+        "MP15": [
+            1,
+            1,
+            1
+        ],
+        "MP16": [
+            1,
+            1,
+            1
+        ],
+        "MP17": [
+            1,
+            1,
+            1
+        ],
+        "MP18": [
+            1,
+            1,
+            1
+        ],
+        "MP19": [
+            1,
+            1,
+            1
+        ]
+    }
+}

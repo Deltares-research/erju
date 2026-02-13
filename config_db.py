@@ -7,12 +7,33 @@ Project: Rail4Earth - Subtask 3.3.3
 Date: February 2026
 """
 
+import json
+from pathlib import Path
+
 # ==============================================================================
 # SITE + TIME REFERENCE
 # ==============================================================================
 
 # Site from where the data is recorded. Used for metadata and file organization.
+# To switch sites: change this to match a JSON file in the sites/ folder.
+# Available sites: Check sites/ directory for .json files (e.g., holten.json)
+# Example: SITE_NAME = "Amsterdam" will load sites/amsterdam.json
 SITE_NAME = "Holten"
+
+# Load site-specific configuration from JSON file
+# This automatically loads measurement points, sensor mappings, distances, etc.
+_config_dir = Path(__file__).parent
+_site_config_file = _config_dir / "sites" / f"{SITE_NAME.lower()}.json"
+
+if not _site_config_file.exists():
+    raise FileNotFoundError(
+        f"Site configuration file not found: {_site_config_file}\n"
+        f"Please create a JSON file for site '{SITE_NAME}' in the sites/ folder.\n"
+        f"See sites/template.json for an example structure."
+    )
+
+with open(_site_config_file, "r") as f:
+    _site_config = json.load(f)
 
 # IMPORTANT:
 # Define the time basis of ACCEL_START_DATE / ACCEL_END_DATE.
@@ -56,65 +77,29 @@ ACCEL_TRACK = 1
 # ==============================================================================
 # ACCELEROMETER SENSOR SELECTION + STANDARDIZED IDS
 # ==============================================================================
+# Site-specific configuration loaded from sites/{SITE_NAME}.json
 
 # Raw measurement point names as they appear in the accelerometer database.
-ACCEL_MEASUREMENT_POINTS = [
-    "Meetjournal_MP1_Holten_zuid_16m_C",
-    "Meetjournal_MP2_Holten_zuid_25m_C",
-    "Meetjournal_MP3_Holten_noord_2m_C",
-    "Meetjournal_MP4_Holten_zuid_2m_C",
-    "Meetjournal_MP5_Holten_noord_4m_C",
-    "Meetjournal_MP6_Holten_noord_4m_D",
-    "Meetjournal_MP7_Holten_zuid_4m_B",
-    "Meetjournal_MP8_Holten_zuid_4m_C",
-    "Meetjournal_MP9_Holten_zuid_4m_D",
-    "Meetjournal_MP10_Holten_zuid_8m_C",
-    "Meetjournal_MP11_Holten_gebouw",
-    "Meetjournal_MP12_Holten_zuid_5m_A",
-    "Meetjournal_MP13_Holten_zuid_5m_E",
-    "Meetjournal_MP14_Holten_sleeper_A",
-    "Meetjournal_MP15_Holten_sleeper_C",
-    "Meetjournal_MP16_Holten_sleeper_D_noord",
-    "Meetjournal_MP17_Holten_sleeper_D_zuid",
-    "Meetjournal_MP18_Holten_sleeper_E",
-    "Meetjournal_MP19_Holten_sleeper_G",
-
-]
+ACCEL_MEASUREMENT_POINTS = _site_config["measurement_points"]
 
 # Stable short sensor IDs used in the NetCDF structure:
 # - /geometry/acc_sensor_id
 # - /acc/<SENSOR_ID>/...
-ACCEL_SENSOR_ID_MAP = {
-    "Meetjournal_MP8_Holten_zuid_4m_C": "MP8",
-    "Meetjournal_MP9_Holten_zuid_4m_D": "MP9",
-    "Meetjournal_MP10_Holten_zuid_8m_C": "MP10",
-}
+ACCEL_SENSOR_ID_MAP = _site_config["sensor_id_map"]
 
 # Distance from each accelerometer to the track centerline (meters).
 # These values must match the IDs used in ACCEL_SENSOR_ID_MAP.
-ACCEL_DISTANCE_TO_TRACK_M = {
-    "MP8": 4.0,
-    "MP9": 4.0,
-    "MP10": 8.0,
-}
+ACCEL_DISTANCE_TO_TRACK_M = _site_config["distance_to_track_m"]
 
 # Optional: side of track convention for each sensor:
 # -1 = left, +1 = right, 0 = unknown.
 # If you don't trust this information, set all to 0 and fill later.
-ACCEL_SIDE_OF_TRACK = {
-    "MP8": 0,
-    "MP9": 0,
-    "MP10": 0,
-}
+ACCEL_SIDE_OF_TRACK = _site_config["side_of_track"]
 
 # Optional: axis availability mask per sensor (x,y,z).
 # Use this if some sensors are Z-only.
 # If not specified, your writer can infer it from the data.
-ACCEL_AXIS_MASK = {
-    "MP8": [1, 1, 1],
-    "MP9": [1, 1, 1],
-    "MP10": [1, 1, 1],
-}
+ACCEL_AXIS_MASK = _site_config["axis_mask"]
 
 # ==============================================================================
 # DATABASE OUTPUT CONFIGURATION
