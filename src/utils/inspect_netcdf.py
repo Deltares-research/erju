@@ -128,5 +128,5 @@ def inspect_netcdf(file_path: str):
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260213_170828\EVENT_0002.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260213_174304\EVENT_0007.nc"
     inspect_netcdf(file_path)
