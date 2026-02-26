@@ -144,7 +144,8 @@ def create_netcdf_database(
             # ===================================================================
             dataset.event_id = str(event_id)
             dataset.site_id = site_name
-            dataset.t0_utc = t0_utc.isoformat().replace("+00:00", "Z")
+            event_t0_utc = t0_utc.isoformat().replace("+00:00", "Z")
+            dataset.event_t0_utc = event_t0_utc
             dataset.created_utc = (
                 datetime.now(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
             )
@@ -153,17 +154,17 @@ def create_netcdf_database(
 
             # Add database generation metadata if enabled
             if config.DATABASE_INCLUDE_METADATA:
-                dataset.accel_start_date = config.ACCEL_START_DATE
-                dataset.accel_end_date = config.ACCEL_END_DATE
-                dataset.accel_train_type_filter = (
+                dataset.query_start_date = config.ACCEL_START_DATE
+                dataset.query_end_date = config.ACCEL_END_DATE
+                dataset.query_train_type_filter = (
                     str(config.ACCEL_TRAINTYPE) if config.ACCEL_TRAINTYPE else "None"
                 )
-                dataset.accel_track_filter = (
+                dataset.query_track_filter = (
                     str(config.ACCEL_TRACK)
                     if config.ACCEL_TRACK is not None
                     else "None"
                 )
-                dataset.timezone = config.TIMEZONE
+                dataset.query_timezone = config.TIMEZONE
 
             # ===================================================================
             # GROUP: meta - Event metadata

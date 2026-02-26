@@ -138,7 +138,7 @@ ACCEL_AXIS_LABELS = ["x", "y", "z"]
 VAR_TIME = {
     "name": "time_s",
     "units": "s",
-    "long_name": "Time relative to t0_utc",
+    "long_name": "Time relative to event_t0_utc",
 }
 
 VAR_FREQUENCY = {
