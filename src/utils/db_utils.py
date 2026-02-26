@@ -3,6 +3,18 @@ from datetime import datetime, timedelta
 import numpy as np
 
 
+def _safe_float_or_nan(value):
+    """Convert value to float, returning NaN when missing/invalid."""
+    if value is None:
+        return np.nan
+    if isinstance(value, str) and value.strip() == "":
+        return np.nan
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return np.nan
+
+
 # Function to fetch the data from the database based on some given conditions
 def fetch_accel_data(
     db_path: str,
@@ -250,6 +262,9 @@ def fetch_multi_mp_accel_data(
                         "start_time": event[2],  # Event start time string
                         "traintype": event[3] if len(event) > 3 else None,
                         "track": event[4] if len(event) > 4 else None,
+                        "speed": _safe_float_or_nan(
+                            event[5] if len(event) > 5 else None
+                        ),
                         "time_window": time_window,
                     },
                     "measurement_points": {},

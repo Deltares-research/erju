@@ -64,15 +64,19 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 ACCEL_START_DATE = "2024-08-26 13:00:00"
 ACCEL_END_DATE = "2024-08-29 07:00:00"
 
+# Query chunk size in days for large date ranges.
+# Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
+ACCEL_QUERY_CHUNK_DAYS = 1
+
 # Campaign name (set to None to include all campaigns)
 ACCEL_CAMPAIGNS = None
 
 # Train type filter (e.g., "VIRM", "ICM", or None for all)
-ACCEL_TRAINTYPE = "VIRM"
+ACCEL_TRAINTYPE = "ICM"
 
 # Track filter (recommend integer for consistent metadata typing)
 # (Set to None for all tracks)
-ACCEL_TRACK = 1
+ACCEL_TRACK = None
 
 # ==============================================================================
 # ACCELEROMETER SENSOR SELECTION + STANDARDIZED IDS
@@ -153,12 +157,6 @@ VAR_DISTANCE = {
     "name": "acc_distance_to_track_m",
     "units": "m",
     "long_name": "Distance from accelerometer to track centerline",
-}
-
-VAR_SPEED = {
-    "name": "train_speed_mps",
-    "units": "m/s",
-    "long_name": "Train speed during passage",
 }
 
 VAR_AXIS_MASK = {

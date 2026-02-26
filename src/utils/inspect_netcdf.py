@@ -9,6 +9,21 @@ import netCDF4 as nc
 from pathlib import Path
 
 
+def _to_python_scalar(value):
+    """Convert NetCDF scalar values to friendly Python scalars for printing."""
+    if hasattr(value, "item"):
+        try:
+            value = value.item()
+        except Exception:
+            pass
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except Exception:
+            pass
+    return value
+
+
 def print_raw_structure(group, indent=0, group_path="ROOT"):
     """Print raw NetCDF structure (what's actually stored in the file)."""
     prefix = "  " * indent
@@ -31,6 +46,12 @@ def print_raw_structure(group, indent=0, group_path="ROOT"):
             shape_str = str(var.shape)
             dtype_str = str(var.dtype)
             print(f"{prefix}[VAR]  {group_path}.{var_name} [{dtype_str}, {shape_str}]")
+            if var.shape == ():
+                try:
+                    value = _to_python_scalar(var[()])
+                    print(f"{prefix}       value = {value}")
+                except Exception as exc:
+                    print(f"{prefix}       value = <error reading scalar: {exc}>")
             # Variable attributes (STORED)
             for attr in var.ncattrs():
                 val = getattr(var, attr)
@@ -71,6 +92,12 @@ def print_formatted_view(group, indent=0):
             shape_str = str(var.shape)
             dtype_str = str(var.dtype)
             print(f"{prefix}  {var_name:30s} {dtype_str:10s} {shape_str}")
+            if var.shape == ():
+                try:
+                    value = _to_python_scalar(var[()])
+                    print(f"{prefix}    value = {value}")
+                except Exception as exc:
+                    print(f"{prefix}    value = <error reading scalar: {exc}>")
             # Show attributes
             for attr in var.ncattrs():
                 val = getattr(var, attr)
@@ -128,5 +155,5 @@ def inspect_netcdf(file_path: str):
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260213_180355\EVENT_0001.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260226_114909\EVENT_0001.nc"
     inspect_netcdf(file_path)

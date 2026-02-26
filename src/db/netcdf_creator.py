@@ -14,6 +14,25 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
+def _apply_config_attributes(nc_var, var_config: dict, long_name_override: str = None):
+    """Apply NetCDF variable attributes from config, mapping description -> long_name."""
+    if not var_config:
+        return
+
+    long_name = (
+        long_name_override
+        if long_name_override is not None
+        else var_config.get("long_name", var_config.get("description"))
+    )
+    if long_name is not None:
+        nc_var.long_name = long_name
+
+    for attr_name, attr_value in var_config.items():
+        if attr_name in {"name", "long_name", "description"}:
+            continue
+        setattr(nc_var, attr_name, attr_value)
+
+
 def validate_config(config):
     """
     Validate configuration before writing NetCDF files.
@@ -66,6 +85,7 @@ def create_netcdf_database(
     config,
     name_format: str = "EVENT_{:04d}",
     compression_level: int = 9,
+    start_index: int = 1,
 ):
     """
     Create hierarchical NetCDF database from accelerometer events.
@@ -84,6 +104,7 @@ def create_netcdf_database(
         config: Configuration module with metadata settings.
         name_format: Format string for file naming.
         compression_level: Compression level (1-9).
+        start_index: Starting index for file numbering (1-based).
 
     Returns:
         list: List of created NetCDF file paths.
@@ -97,9 +118,9 @@ def create_netcdf_database(
     output_files = []
     total_events = len(events_dict)
 
-    for i, (event_id, event_data) in enumerate(events_dict.items(), start=1):
+    for local_idx, (event_id, event_data) in enumerate(events_dict.items(), start=1):
         # Generate file ID and path
-        file_id = name_format.format(i)
+        file_id = name_format.format(start_index + local_idx - 1)
         netcdf_filename = f"{file_id}.nc"
         netcdf_path = output_folder / netcdf_filename
 
@@ -170,17 +191,19 @@ def create_netcdf_database(
 
             meta_grp.createVariable("event_start_offset_s", "f4")
             meta_grp.createVariable("event_end_offset_s", "f4")
-            meta_grp.createVariable(config.VAR_SPEED["name"], "f4")
+            train_speed_var = meta_grp.createVariable("train_speed_kmh", "f4")
 
             meta_grp["event_start_offset_s"][:] = event_start_offset
             meta_grp["event_end_offset_s"][:] = event_end_offset
-            meta_grp[config.VAR_SPEED["name"]][:] = np.nan  # Unknown for now
-            if "units" in config.VAR_SPEED:
-                meta_grp[config.VAR_SPEED["name"]].units = config.VAR_SPEED["units"]
-            if "long_name" in config.VAR_SPEED:
-                meta_grp[config.VAR_SPEED["name"]].long_name = config.VAR_SPEED[
-                    "long_name"
-                ]
+
+            speed_kmh = metadata.get("speed", np.nan)
+            if speed_kmh is None:
+                speed_kmh = np.nan
+            train_speed_var[:] = speed_kmh
+            train_speed_var.units = "km/h"
+            train_speed_var.long_name = (
+                "Train speed during passage from source database"
+            )
 
             # ===================================================================
             # ROOT DIMENSIONS - Shared across all groups
@@ -219,10 +242,7 @@ def create_netcdf_database(
             )
             for idx, sensor_id in enumerate(sensor_ids):
                 dist_var[idx] = config.ACCEL_DISTANCE_TO_TRACK_M[sensor_id]
-            if "units" in config.VAR_DISTANCE:
-                dist_var.units = config.VAR_DISTANCE["units"]
-            if "long_name" in config.VAR_DISTANCE:
-                dist_var.long_name = config.VAR_DISTANCE["long_name"]
+            _apply_config_attributes(dist_var, config.VAR_DISTANCE)
 
             # Side of track variable (int8 for -1, 0, +1)
             side_var = geom_grp.createVariable(
@@ -238,8 +258,7 @@ def create_netcdf_database(
             )
             for idx, sensor_id in enumerate(sensor_ids):
                 mask_var[idx, :] = config.ACCEL_AXIS_MASK[sensor_id]
-            if "long_name" in config.VAR_AXIS_MASK:
-                mask_var.long_name = config.VAR_AXIS_MASK["long_name"]
+            _apply_config_attributes(mask_var, config.VAR_AXIS_MASK)
 
             # ===================================================================
             # GROUP: acc/<SENSOR_ID> - Accelerometer data for each measurement point
@@ -277,20 +296,21 @@ def create_netcdf_database(
                     complevel=compression_level if compression_level > 0 else 0,
                 )
                 time_var[:] = time_s
-                if "units" in config.VAR_TIME:
-                    time_var.units = config.VAR_TIME["units"]
-                if "long_name" in config.VAR_TIME:
-                    time_var.long_name = (
-                        f"{config.VAR_TIME['long_name']} for {sensor_id}"
-                    )
+                time_long_name = config.VAR_TIME.get(
+                    "long_name", config.VAR_TIME.get("description")
+                )
+                if time_long_name:
+                    time_long_name = f"{time_long_name} for {sensor_id}"
+                _apply_config_attributes(
+                    time_var,
+                    config.VAR_TIME,
+                    long_name_override=time_long_name,
+                )
 
                 # Sampling frequency
                 fs_var = acc_grp.createVariable(config.VAR_FREQUENCY["name"], "f4")
                 fs_var[:] = fs_hz
-                if "units" in config.VAR_FREQUENCY:
-                    fs_var.units = config.VAR_FREQUENCY["units"]
-                if "long_name" in config.VAR_FREQUENCY:
-                    fs_var.long_name = config.VAR_FREQUENCY["long_name"]
+                _apply_config_attributes(fs_var, config.VAR_FREQUENCY)
 
                 # Acceleration matrix [time, axis] - uses inherited acc_axis dimension
                 accel_var = acc_grp.createVariable(
@@ -303,15 +323,12 @@ def create_netcdf_database(
                 accel_var[:, 0] = trace_x
                 accel_var[:, 1] = trace_y
                 accel_var[:, 2] = trace_z
-                if "units" in config.VAR_ACCELERATION:
-                    accel_var.units = config.VAR_ACCELERATION["units"]
-                if "long_name" in config.VAR_ACCELERATION:
-                    accel_var.long_name = config.VAR_ACCELERATION["long_name"]
+                _apply_config_attributes(accel_var, config.VAR_ACCELERATION)
 
         output_files.append(str(netcdf_path))
 
         # Print progress
-        if i % 10 == 0 or i == total_events:
-            print(f"  Created {i}/{total_events} files...")
+        if local_idx % 10 == 0 or local_idx == total_events:
+            print(f"  Created {local_idx}/{total_events} files...")
 
     return output_files
