@@ -198,26 +198,45 @@ def print_axis_availability_summary(dataset):
     if "acc" not in dataset.groups:
         return
 
-    acc_root = dataset.groups["acc"]
-    sensor_ids = list(acc_root.groups.keys())
-    if len(sensor_ids) == 0:
+    if len(dataset["acc"].groups) == 0:
         return
 
     axis_labels = _get_axis_labels(dataset)
 
     print("ACCELEROMETER AXIS AVAILABILITY")
     print("=" * 80)
-    for sensor_id in sensor_ids:
-        mask = _get_sensor_axis_mask(dataset, sensor_id)
+    seen_sensor_ids = set()
+    summary_lines = []
+
+    for raw_sensor_id in dataset["acc"].groups:
+        # Canonicalize for robust de-duplication in case of hidden formatting chars
+        sensor_id = "".join(str(raw_sensor_id).split()).upper()
+        if sensor_id == "":
+            continue
+
+        if sensor_id in seen_sensor_ids:
+            continue
+        seen_sensor_ids.add(sensor_id)
+
+        # Resolve mask using raw key first, then normalized key as fallback
+        mask = _get_sensor_axis_mask(dataset, raw_sensor_id)
+        if mask is None and sensor_id != raw_sensor_id:
+            mask = _get_sensor_axis_mask(dataset, sensor_id)
+
         if mask is None:
-            print(f"  {sensor_id:10s} mask=N/A   saved_axes=unknown")
+            summary_lines.append(f"  {sensor_id:10s} mask=N/A   saved_axes=unknown")
             continue
 
         saved_axes = [
             axis_labels[idx] for idx, present in enumerate(mask) if int(present) == 1
         ]
         saved_axes_str = ",".join(saved_axes) if saved_axes else "none"
-        print(f"  {sensor_id:10s} mask={mask}   saved_axes={saved_axes_str}")
+        summary_lines.append(
+            f"  {sensor_id:10s} mask={mask}   saved_axes={saved_axes_str}"
+        )
+
+    for line in summary_lines:
+        print(line)
     print()
 
 
@@ -412,7 +431,7 @@ def inspect_netcdf(
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260227_164411\EVENT_0001.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260227_170426\EVENT_0002.nc"
 
     # Plotting switch: set True to show sample accelerometer plots, False to disable
     PLOT_ACCEL_SAMPLES = True
