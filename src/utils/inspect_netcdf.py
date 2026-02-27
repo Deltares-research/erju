@@ -136,6 +136,135 @@ def _get_event_t0_utc(dataset):
         return None
 
 
+def _get_axis_labels(dataset):
+    """Return axis labels in order, defaulting to x/y/z."""
+    default_labels = ["x", "y", "z"]
+    try:
+        geometry = dataset.groups.get("geometry")
+        if geometry is None or "axis_labels" not in geometry.variables:
+            return default_labels
+
+        labels = []
+        for raw in geometry.variables["axis_labels"][:]:
+            val = _to_python_scalar(raw)
+            labels.append(str(val).strip())
+
+        if len(labels) >= 3:
+            return labels[:3]
+    except Exception:
+        pass
+    return default_labels
+
+
+def _get_sensor_axis_mask(dataset, sensor_id):
+    """Return per-sensor axis mask as list of 3 ints, if available."""
+    # Preferred: per-sensor mask in acc/<sensor_id>/axis_mask
+    try:
+        acc_root = dataset.groups.get("acc")
+        if acc_root is not None and sensor_id in acc_root.groups:
+            sensor_group = acc_root.groups[sensor_id]
+            if "axis_mask" in sensor_group.variables:
+                values = np.asarray(sensor_group.variables["axis_mask"][:]).astype(int)
+                if values.size >= 3:
+                    return values[:3].tolist()
+    except Exception:
+        pass
+
+    # Fallback: geometry/axis_mask using geometry/acc_sensor_id index
+    try:
+        geometry = dataset.groups.get("geometry")
+        if (
+            geometry is not None
+            and "acc_sensor_id" in geometry.variables
+            and "axis_mask" in geometry.variables
+        ):
+            sensor_ids = [
+                str(_to_python_scalar(v))
+                for v in geometry.variables["acc_sensor_id"][:]
+            ]
+            if sensor_id in sensor_ids:
+                idx = sensor_ids.index(sensor_id)
+                values = np.asarray(geometry.variables["axis_mask"][idx, :]).astype(int)
+                if values.size >= 3:
+                    return values[:3].tolist()
+    except Exception:
+        pass
+
+    return None
+
+
+def print_axis_availability_summary(dataset):
+    """Print per-sensor saved-axis summary based on axis_mask."""
+    if "acc" not in dataset.groups:
+        return
+
+    acc_root = dataset.groups["acc"]
+    sensor_ids = list(acc_root.groups.keys())
+    if len(sensor_ids) == 0:
+        return
+
+    axis_labels = _get_axis_labels(dataset)
+
+    print("ACCELEROMETER AXIS AVAILABILITY")
+    print("=" * 80)
+    for sensor_id in sensor_ids:
+        mask = _get_sensor_axis_mask(dataset, sensor_id)
+        if mask is None:
+            print(f"  {sensor_id:10s} mask=N/A   saved_axes=unknown")
+            continue
+
+        saved_axes = [
+            axis_labels[idx] for idx, present in enumerate(mask) if int(present) == 1
+        ]
+        saved_axes_str = ",".join(saved_axes) if saved_axes else "none"
+        print(f"  {sensor_id:10s} mask={mask}   saved_axes={saved_axes_str}")
+    print()
+
+
+def print_event_metadata_summary(dataset):
+    """Print key event metadata (train type, speed, track number)."""
+    meta = dataset.groups.get("meta")
+    if meta is None:
+        return
+
+    train_type = "unknown"
+    train_speed = "unknown"
+    track_number = "unknown"
+
+    try:
+        if "train_type" in meta.variables:
+            train_type = str(_to_python_scalar(meta.variables["train_type"][()]))
+    except Exception:
+        pass
+
+    try:
+        if "train_speed_kmh" in meta.variables:
+            train_speed = float(meta.variables["train_speed_kmh"][()])
+    except Exception:
+        pass
+
+    try:
+        if "track_number" in meta.variables:
+            track_value = int(meta.variables["track_number"][()])
+            missing_value = -1
+            if "missing_value" in meta.variables["track_number"].ncattrs():
+                missing_value = int(
+                    _to_python_scalar(
+                        getattr(meta.variables["track_number"], "missing_value")
+                    )
+                )
+            track_number = "unknown" if track_value == missing_value else track_value
+    except Exception:
+        pass
+
+    print("EVENT METADATA SUMMARY")
+    print("=" * 80)
+    print(f"  train_type:      {train_type}")
+    print(f"  train_speed_kmh: {train_speed}")
+    print(f"  track_number:    {track_number}")
+    print()
+
+
 def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
     """Plot accelerometer time signals from the NetCDF file (no saving)."""
     if "acc" not in dataset.groups:
@@ -149,14 +278,25 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
         return
 
     event_t0_utc = _get_event_t0_utc(dataset)
+    axis_labels = _get_axis_labels(dataset)
 
     sensors_to_plot = sensor_ids[:max_sensors]
-    points_label = "full timeseries" if max_points is None else f"max {max_points} points"
-    print(f"\nPLOTTING ACCELEROMETER SIGNALS ({len(sensors_to_plot)} sensor(s), {points_label})")
+    points_label = (
+        "full timeseries" if max_points is None else f"max {max_points} points"
+    )
+    print(
+        f"\nPLOTTING ACCELEROMETER SIGNALS ({len(sensors_to_plot)} sensor(s), {points_label})"
+    )
     print("=" * 80)
 
     for sensor_id in sensors_to_plot:
         sensor_group = acc_root.groups[sensor_id]
+        axis_mask = _get_sensor_axis_mask(dataset, sensor_id)
+        active_axis_indices = (
+            [idx for idx, present in enumerate(axis_mask) if int(present) == 1]
+            if axis_mask is not None
+            else [0, 1, 2]
+        )
 
         if "time_s" in sensor_group.variables:
             time = np.asarray(sensor_group.variables["time_s"][:])
@@ -181,13 +321,13 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
         if "acceleration_mps2" in sensor_group.variables:
             accel = np.asarray(sensor_group.variables["acceleration_mps2"][:])
             if accel.ndim == 2 and accel.shape[1] >= 3:
-                traces = {
-                    "x": accel[:, 0],
-                    "y": accel[:, 1],
-                    "z": accel[:, 2],
-                }
+                for axis_idx, axis_name in enumerate(axis_labels[:3]):
+                    if axis_idx in active_axis_indices:
+                        traces[axis_name] = accel[:, axis_idx]
         else:
-            for axis in ["x", "y", "z"]:
+            for axis_idx, axis in enumerate(axis_labels[:3]):
+                if axis_idx not in active_axis_indices:
+                    continue
                 var_name = f"accel_{axis}"
                 if var_name in sensor_group.variables:
                     traces[axis] = np.asarray(sensor_group.variables[var_name][:])
@@ -204,7 +344,7 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
         fig, axes = plt.subplots(3, 1, figsize=(11, 7), sharex=True)
         fig.suptitle(f"Accelerometer sample traces - {sensor_id}")
 
-        for i, axis in enumerate(["x", "y", "z"]):
+        for i, axis in enumerate(axis_labels[:3]):
             if axis in traces:
                 axes[i].plot(time_plot[:n], traces[axis][:n], linewidth=0.9)
                 axes[i].set_ylabel(f"{axis.upper()} [m/s²]")
@@ -238,6 +378,8 @@ def inspect_netcdf(
     print("=" * 80 + "\n")
 
     with nc.Dataset(file_path, "r") as dataset:
+        print_event_metadata_summary(dataset)
+
         # PART 1: RAW NETCDF STRUCTURE (what's actually in the file)
         print("RAW NETCDF STRUCTURE (what's stored in file)")
         print("=" * 80)
@@ -250,6 +392,8 @@ def inspect_netcdf(
         print("\nFORMATTED VIEW (for understanding)")
         print("=" * 80)
         print_formatted_view(dataset)
+
+        print_axis_availability_summary(dataset)
 
         if plot_accel_samples:
             plot_sample_accel_timesignals(
@@ -268,7 +412,7 @@ def inspect_netcdf(
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260226_163053\EVENT_0090.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260227_164411\EVENT_0001.nc"
 
     # Plotting switch: set True to show sample accelerometer plots, False to disable
     PLOT_ACCEL_SAMPLES = True

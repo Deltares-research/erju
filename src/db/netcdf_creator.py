@@ -33,6 +33,18 @@ def _apply_config_attributes(nc_var, var_config: dict, long_name_override: str =
         setattr(nc_var, attr_name, attr_value)
 
 
+def _safe_int_or_missing(value, missing_value: int = -1):
+    """Convert value to int, returning missing_value when missing/invalid."""
+    if value is None:
+        return missing_value
+    if isinstance(value, str) and value.strip() == "":
+        return missing_value
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return missing_value
+
+
 def validate_config(config):
     """
     Validate configuration before writing NetCDF files.
@@ -176,11 +188,6 @@ def create_netcdf_database(
             train_type_var[0] = metadata.get("traintype", "unknown")
             train_type_var.long_name = "Train type/classification during passage"
 
-            # Track as int32 scalar if available
-            if config.ACCEL_TRACK is not None:
-                track_var = meta_grp.createVariable("track", "i4")
-                track_var[:] = config.ACCEL_TRACK
-
             # Calculate event timing relative to t0
             time_window = metadata["time_window"]
             event_start_offset = (
@@ -205,6 +212,15 @@ def create_netcdf_database(
             train_speed_var.long_name = (
                 "Train speed during passage from source database"
             )
+
+            track_number_var = meta_grp.createVariable("track_number", "i4")
+            track_number = _safe_int_or_missing(metadata.get("track"), missing_value=-1)
+            track_number_var[:] = track_number
+            track_number_var.long_name = (
+                "Track number during passage from source database"
+            )
+            track_number_var.missing_value = np.int32(-1)
+            track_number_var.comment = "-1 indicates unknown or missing track number"
 
             # ===================================================================
             # ROOT DIMENSIONS - Shared across all groups
@@ -312,6 +328,26 @@ def create_netcdf_database(
                 fs_var = acc_grp.createVariable(config.VAR_FREQUENCY["name"], "f4")
                 fs_var[:] = fs_hz
                 _apply_config_attributes(fs_var, config.VAR_FREQUENCY)
+
+                # Per-sensor axis availability mask [axis]
+                sensor_axis_mask_var = acc_grp.createVariable(
+                    config.VAR_AXIS_MASK["name"],
+                    "i1",
+                    ("acc_axis",),
+                )
+                sensor_axis_mask_var[:] = np.asarray(
+                    config.ACCEL_AXIS_MASK[sensor_id], dtype=np.int8
+                )
+                axis_mask_long_name = config.VAR_AXIS_MASK.get(
+                    "long_name", config.VAR_AXIS_MASK.get("description")
+                )
+                if axis_mask_long_name:
+                    axis_mask_long_name = f"{axis_mask_long_name} for {sensor_id}"
+                _apply_config_attributes(
+                    sensor_axis_mask_var,
+                    config.VAR_AXIS_MASK,
+                    long_name_override=axis_mask_long_name,
+                )
 
                 # Acceleration matrix [time, axis] - uses inherited acc_axis dimension
                 accel_var = acc_grp.createVariable(

@@ -46,9 +46,10 @@ TIMEZONE = "UTC"
 
 # Path to folder containing fiber optic H5 files (.h5 format)
 # (Not used yet if you are building accelerometer-only NetCDF files first)
-FO_DATA_PATH = (
-    r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
-)
+# FO_DATA_PATH = (
+#     r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+# )
+FO_DATA_PATH = r"C:\fo_holten_sample"
 
 # Path to accelerometer SQLite database
 ACCEL_DB_PATH = r"P:\archivedprojects\11207352-stem\database\Wielrondheid_132887.db"
