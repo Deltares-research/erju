@@ -284,6 +284,66 @@ def print_event_metadata_summary(dataset):
     print()
 
 
+def _get_fo_plot_payload(dataset, event_t0_utc):
+    """Return FO time axis and a few channel traces for plotting, if available."""
+    if "fo" not in dataset.groups:
+        return None
+
+    fo_grp = dataset.groups["fo"]
+    if "time_s" not in fo_grp.variables or "strain" not in fo_grp.variables:
+        return None
+
+    fo_time_s = np.asarray(fo_grp.variables["time_s"][:])
+    fo_strain = np.asarray(fo_grp.variables["strain"][:])
+    if fo_strain.ndim != 2 or fo_strain.shape[0] == 0:
+        return None
+
+    if event_t0_utc is not None:
+        fo_time_plot = np.array(
+            [event_t0_utc + timedelta(seconds=float(t)) for t in fo_time_s],
+            dtype=object,
+        )
+    else:
+        fo_time_plot = fo_time_s
+
+    channel_ids = None
+    center_channel = None
+    if "geometry_fo" in dataset.groups:
+        geometry_fo = dataset.groups["geometry_fo"]
+        if "fo_channel_id" in geometry_fo.variables:
+            channel_ids = np.asarray(geometry_fo.variables["fo_channel_id"][:]).astype(int)
+        if "centre_fo_channel" in geometry_fo.variables:
+            try:
+                center_channel = int(geometry_fo.variables["centre_fo_channel"][()])
+            except Exception:
+                center_channel = None
+
+    # Pick up to 3 representative FO channels near center.
+    if channel_ids is not None and channel_ids.size > 0:
+        if center_channel is None:
+            center_idx = int(channel_ids.size // 2)
+        else:
+            center_idx = int(np.argmin(np.abs(channel_ids - center_channel)))
+
+        candidate_idx = [center_idx - 1, center_idx, center_idx + 1]
+        selected_idx = [idx for idx in candidate_idx if 0 <= idx < channel_ids.size]
+        selected_idx = list(dict.fromkeys(selected_idx))
+        labels = [f"ch {int(channel_ids[idx])}" for idx in selected_idx]
+    else:
+        center_idx = int(fo_strain.shape[1] // 2)
+        candidate_idx = [center_idx - 1, center_idx, center_idx + 1]
+        selected_idx = [idx for idx in candidate_idx if 0 <= idx < fo_strain.shape[1]]
+        selected_idx = list(dict.fromkeys(selected_idx))
+        labels = [f"idx {idx}" for idx in selected_idx]
+
+    traces = [fo_strain[:, idx] for idx in selected_idx]
+    return {
+        "time_plot": fo_time_plot,
+        "traces": traces,
+        "labels": labels,
+    }
+
+
 def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
     """Plot accelerometer time signals from the NetCDF file (no saving)."""
     if "acc" not in dataset.groups:
@@ -298,6 +358,7 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
 
     event_t0_utc = _get_event_t0_utc(dataset)
     axis_labels = _get_axis_labels(dataset)
+    fo_payload = _get_fo_plot_payload(dataset, event_t0_utc)
 
     sensors_to_plot = sensor_ids[:max_sensors]
     points_label = (
@@ -360,8 +421,9 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
             print(f"  - {sensor_id}: empty signal, skipping")
             continue
 
-        fig, axes = plt.subplots(3, 1, figsize=(11, 7), sharex=True)
-        fig.suptitle(f"Accelerometer sample traces - {sensor_id}")
+        n_rows = 4 if fo_payload is not None else 3
+        fig, axes = plt.subplots(n_rows, 1, figsize=(11, 8 if n_rows == 4 else 7), sharex=True)
+        fig.suptitle(f"Accelerometer + FO sample traces - {sensor_id}")
 
         for i, axis in enumerate(axis_labels[:3]):
             if axis in traces:
@@ -373,6 +435,20 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
                 )
                 axes[i].set_yticks([])
             axes[i].grid(True, alpha=0.3)
+
+        if fo_payload is not None:
+            fo_time_plot = fo_payload["time_plot"]
+            n_fo = len(fo_time_plot) if max_points is None else min(len(fo_time_plot), max_points)
+            fo_ax = axes[3]
+            if n_fo == 0 or len(fo_payload["traces"]) == 0:
+                fo_ax.text(0.5, 0.5, "FO data not available", ha="center", va="center")
+                fo_ax.set_yticks([])
+            else:
+                for trace, label in zip(fo_payload["traces"], fo_payload["labels"]):
+                    fo_ax.plot(fo_time_plot[:n_fo], trace[:n_fo], linewidth=0.8, label=label)
+                fo_ax.set_ylabel("FO strain")
+                fo_ax.legend(loc="upper right", fontsize=8)
+            fo_ax.grid(True, alpha=0.3)
 
         axes[-1].set_xlabel(f"{time_label}")
         plt.tight_layout()
@@ -431,7 +507,7 @@ def inspect_netcdf(
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260227_170426\EVENT_0002.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260402_175419\EVENT_0001.nc"
 
     # Plotting switch: set True to show sample accelerometer plots, False to disable
     PLOT_ACCEL_SAMPLES = True

@@ -50,6 +50,9 @@ TIMEZONE = "UTC"
 #     r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
 # )
 FO_DATA_PATH = r"C:\fo_holten_sample"
+FO_DATA_PATH = (
+    r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+)
 
 # Enable/disable FO extraction per event.
 FO_ENABLE = True
