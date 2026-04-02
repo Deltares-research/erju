@@ -10,6 +10,7 @@ Usage:
 """
 
 import sys
+import csv
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import config_db as config
 from src.utils.db_utils import fetch_multi_mp_accel_data
+from src.utils.fo_utils import extract_fo_event_data
 from src.db.netcdf_creator import create_netcdf_database
 
 
@@ -79,6 +81,7 @@ def main():
 
     output_files = []
     total_events_found = 0
+    fo_report_rows = []
 
     for chunk_idx, (chunk_start_dt, chunk_end_dt) in enumerate(chunk_ranges, start=1):
         chunk_start = chunk_start_dt.strftime(DATE_FMT)
@@ -107,6 +110,46 @@ def main():
             print("  No events in this chunk.")
             continue
 
+        # 2b. Enrich events with FO data using exact accelerometer time window
+        if getattr(config, "FO_ENABLE", False):
+            print("  Extracting FO data for event windows...")
+            for event_id, event_data in events_dict.items():
+                time_window = event_data["event_metadata"]["time_window"]
+
+                try:
+                    fo_result = extract_fo_event_data(
+                        fo_data_path=config.FO_DATA_PATH,
+                        time_window=time_window,
+                        center_channel=config.FO_CENTER_CHANNEL,
+                        channel_half_window=config.FO_CHANNEL_HALF_WINDOW,
+                        reader=config.FO_READER,
+                    )
+                except Exception as exc:
+                    fo_result = {
+                        "found": False,
+                        "reason": f"fo_exception: {exc}",
+                        "file_paths": [],
+                    }
+
+                if fo_result.get("found", False):
+                    event_data["fo_data"] = fo_result
+
+                fo_report_rows.append(
+                    {
+                        "event_id": event_id,
+                        "chunk_start": chunk_start,
+                        "chunk_end": chunk_end,
+                        "has_fo": int(bool(fo_result.get("found", False))),
+                        "reason": fo_result.get("reason", "unknown"),
+                        "fo_file_count": len(fo_result.get("file_paths", [])),
+                        "fo_n_samples": (
+                            int(fo_result["strain"].shape[0])
+                            if fo_result.get("found", False)
+                            else 0
+                        ),
+                    }
+                )
+
         print(f"  Writing {n_events} NetCDF file(s)...")
         chunk_output_files = create_netcdf_database(
             events_dict=events_dict,
@@ -127,6 +170,27 @@ def main():
     print(f"Total events found: {total_events_found}")
     print(f"\nCreated {len(output_files)} NetCDF files")
     print(f"Location: {output_subfolder}")
+
+    if getattr(config, "FO_ENABLE", False) and getattr(
+        config, "FO_SAVE_AVAILABILITY_REPORT", True
+    ):
+        report_path = output_subfolder / "fo_event_availability.csv"
+        with open(report_path, "w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=[
+                    "event_id",
+                    "chunk_start",
+                    "chunk_end",
+                    "has_fo",
+                    "reason",
+                    "fo_file_count",
+                    "fo_n_samples",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(fo_report_rows)
+        print(f"FO availability report: {report_path}")
 
     print("\n" + "=" * 80)
     print("DATABASE CREATION - COMPLETE")

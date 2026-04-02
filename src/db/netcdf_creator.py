@@ -89,6 +89,12 @@ def validate_config(config):
                 f"got {len(config.ACCEL_AXIS_MASK[sensor_id])}"
             )
 
+    if getattr(config, "FO_ENABLE", False):
+        if getattr(config, "FO_CHANNEL_HALF_WINDOW", -1) < 0:
+            raise ValueError("FO_CHANNEL_HALF_WINDOW must be >= 0")
+        if getattr(config, "FO_CENTER_CHANNEL", -1) < 0:
+            raise ValueError("FO_CENTER_CHANNEL must be >= 0")
+
 
 def create_netcdf_database(
     events_dict: dict,
@@ -105,8 +111,8 @@ def create_netcdf_database(
     Handles both single and multiple measurement points per event.
     Each NetCDF file represents one train passing event and contains:
     - Root attributes: Global metadata (event_id, site_id, timestamps)
-    - meta/: Event metadata (train info, timing)
-    - geometry/: Sensor geometry information
+    - meta_acc/: Accelerometer event metadata (train info, timing)
+    - geometry_acc/: Accelerometer sensor geometry information
     - acc/<SENSOR_ID>/: Accelerometer data for each measurement point
 
     Args:
@@ -179,9 +185,9 @@ def create_netcdf_database(
                 dataset.query_timezone = config.TIMEZONE
 
             # ===================================================================
-            # GROUP: meta - Event metadata
+            # GROUP: meta_acc - Accelerometer event metadata
             # ===================================================================
-            meta_grp = dataset.createGroup("meta")
+            meta_grp = dataset.createGroup("meta_acc")
 
             # Train type as string variable (scalar)
             train_type_var = meta_grp.createVariable("train_type", str, ())
@@ -229,9 +235,9 @@ def create_netcdf_database(
             dataset.createDimension("acc_axis", 3)
 
             # ===================================================================
-            # GROUP: geometry - Sensor geometry
+            # GROUP: geometry_acc - Accelerometer sensor geometry
             # ===================================================================
-            geom_grp = dataset.createGroup("geometry")
+            geom_grp = dataset.createGroup("geometry_acc")
 
             # Map measurement point names to sensor IDs
             # Note: mps already has sensor IDs as keys (from fetch_multi_mp_accel_data)
@@ -361,6 +367,123 @@ def create_netcdf_database(
                 accel_var[:, 1] = trace_y
                 accel_var[:, 2] = trace_z
                 _apply_config_attributes(accel_var, config.VAR_ACCELERATION)
+
+            # ===================================================================
+            # FO modality (optional): meta_fo, geometry_fo, fo
+            # ===================================================================
+            fo_data = event_data.get("fo_data")
+            if fo_data and fo_data.get("found", False):
+                fo_timestamps = fo_data["timestamps"]
+                fo_strain = np.asarray(fo_data["strain"], dtype=np.float32)
+                fo_channel_ids = np.asarray(fo_data["channel_ids"], dtype=np.int32)
+
+                if fo_strain.ndim != 2:
+                    raise ValueError(
+                        f"FO strain must be 2D [time, channel], got shape {fo_strain.shape}"
+                    )
+
+                n_fo_time, n_fo_channel = fo_strain.shape
+                if n_fo_channel != len(fo_channel_ids):
+                    raise ValueError(
+                        "FO channel dimension mismatch between strain and channel_ids"
+                    )
+
+                # Root dimensions shared by geometry_fo and /fo
+                dataset.createDimension("fo_channel", n_fo_channel)
+
+                # GROUP: meta_fo
+                meta_fo_grp = dataset.createGroup("meta_fo")
+                fo_reader_var = meta_fo_grp.createVariable("fo_reader", str, ())
+                fo_reader_var[0] = str(fo_data.get("fo_reader", "unknown"))
+                fo_reader_var.long_name = "FO data reader type"
+
+                fo_file_count_var = meta_fo_grp.createVariable("fo_file_count", "i4")
+                fo_file_count_var[:] = len(fo_data.get("file_paths", []))
+                fo_file_count_var.long_name = (
+                    "Number of FO files concatenated for this event"
+                )
+
+                # GROUP: geometry_fo
+                geometry_fo_grp = dataset.createGroup("geometry_fo")
+
+                centre_fo_channel_var = geometry_fo_grp.createVariable(
+                    "centre_fo_channel", "i4"
+                )
+                centre_fo_channel_var[:] = int(fo_data.get("center_channel"))
+
+                fo_channel_half_window_var = geometry_fo_grp.createVariable(
+                    "fo_channel_half_window", "i4"
+                )
+                fo_channel_half_window_var[:] = int(fo_data.get("channel_half_window"))
+
+                fo_channel_id_var = geometry_fo_grp.createVariable(
+                    "fo_channel_id", "i4", ("fo_channel",)
+                )
+                fo_channel_id_var[:] = fo_channel_ids
+                fo_channel_id_var.long_name = "Absolute FO channel numbers"
+
+                # Keep requested variable name while storing literal channel values
+                fo_channel_position_var = geometry_fo_grp.createVariable(
+                    "fo_channel_position_m", "f4", ("fo_channel",)
+                )
+                fo_channel_position_var[:] = fo_channel_ids.astype(np.float32)
+                fo_channel_position_var.units = "-"
+                fo_channel_position_var.long_name = "Literal FO channel values"
+                fo_channel_position_var.comment = (
+                    "No distance conversion applied; values equal fo_channel_id"
+                )
+
+                channel_spacing = fo_data.get("channel_spacing_m")
+                if channel_spacing is not None:
+                    channel_spacing_var = geometry_fo_grp.createVariable(
+                        "fo_channel_spacing_m", "f4"
+                    )
+                    channel_spacing_var[:] = np.float32(channel_spacing)
+
+                gauge_length = fo_data.get("gauge_length_m")
+                if gauge_length is not None:
+                    gauge_length_var = geometry_fo_grp.createVariable(
+                        "fo_gauge_length_m", "f4"
+                    )
+                    gauge_length_var[:] = np.float32(gauge_length)
+
+                # GROUP: fo
+                fo_grp = dataset.createGroup("fo")
+                fo_grp.createDimension("fo_time", n_fo_time)
+
+                fo_time_s = np.array(
+                    [
+                        (t - t0_utc.replace(tzinfo=None)).total_seconds()
+                        for t in fo_timestamps
+                    ],
+                    dtype=np.float64,
+                )
+
+                fo_time_var = fo_grp.createVariable(
+                    "time_s",
+                    "f8",
+                    ("fo_time",),
+                    compression="zlib" if compression_level > 0 else None,
+                    complevel=compression_level if compression_level > 0 else 0,
+                )
+                fo_time_var[:] = fo_time_s
+                fo_time_var.units = "s"
+                fo_time_var.long_name = "FO time relative to event_t0_utc"
+
+                fo_fs_var = fo_grp.createVariable("fs_hz", "f4")
+                fo_fs_var[:] = np.float32(fo_data["fs_hz"])
+                fo_fs_var.units = "Hz"
+                fo_fs_var.long_name = "FO sampling frequency"
+
+                fo_strain_var = fo_grp.createVariable(
+                    "strain",
+                    "f4",
+                    ("fo_time", "fo_channel"),
+                    compression="zlib" if compression_level > 0 else None,
+                    complevel=compression_level if compression_level > 0 else 0,
+                )
+                fo_strain_var[:, :] = fo_strain
+                fo_strain_var.long_name = "FO strain time series"
 
         output_files.append(str(netcdf_path))
 

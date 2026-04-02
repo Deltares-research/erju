@@ -140,7 +140,7 @@ def _get_axis_labels(dataset):
     """Return axis labels in order, defaulting to x/y/z."""
     default_labels = ["x", "y", "z"]
     try:
-        geometry = dataset.groups.get("geometry")
+        geometry = dataset.groups.get("geometry_acc") or dataset.groups.get("geometry")
         if geometry is None or "axis_labels" not in geometry.variables:
             return default_labels
 
@@ -170,9 +170,9 @@ def _get_sensor_axis_mask(dataset, sensor_id):
     except Exception:
         pass
 
-    # Fallback: geometry/axis_mask using geometry/acc_sensor_id index
+    # Fallback: geometry_acc/axis_mask (or legacy geometry) using acc_sensor_id index
     try:
-        geometry = dataset.groups.get("geometry")
+        geometry = dataset.groups.get("geometry_acc") or dataset.groups.get("geometry")
         if (
             geometry is not None
             and "acc_sensor_id" in geometry.variables
@@ -242,7 +242,7 @@ def print_axis_availability_summary(dataset):
 
 def print_event_metadata_summary(dataset):
     """Print key event metadata (train type, speed, track number)."""
-    meta = dataset.groups.get("meta")
+    meta = dataset.groups.get("meta_acc") or dataset.groups.get("meta")
     if meta is None:
         return
 

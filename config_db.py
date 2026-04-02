@@ -51,6 +51,19 @@ TIMEZONE = "UTC"
 # )
 FO_DATA_PATH = r"C:\fo_holten_sample"
 
+# Enable/disable FO extraction per event.
+FO_ENABLE = True
+
+# FO reader type used by BaseFOdata factory.
+FO_READER = "optasense"
+
+# FO channel window definition around center channel.
+FO_CENTER_CHANNEL = 1190
+FO_CHANNEL_HALF_WINDOW = 6
+
+# Save per-event FO availability report (CSV) next to NetCDF outputs.
+FO_SAVE_AVAILABILITY_REPORT = True
+
 # Path to accelerometer SQLite database
 ACCEL_DB_PATH = r"P:\archivedprojects\11207352-stem\database\Wielrondheid_132887.db"
 

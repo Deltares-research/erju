@@ -1,11 +1,12 @@
 import os
-import pandas as pd
+from datetime import datetime, timedelta
+
 import numpy as np
-from datetime import datetime
+import pandas as pd
 from loguru import logger
 
-from src.utils.file_utils import get_files_in_dir, extract_timestamp_from_name
 from src.erju.process_FO_base import BaseFOdata
+from src.utils.file_utils import extract_timestamp_from_name, get_files_in_dir
 
 
 def from_window_get_fo_file(fo_data_path: str, time_window: list):
@@ -27,14 +28,21 @@ def from_window_get_fo_file(fo_data_path: str, time_window: list):
         list: A list of full file paths that cover the event time window, extended by one file before and after.
     """
     # Ensure time_window is a list of two datetime objects
-    if not (isinstance(time_window, list) and len(time_window) == 2 and
-            all(isinstance(t, datetime) for t in time_window)):
-        raise ValueError("time_window must be a list of two datetime objects: [start_time, end_time]")
+    if not (
+        isinstance(time_window, list)
+        and len(time_window) == 2
+        and all(isinstance(t, datetime) for t in time_window)
+    ):
+        raise ValueError(
+            "time_window must be a list of two datetime objects: [start_time, end_time]"
+        )
 
     event_start, event_end = time_window
 
-    # Get a list of all the .h5 file names in the folder (assumed sorted alphabetically, which also sorts them timewise)
-    file_names = get_files_in_dir(folder_path=fo_data_path, file_format='.h5')
+    # Get a list of all .h5 file names sorted by name (timestamp is embedded in name).
+    file_names = sorted(get_files_in_dir(folder_path=fo_data_path, file_format=".h5"))
+    if len(file_names) == 0:
+        return []
 
     # Extract timestamps from the file names.
     # This function should return a list of timestamps in a format that can be converted to pd.Timestamp.
@@ -79,58 +87,126 @@ def from_window_get_fo_file(fo_data_path: str, time_window: list):
             extended_indices.add(idx + 1)
 
     # Convert the indices back to a sorted list of full file paths
-    matching_file_paths = [os.path.join(fo_data_path, file_names[i]) for i in sorted(extended_indices)]
+    matching_file_paths = [
+        os.path.join(fo_data_path, file_names[i]) for i in sorted(extended_indices)
+    ]
 
     return matching_file_paths
 
 
-def get_fo_data_from_window(fo_data_path: str, first_channel: int, last_channel: int, center_channel: int,
-                            time_window: list):
+def extract_fo_event_data(
+    fo_data_path: str,
+    time_window: list,
+    center_channel: int,
+    channel_half_window: int,
+    reader: str = "optasense",
+):
+    """Extract FO strain for an event window using the same logic as compare_data.py.
+
+    Returns a dictionary with:
+      - found (bool)
+      - reason (str)
+      - file_paths (list[str])
+      - timestamps (list[datetime])
+      - fs_hz (float)
+      - strain (np.ndarray: [fo_time, fo_channel])
+      - channel_ids (np.ndarray: absolute channel numbers)
+      - center_channel / channel_half_window
+      - optional metadata (gauge_length_m, channel_spacing_m)
     """
-    Given an event (and thus, it's time window), this function will find all the FO files that have data
-    in that time window, extract it, append it together and return it. Note that it return two variables:
-    One is the data just transformed to strain, the second is the data with the bandpass applied internally.
+    first_channel = int(center_channel) - int(channel_half_window)
+    last_channel = int(center_channel) + int(channel_half_window)
+    if first_channel < 0:
+        return {
+            "found": False,
+            "reason": "invalid_channel_window",
+            "file_paths": [],
+        }
 
-    """
-    # Create an instance of the BaseFOdata class
-    fo = BaseFOdata(path_fo=fo_data_path, first_channel=first_channel,
-                    last_channel=last_channel, center_channel=center_channel)
+    fo_files_in_event = from_window_get_fo_file(fo_data_path, time_window)
+    if len(fo_files_in_event) == 0:
+        return {
+            "found": False,
+            "reason": "no_matching_fo_files",
+            "file_paths": [],
+        }
 
-    fo_strain_data = []
-    fo_strain_and_bandpass_data = []
+    fo = BaseFOdata.create_instance(
+        dir_path=fo_data_path,
+        first_channel=first_channel,
+        last_channel=last_channel,
+        reader=reader,
+    )
 
-    # Find the FO files that are in the time window
-    fo_files_in_event = from_window_get_fo_file(fo_data_path=fo_data_path, time_window=time_window)
+    strain_chunks = []
+    sampling_frequency = None
+    file_start_time = None
+    gauge_length_m = None
+    channel_spacing_m = None
 
-    # Loop through each file and extract the data
     for i, fo_file in enumerate(fo_files_in_event):
         if i == 0:
-            # If it is the first file:
             fo.extract_properties_per_file(fo_file)
-            file_start_time = fo.properties['FileStartTime']
-            sampling_frequency = fo.properties['SamplingFrequency[Hz]']
+            file_start_time = fo.properties.get("FileStartTime")
+            sampling_frequency = float(fo.properties.get("SamplingFrequency[Hz]"))
+            gauge_length_m = fo.properties.get("GaugeLength")
+            channel_spacing_m = fo.properties.get("SpatialSamplingInterval")
 
-        # Extract the data from the file
-        fo_processed_data, fo_strain_data = fo.extract_data(file_name=fo_file,
-                                                            first_channel=first_channel,
-                                                            last_channel=last_channel)
+        # extract_data returns (filtered_to_strain, strain). We store raw strain only.
+        _, raw_strain = fo.extract_data(
+            file_name=fo_file,
+            first_channel=first_channel,
+            last_channel=last_channel,
+        )
+        strain_chunks.append(raw_strain.T)
 
-        # Transpose the data to match the expected format
-        fo_processed_data = fo_processed_data.T
-        fo_strain_data = fo_strain_data.T
+    if len(strain_chunks) == 0:
+        return {
+            "found": False,
+            "reason": "no_fo_data_extracted",
+            "file_paths": fo_files_in_event,
+        }
 
-        # Append the data to the lists
-        fo_strain_data.append(fo_strain_data)
-        fo_strain_and_bandpass_data.append(fo_processed_data)
+    strain_all = np.concatenate(strain_chunks, axis=0)
 
-    # Concatenate the data from all files
-    fo_strain_data = np.concatenate(fo_strain_data, axis=0)
-    fo_strain_and_bandpass_data = np.concatenate(fo_strain_and_bandpass_data, axis=0)
+    # Build timestamps exactly as compare_data.py does.
+    timestamps = [
+        file_start_time + timedelta(seconds=i / sampling_frequency)
+        for i in range(strain_all.shape[0])
+    ]
 
-    # Compute the timestamps for the FO data
-    timestamps = [file_start_time + pd.Timedelta(seconds=i / sampling_frequency) for i in
-                  range(fo_strain_data.shape[0])]
-    # Convert timestamps to datetime objects
-    timestamps = [pd.Timestamp(ts) for ts in timestamps]
+    timestamps_array = np.array(timestamps, dtype="datetime64[ns]")
+    start_time_np = np.datetime64(time_window[0])
+    end_time_np = np.datetime64(time_window[1])
+    start_index = int(np.argmin(np.abs(timestamps_array - start_time_np)))
+    end_index = int(np.argmin(np.abs(timestamps_array - end_time_np)))
 
-    return fo_strain_data, fo_strain_and_bandpass_data, timestamps
+    if end_index < start_index:
+        start_index, end_index = end_index, start_index
+
+    timestamps_cropped = timestamps[start_index : end_index + 1]
+    strain_cropped = strain_all[start_index : end_index + 1, :]
+
+    if len(timestamps_cropped) == 0 or strain_cropped.size == 0:
+        return {
+            "found": False,
+            "reason": "empty_fo_after_crop",
+            "file_paths": fo_files_in_event,
+        }
+
+    channel_ids = np.arange(first_channel, last_channel + 1, dtype=np.int32)
+
+    return {
+        "found": True,
+        "reason": "ok",
+        "fo_reader": reader,
+        "file_paths": fo_files_in_event,
+        "timestamps": timestamps_cropped,
+        "fs_hz": np.float32(sampling_frequency),
+        "strain": np.asarray(strain_cropped, dtype=np.float32),
+        "channel_ids": channel_ids,
+        "center_channel": int(center_channel),
+        "channel_half_window": int(channel_half_window),
+        "gauge_length_m": gauge_length_m,
+        "channel_spacing_m": channel_spacing_m,
+    }
