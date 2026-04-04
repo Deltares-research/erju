@@ -100,6 +100,7 @@ def extract_fo_event_data(
     center_channel: int,
     channel_half_window: int,
     reader: str = "optasense",
+    manual_metadata: dict = None,
 ):
     """Extract FO strain for an event window using the same logic as compare_data.py.
 
@@ -194,6 +195,47 @@ def extract_fo_event_data(
             "file_paths": fo_files_in_event,
         }
 
+    # Build robust event-level metadata: use manual defaults, then overwrite
+    # with H5 properties when available.
+    file_properties = fo.properties if hasattr(fo, "properties") else {}
+    manual_metadata = manual_metadata or {}
+
+    metadata_map = {
+        "acquisition_id": "AcquisitionId",
+        "gauge_length": "GaugeLength",
+        "gauge_length_unit": "GaugeLengthUnit",
+        "spatial_sampling_interval": "SpatialSamplingInterval",
+        "spatial_sampling_interval_unit": "SpatialSamplingIntervalUnit",
+        "raw_data_unit": "RawDataUnit",
+        "raw_description": "RawDescription",
+        "fibre_refractive_index": "Fibre Refractive Index",
+        "number_of_measurements": "NumberOfMeasurements",
+    }
+
+    fo_meta = {
+        "acquisition_id": manual_metadata.get("acquisition_id"),
+        "gauge_length": manual_metadata.get("gauge_length"),
+        "gauge_length_unit": manual_metadata.get("gauge_length_unit"),
+        "spatial_sampling_interval": manual_metadata.get("spatial_sampling_interval"),
+        "spatial_sampling_interval_unit": manual_metadata.get(
+            "spatial_sampling_interval_unit"
+        ),
+        "raw_data_unit": manual_metadata.get("raw_data_unit"),
+        "raw_description": manual_metadata.get("raw_description"),
+        "fibre_refractive_index": manual_metadata.get("fibre_refractive_index"),
+        "number_of_measurements": manual_metadata.get("number_of_measurements"),
+    }
+
+    for target_key, source_key in metadata_map.items():
+        value = file_properties.get(source_key)
+        if value is None:
+            continue
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
+        if isinstance(value, np.generic):
+            value = value.item()
+        fo_meta[target_key] = value
+
     channel_ids = np.arange(first_channel, last_channel + 1, dtype=np.int32)
 
     return {
@@ -207,6 +249,17 @@ def extract_fo_event_data(
         "channel_ids": channel_ids,
         "center_channel": int(center_channel),
         "channel_half_window": int(channel_half_window),
-        "gauge_length_m": gauge_length_m,
-        "channel_spacing_m": channel_spacing_m,
+        "gauge_length_m": fo_meta.get("gauge_length", gauge_length_m),
+        "channel_spacing_m": fo_meta.get(
+            "spatial_sampling_interval", channel_spacing_m
+        ),
+        "acquisition_id": fo_meta.get("acquisition_id"),
+        "gauge_length": fo_meta.get("gauge_length"),
+        "gauge_length_unit": fo_meta.get("gauge_length_unit"),
+        "spatial_sampling_interval": fo_meta.get("spatial_sampling_interval"),
+        "spatial_sampling_interval_unit": fo_meta.get("spatial_sampling_interval_unit"),
+        "raw_data_unit": fo_meta.get("raw_data_unit"),
+        "raw_description": fo_meta.get("raw_description"),
+        "fibre_refractive_index": fo_meta.get("fibre_refractive_index"),
+        "number_of_measurements": fo_meta.get("number_of_measurements"),
     }

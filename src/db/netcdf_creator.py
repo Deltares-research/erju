@@ -4,7 +4,7 @@ NetCDF database creator for accelerometer events.
 Creates hierarchical NetCDF files with support for multiple measurement points.
 
 Author: Fabian Campos
-Date: February 2026
+Date: April 2026
 """
 
 import netCDF4 as nc
@@ -410,6 +410,74 @@ def create_netcdf_database(
                 fo_file_count_var.long_name = (
                     "Number of FO files concatenated for this event"
                 )
+
+                acquisition_id = fo_data.get("acquisition_id")
+                if acquisition_id is not None:
+                    acquisition_id_var = meta_fo_grp.createVariable(
+                        "acquisition_id", str, ()
+                    )
+                    acquisition_id_var[0] = str(acquisition_id)
+                    acquisition_id_var.long_name = "FO acquisition ID"
+
+                gauge_length = fo_data.get("gauge_length")
+                if gauge_length is not None:
+                    gauge_length_var = meta_fo_grp.createVariable("gauge_length", "f4")
+                    gauge_length_var[:] = np.float32(gauge_length)
+
+                gauge_length_unit = fo_data.get("gauge_length_unit")
+                if gauge_length_unit is not None:
+                    gauge_length_unit_var = meta_fo_grp.createVariable(
+                        "gauge_length_unit", str, ()
+                    )
+                    gauge_length_unit_var[0] = str(gauge_length_unit)
+
+                spatial_sampling_interval = fo_data.get("spatial_sampling_interval")
+                if spatial_sampling_interval is not None:
+                    spatial_sampling_interval_var = meta_fo_grp.createVariable(
+                        "spatial_sampling_interval", "f4"
+                    )
+                    spatial_sampling_interval_var[:] = np.float32(
+                        spatial_sampling_interval
+                    )
+
+                spatial_sampling_interval_unit = fo_data.get(
+                    "spatial_sampling_interval_unit"
+                )
+                if spatial_sampling_interval_unit is not None:
+                    spatial_sampling_interval_unit_var = meta_fo_grp.createVariable(
+                        "spatial_sampling_interval_unit", str, ()
+                    )
+                    spatial_sampling_interval_unit_var[0] = str(
+                        spatial_sampling_interval_unit
+                    )
+
+                raw_data_unit = fo_data.get("raw_data_unit")
+                if raw_data_unit is not None:
+                    raw_data_unit_var = meta_fo_grp.createVariable(
+                        "raw_data_unit", str, ()
+                    )
+                    raw_data_unit_var[0] = str(raw_data_unit)
+
+                raw_description = fo_data.get("raw_description")
+                if raw_description is not None:
+                    raw_description_var = meta_fo_grp.createVariable(
+                        "raw_description", str, ()
+                    )
+                    raw_description_var[0] = str(raw_description)
+
+                fibre_refractive_index = fo_data.get("fibre_refractive_index")
+                if fibre_refractive_index is not None:
+                    fibre_refractive_index_var = meta_fo_grp.createVariable(
+                        "fibre_refractive_index", "f4"
+                    )
+                    fibre_refractive_index_var[:] = np.float32(fibre_refractive_index)
+
+                number_of_measurements = fo_data.get("number_of_measurements")
+                if number_of_measurements is not None:
+                    number_of_measurements_var = meta_fo_grp.createVariable(
+                        "number_of_measurements", "i4"
+                    )
+                    number_of_measurements_var[:] = np.int32(number_of_measurements)
 
                 # GROUP: geometry_fo
                 geometry_fo_grp = dataset.createGroup("geometry_fo")

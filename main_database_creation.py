@@ -123,6 +123,7 @@ def main():
                         center_channel=config.FO_CENTER_CHANNEL,
                         channel_half_window=config.FO_CHANNEL_HALF_WINDOW,
                         reader=config.FO_READER,
+                        manual_metadata=getattr(config, "FO_METADATA_MANUAL", None),
                     )
                 except Exception as exc:
                     fo_result = {

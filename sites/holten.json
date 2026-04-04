@@ -177,6 +177,10 @@
     },
     "fibre_optics": {
         "fo_side_of_track": -1,
-        "fo_aprox_distance_to_track_m": 4.5
+        "fo_aprox_distance_to_track_m": 4.5,
+        "gauge_length": 10.0,
+        "gauge_length_unit": "m",
+        "spatial_sampling_interval": 1.0,
+        "spatial_sampling_interval_unit": "m"
     }
 }

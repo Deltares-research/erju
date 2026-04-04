@@ -33,6 +33,10 @@
     },
     "fibre_optics": {
         "fo_side_of_track": 0,
-        "fo_aprox_distance_to_track_m": 0.0
+        "fo_aprox_distance_to_track_m": 0.0,
+        "gauge_length": 0.0,
+        "gauge_length_unit": "m",
+        "spatial_sampling_interval": 0.0,
+        "spatial_sampling_interval_unit": "m"
     }
 }

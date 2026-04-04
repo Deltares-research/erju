@@ -75,6 +75,16 @@ FO_SIDE_OF_TRACK = _fo_site_config.get("fo_side_of_track", 0)
 # Optional: approximate FO cable distance to track centerline (meters).
 FO_APROX_DISTANCE_TO_TRACK_M = _fo_site_config.get("fo_aprox_distance_to_track_m")
 
+# Manual FO metadata defaults (overwritten by file properties when available).
+FO_METADATA_MANUAL = {
+    "gauge_length": _fo_site_config.get("gauge_length"),
+    "gauge_length_unit": _fo_site_config.get("gauge_length_unit"),
+    "spatial_sampling_interval": _fo_site_config.get("spatial_sampling_interval"),
+    "spatial_sampling_interval_unit": _fo_site_config.get(
+        "spatial_sampling_interval_unit"
+    ),
+}
+
 # Save per-event FO availability report (CSV) next to NetCDF outputs.
 FO_SAVE_AVAILABILITY_REPORT = True
 
