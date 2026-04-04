@@ -94,6 +94,14 @@ def validate_config(config):
             raise ValueError("FO_CHANNEL_HALF_WINDOW must be >= 0")
         if getattr(config, "FO_CENTER_CHANNEL", -1) < 0:
             raise ValueError("FO_CENTER_CHANNEL must be >= 0")
+        if getattr(config, "FO_SIDE_OF_TRACK", 0) not in {-1, 0, 1}:
+            raise ValueError("FO_SIDE_OF_TRACK must be one of {-1, 0, 1}")
+        fo_dist = getattr(config, "FO_APROX_DISTANCE_TO_TRACK_M", None)
+        if fo_dist is not None:
+            try:
+                float(fo_dist)
+            except (TypeError, ValueError):
+                raise ValueError("FO_APROX_DISTANCE_TO_TRACK_M must be numeric or None")
 
 
 def create_netcdf_database(
@@ -415,6 +423,23 @@ def create_netcdf_database(
                     "fo_channel_half_window", "i4"
                 )
                 fo_channel_half_window_var[:] = int(fo_data.get("channel_half_window"))
+
+                fo_side_var = geometry_fo_grp.createVariable("fo_side_of_track", "i1")
+                fo_side_var[:] = np.int8(getattr(config, "FO_SIDE_OF_TRACK", 0))
+                fo_side_var.long_name = (
+                    "FO side of track (-1=left, 0=unknown, +1=right)"
+                )
+
+                fo_aprox_dist = getattr(config, "FO_APROX_DISTANCE_TO_TRACK_M", None)
+                if fo_aprox_dist is not None:
+                    fo_aprox_dist_var = geometry_fo_grp.createVariable(
+                        "fo_aprox_distance_to_track_m", "f4"
+                    )
+                    fo_aprox_dist_var[:] = np.float32(fo_aprox_dist)
+                    fo_aprox_dist_var.units = "m"
+                    fo_aprox_dist_var.long_name = (
+                        "Approximate FO distance to track centerline"
+                    )
 
                 fo_channel_id_var = geometry_fo_grp.createVariable(
                     "fo_channel_id", "i4", ("fo_channel",)

@@ -1,32 +1,38 @@
 {
     "site_name": "Template",
     "description": "Template for creating new site configuration files. Copy this file and rename it to {site_name}.json",
-    "measurement_points": [
-        "Example_MP1_Location_Distance_Axis",
-        "Example_MP2_Location_Distance_Axis"
-    ],
-    "sensor_id_map": {
-        "Example_MP1_Location_Distance_Axis": "MP1",
-        "Example_MP2_Location_Distance_Axis": "MP2"
-    },
-    "distance_to_track_m": {
-        "MP1": 4.0,
-        "MP2": 8.0
-    },
-    "side_of_track": {
-        "MP1": 0,
-        "MP2": 0
-    },
-    "axis_mask": {
-        "MP1": [
-            1,
-            1,
-            1
+    "accelerometer": {
+        "measurement_points": [
+            "Example_MP1_Location_Distance_Axis",
+            "Example_MP2_Location_Distance_Axis"
         ],
-        "MP2": [
-            1,
-            1,
-            1
-        ]
+        "sensor_id_map": {
+            "Example_MP1_Location_Distance_Axis": "MP1",
+            "Example_MP2_Location_Distance_Axis": "MP2"
+        },
+        "distance_to_track_m": {
+            "MP1": 4.0,
+            "MP2": 8.0
+        },
+        "side_of_track": {
+            "MP1": 0,
+            "MP2": 0
+        },
+        "axis_mask": {
+            "MP1": [
+                1,
+                1,
+                1
+            ],
+            "MP2": [
+                1,
+                1,
+                1
+            ]
+        }
+    },
+    "fibre_optics": {
+        "fo_side_of_track": 0,
+        "fo_aprox_distance_to_track_m": 0.0
     }
 }

@@ -35,6 +35,10 @@ if not _site_config_file.exists():
 with open(_site_config_file, "r") as f:
     _site_config = json.load(f)
 
+# Support separated site sections with fallback to legacy flat layout.
+_accel_site_config = _site_config.get("accelerometer", _site_config)
+_fo_site_config = _site_config.get("fibre_optics", _site_config)
+
 # IMPORTANT:
 # Define the time basis of ACCEL_START_DATE / ACCEL_END_DATE.
 # Use "UTC" if your database timestamps are UTC; use "Europe/Amsterdam" if local.
@@ -49,9 +53,9 @@ TIMEZONE = "UTC"
 # FO_DATA_PATH = (
 #     r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
 # )
-FO_DATA_PATH = r"C:\fo_holten_sample"
+# FO_DATA_PATH = r"C:\fo_holten_sample"
 FO_DATA_PATH = (
-    r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+    r"F:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels"
 )
 
 # Enable/disable FO extraction per event.
@@ -62,7 +66,14 @@ FO_READER = "optasense"
 
 # FO channel window definition around center channel.
 FO_CENTER_CHANNEL = 1190
-FO_CHANNEL_HALF_WINDOW = 6
+FO_CHANNEL_HALF_WINDOW = 25
+
+# Optional: side-of-track convention for FO cable relative to track.
+# -1 = left, +1 = right, 0 = unknown.
+FO_SIDE_OF_TRACK = _fo_site_config.get("fo_side_of_track", 0)
+
+# Optional: approximate FO cable distance to track centerline (meters).
+FO_APROX_DISTANCE_TO_TRACK_M = _fo_site_config.get("fo_aprox_distance_to_track_m")
 
 # Save per-event FO availability report (CSV) next to NetCDF outputs.
 FO_SAVE_AVAILABILITY_REPORT = True
@@ -78,8 +89,8 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # ==============================================================================
 
 # Time range for extracting accelerometer events
-ACCEL_START_DATE = "2024-08-26 13:00:00"
-ACCEL_END_DATE = "2024-08-29 07:00:00"
+ACCEL_START_DATE = "2024-09-06 11:59:00"
+ACCEL_END_DATE = "2024-09-09 09:00:00"
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
@@ -101,26 +112,26 @@ ACCEL_TRACK = None
 # Site-specific configuration loaded from sites/{SITE_NAME}.json
 
 # Raw measurement point names as they appear in the accelerometer database.
-ACCEL_MEASUREMENT_POINTS = _site_config["measurement_points"]
+ACCEL_MEASUREMENT_POINTS = _accel_site_config["measurement_points"]
 
 # Stable short sensor IDs used in the NetCDF structure:
 # - /geometry/acc_sensor_id
 # - /acc/<SENSOR_ID>/...
-ACCEL_SENSOR_ID_MAP = _site_config["sensor_id_map"]
+ACCEL_SENSOR_ID_MAP = _accel_site_config["sensor_id_map"]
 
 # Distance from each accelerometer to the track centerline (meters).
 # These values must match the IDs used in ACCEL_SENSOR_ID_MAP.
-ACCEL_DISTANCE_TO_TRACK_M = _site_config["distance_to_track_m"]
+ACCEL_DISTANCE_TO_TRACK_M = _accel_site_config["distance_to_track_m"]
 
 # Optional: side of track convention for each sensor:
 # -1 = left, +1 = right, 0 = unknown.
 # If you don't trust this information, set all to 0 and fill later.
-ACCEL_SIDE_OF_TRACK = _site_config["side_of_track"]
+ACCEL_SIDE_OF_TRACK = _accel_site_config["side_of_track"]
 
 # Optional: axis availability mask per sensor (x,y,z).
 # Use this if some sensors are Z-only.
 # If not specified, your writer can infer it from the data.
-ACCEL_AXIS_MASK = _site_config["axis_mask"]
+ACCEL_AXIS_MASK = _accel_site_config["axis_mask"]
 
 # ==============================================================================
 # DATABASE OUTPUT CONFIGURATION

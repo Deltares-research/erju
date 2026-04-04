@@ -507,7 +507,7 @@ def inspect_netcdf(
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260402_175419\EVENT_0001.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260403_003339_10mGL_3000channels\EVENT_0020.nc"
 
     # Plotting switch: set True to show sample accelerometer plots, False to disable
     PLOT_ACCEL_SAMPLES = True
