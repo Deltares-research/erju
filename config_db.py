@@ -55,7 +55,7 @@ TIMEZONE = "UTC"
 # )
 # FO_DATA_PATH = r"C:\fo_holten_sample"
 FO_DATA_PATH = (
-    r"F:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels"
+    r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
 )
 
 # Enable/disable FO extraction per event.
@@ -99,8 +99,8 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # ==============================================================================
 
 # Time range for extracting accelerometer events
-ACCEL_START_DATE = "2024-09-06 11:59:00"
-ACCEL_END_DATE = "2024-09-09 09:00:00"
+ACCEL_START_DATE = "2024-08-26 13:00:00"
+ACCEL_END_DATE = "2024-08-29 07:50:00"
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
@@ -110,7 +110,7 @@ ACCEL_QUERY_CHUNK_DAYS = 1
 ACCEL_CAMPAIGNS = None
 
 # Train type filter (e.g., "VIRM", "ICM", or None for all)
-ACCEL_TRAINTYPE = "ICM"
+ACCEL_TRAINTYPE = None
 
 # Track filter (recommend integer for consistent metadata typing)
 # (Set to None for all tracks)

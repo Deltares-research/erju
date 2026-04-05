@@ -1,4 +1,10 @@
 """
+POSSIBLE LEGACY CODE - REVIEW BEFORE USE.
+
+This module is not used by the current production database pipeline.
+Current pipeline writes NetCDF via src/db/netcdf_creator.py through main_database_creation.py.
+Kept for historical reference.
+
 NetCDF writer module for database creation.
 
 This module handles writing event data to NetCDF format with proper

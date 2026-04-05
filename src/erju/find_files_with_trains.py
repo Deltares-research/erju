@@ -1,3 +1,10 @@
+"""
+POSSIBLE LEGACY CODE - REVIEW BEFORE USE.
+
+This module is currently not part of the main production database creation flow.
+Kept for historical train-detection experiments.
+"""
+
 from pathlib import Path
 
 import h5py
@@ -7,6 +14,7 @@ from loguru import logger
 from obspy.core.trace import Trace
 from obspy.signal.trigger import plot_trigger, recursive_sta_lta, trigger_onset
 from scipy.signal import butter, filtfilt
+
 
 def calculate_sampling_frequency(file: h5py.File) -> float:
     """
@@ -21,10 +29,12 @@ def calculate_sampling_frequency(file: h5py.File) -> float:
     """
     try:
         # Access the 'RawDataTime' dataset to get timestamps for calculating sampling interval
-        raw_data_time = file['Acquisition']['Raw[0]']['RawDataTime']
+        raw_data_time = file["Acquisition"]["Raw[0]"]["RawDataTime"]
 
         # Calculate time interval between the first two samples in seconds
-        time_interval = (raw_data_time[1] - raw_data_time[0]) * 1e-6  # Convert from microseconds to seconds
+        time_interval = (
+            raw_data_time[1] - raw_data_time[0]
+        ) * 1e-6  # Convert from microseconds to seconds
 
         # Sampling frequency is the inverse of the time interval
         sampling_frequency = 1 / time_interval
@@ -36,7 +46,9 @@ def calculate_sampling_frequency(file: h5py.File) -> float:
     except KeyError:
         raise ValueError("The 'RawDataTime' dataset is missing in the file structure.")
     except IndexError:
-        raise ValueError("The 'RawDataTime' dataset has insufficient data for frequency calculation.")
+        raise ValueError(
+            "The 'RawDataTime' dataset has insufficient data for frequency calculation."
+        )
 
 
 def highpass(data: np.ndarray, cutoff: float = 0.1) -> np.ndarray:
@@ -121,7 +133,7 @@ def find_trains_STALTA(
     # Run STA-LTA on the signal
     values = do_stalta(
         data=singlechanneldata,
-        freq=sf/2,
+        freq=sf / 2,
         plots=False,  # Only True for local dev
         lower=lower_seconds,
         upper=upper_seconds,
@@ -134,7 +146,9 @@ def find_trains_STALTA(
 
     if len(triggers) == 0:  # Only continue if there are triggers
         return pd.DataFrame(columns=["start", "end", "channel"])
-    offset = batch * batch_length  # TODO: We should not want to do this for very large runs
+    offset = (
+        batch * batch_length
+    )  # TODO: We should not want to do this for very large runs
     df_trains = pd.DataFrame(triggers, columns=["start", "end"]).assign(batch=batch)
     df_trains = df_trains.loc[lambda d: d.end - d.start > minimum_trigger_period * sf]
     df_trains["start"] = df_trains["start"] + offset
@@ -165,10 +179,14 @@ def detect_trainpassages_in_folder(
     """
     # Get metadata from the first file
     # Compare with the last file to ensure they are the same
-    with h5py.File(filenames[0], "r") as file_start, h5py.File(filenames[-1], "r") as file_end:
+    with h5py.File(filenames[0], "r") as file_start, h5py.File(
+        filenames[-1], "r"
+    ) as file_end:
         sf = calculate_sampling_frequency(file_start)
         if sf != calculate_sampling_frequency(file_end):
-            raise ValueError("Sampling frequency is not the same in the begin and end files")
+            raise ValueError(
+                "Sampling frequency is not the same in the begin and end files"
+            )
 
         data_shape = file_start["Acquisition"]["Raw[0]"]["RawData"].shape
         if data_shape != file_end["Acquisition"]["Raw[0]"]["RawData"].shape:
@@ -180,7 +198,9 @@ def detect_trainpassages_in_folder(
 
     # Load local files
     dfs = []
-    file_batches = [filenames[i : i + batchsize] for i in range(0, len(filenames), batchsize)]
+    file_batches = [
+        filenames[i : i + batchsize] for i in range(0, len(filenames), batchsize)
+    ]
     batchlength = batchsize * filelength
     for batch_number, batch in enumerate(file_batches):
         logger.info(f"Reading files in batch {batch_number}")
@@ -234,6 +254,7 @@ def detect_trainpassages_in_folder(
     df = df.drop(columns=["startfile_index", "endfile_index", "batch"])
     return df
 
+
 ########################################################################################################################
 """
 Based on the code provided by Joost (ProRail) and Edwin (Deltares), this code:
@@ -244,11 +265,11 @@ Based on the code provided by Joost (ProRail) and Edwin (Deltares), this code:
 - If it detects a train, it saves the start and end times of the train, the channel number, and the file name
 - It then saves all the files with trains in a CSV file
 """
-#TODO: This now works only with .h5 files. Lets make it general like in the old train_detectionOLDFILE.py
+# TODO: This now works only with .h5 files. Lets make it general like in the old train_detectionOLDFILE.py
 
 # From a given folder path, get all the files with a given extension
-path_to_files = Path(r'C:\fo_samples\holten')
-save_path = r'N:\Projects\11210000\11210064\B. Measurements and calculations\holten'
+path_to_files = Path(r"C:\fo_samples\holten")
+save_path = r"N:\Projects\11210000\11210064\B. Measurements and calculations\holten"
 
 # Detection parameters
 batchsize = 1
@@ -266,18 +287,18 @@ files_with_trains = detect_trainpassages_in_folder(
 )
 
 # Combine "startfile" and "endfile" columns into one Series and get unique values
-all_files = pd.concat([files_with_trains['startfile'], files_with_trains['endfile']]).unique()
+all_files = pd.concat(
+    [files_with_trains["startfile"], files_with_trains["endfile"]]
+).unique()
 
 # Extract input folder name dynamically
 input_folder_name = path_to_files.name
 
 # Automatically generate the output CSV filename based on parameters and input folder name
-output_filename = (
-    f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}.csv")
+output_filename = f"trains_{input_folder_name}_res{detection_resolution}_low{stalta_lower_thres}_up{stalta_upper_thres}.csv"
 output_filepath = Path(save_path) / output_filename
 
 # Save the results to a CSV file
-pd.DataFrame(all_files, columns=['file_name']).to_csv(output_filepath, index=False)
+pd.DataFrame(all_files, columns=["file_name"]).to_csv(output_filepath, index=False)
 
 logger.info(f"Saved the detected trains file list to {output_filepath}")
-

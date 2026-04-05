@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import config_db as config
 from src.utils.db_utils import fetch_multi_mp_accel_data
 from src.utils.fo_utils import extract_fo_event_data
-from src.db.netcdf_creator import create_netcdf_database
+from src.db.netcdf import create_netcdf_database
 
 
 DATE_FMT = "%Y-%m-%d %H:%M:%S"
