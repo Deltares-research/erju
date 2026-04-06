@@ -91,8 +91,25 @@ def main() -> None:
         f"      Rows: {len(df):,}  |  Unique events: {n_events:,}  |  Columns: {len(df.columns)}"
     )
     log_lines.append(
-        f"Rows: {len(df)}  |  Events: {n_events}  |  Columns: {len(df.columns)}"
+        f"Rows (raw): {len(df)}  |  Events (raw): {n_events}  |  Columns: {len(df.columns)}"
     )
+
+    # Exclude sensors whose stored targets are not in mm/s (e.g. in-track
+    # sensors that record raw acceleration in g).
+    if cfg.exclude_sensor_ids:
+        before = len(df)
+        df = df[~df["sensor_id"].isin(cfg.exclude_sensor_ids)].copy()
+        dropped = before - len(df)
+        print(
+            f"      Excluded sensor_ids {cfg.exclude_sensor_ids}: "
+            f"-{dropped:,} rows → {len(df):,} rows remaining"
+        )
+        log_lines.append(
+            f"Excluded sensor_ids: {cfg.exclude_sensor_ids} (-{dropped} rows)"
+        )
+        n_events = df["event_id"].nunique()
+
+    print(f"      Final: {len(df):,} rows  |  {n_events:,} unique events")
 
     # ------------------------------------------------------------------
     # 2. Train/test split by event_id

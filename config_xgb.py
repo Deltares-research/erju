@@ -94,7 +94,7 @@ class FeatureEngineeringConfig:
 class OutputConfig:
     """Output naming for model artifacts."""
 
-    version_name: str = "xgb_v002"
+    version_name: str = "xgb_v003"
     final_model_filename: str = "model_final.ubj"
     config_snapshot_filename: str = "config_snapshot.json"
     split_manifest_filename: str = "split_manifest.json"
@@ -120,13 +120,36 @@ class XGBTrainingConfig:
     fe: FeatureEngineeringConfig = field(default_factory=FeatureEngineeringConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
+    # Sensors to exclude from training — rows where sensor_id is in this list
+    # are dropped after loading the Parquet, before any split or feature work.
+    # MP14-MP19 are in-track sensors (sleepers + ballast depth) that store raw
+    # acceleration in g, not velocity in mm/s.  Their target_pgv_z_mms values
+    # in the current Parquet are therefore physically wrong (g values mislabeled
+    # as mm/s).  They are excluded here so the model trains only on the 12
+    # free-field sensors (MP1-MP13) whose targets are correct.
+    # Once the NetCDF database is rebuilt (netcdf_creator.py now writes
+    # acceleration_g for these sensors) and the Parquet is regenerated
+    # (build_parquet_v1.py now has exclude_sensor_ids=[MP14..MP19]),
+    # these sensors will be absent from the Parquet entirely.
+    exclude_sensor_ids: List[str] = field(
+        default_factory=lambda: ["MP14", "MP15", "MP16", "MP17", "MP18", "MP19"]
+    )
+
     # Human-readable notes for this experiment — saved verbatim to config_snapshot.json.
     # Intended for paper writing and cross-experiment comparison.
     experiment_notes: str = (
-        "v002: log1p target transform + physics-inspired geometry features "
-        "(feat_log1p_distance, feat_inv_distance_sq) + max_depth=6. "
-        "v001 baseline: OOF R2=0.22, Test RMSE=6.39 mm/s, target skewness=4.26. "
-        "Distant sensors MP14-MP18 had MAE > 6 mm/s in v001."
+        "v003: identical to v002 (log1p target, geometry features, max_depth=6) "
+        "but MP14-MP19 excluded from training and evaluation. "
+        "Reason: colleagues confirmed MP14-MP19 are in-track sensors (sleepers + "
+        "ballast depth) recording raw acceleration in g, NOT velocity in mm/s. "
+        "Their target_pgv_z_mms values in the v001 Parquet are therefore corrupted "
+        "(g values stored as if mm/s). "
+        "Excluding these 6 sensors reduces the dataset to 12 free-field sensors "
+        "(MP1-MP13) with correct mm/s targets. "
+        "v002 results (all sensors, corrupted): OOF RMSE=7.28, MAE=3.28, R2=0.084. "
+        "v001 results (all sensors, corrupted): OOF RMSE=6.72, MAE=3.57, R2=0.22. "
+        "Future: rebuild NetCDF + Parquet so MP14-MP19 are written with correct units "
+        "and excluded at Parquet-build time; this v003 is a clean interim experiment."
     )
 
     # If True, print per-fold progress during GroupKFold
