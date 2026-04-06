@@ -311,7 +311,9 @@ def _get_fo_plot_payload(dataset, event_t0_utc):
     if "geometry_fo" in dataset.groups:
         geometry_fo = dataset.groups["geometry_fo"]
         if "fo_channel_id" in geometry_fo.variables:
-            channel_ids = np.asarray(geometry_fo.variables["fo_channel_id"][:]).astype(int)
+            channel_ids = np.asarray(geometry_fo.variables["fo_channel_id"][:]).astype(
+                int
+            )
         if "centre_fo_channel" in geometry_fo.variables:
             try:
                 center_channel = int(geometry_fo.variables["centre_fo_channel"][()])
@@ -398,8 +400,15 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
             continue
 
         traces = {}
-        if "acceleration_mps2" in sensor_group.variables:
-            accel = np.asarray(sensor_group.variables["acceleration_mps2"][:])
+        # Support both the current name (velocity_mms) and the legacy name
+        # (acceleration_mps2) used in NetCDF files built before the rename.
+        _accel_var = next(
+            (n for n in ("velocity_mms", "acceleration_mps2")
+             if n in sensor_group.variables),
+            None,
+        )
+        if _accel_var is not None:
+            accel = np.asarray(sensor_group.variables[_accel_var][:])
             if accel.ndim == 2 and accel.shape[1] >= 3:
                 for axis_idx, axis_name in enumerate(axis_labels[:3]):
                     if axis_idx in active_axis_indices:
@@ -422,7 +431,9 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
             continue
 
         n_rows = 4 if fo_payload is not None else 3
-        fig, axes = plt.subplots(n_rows, 1, figsize=(11, 8 if n_rows == 4 else 7), sharex=True)
+        fig, axes = plt.subplots(
+            n_rows, 1, figsize=(11, 8 if n_rows == 4 else 7), sharex=True
+        )
         fig.suptitle(f"Accelerometer + FO sample traces - {sensor_id}")
 
         for i, axis in enumerate(axis_labels[:3]):
@@ -438,15 +449,21 @@ def plot_sample_accel_timesignals(dataset, max_sensors=3, max_points=None):
 
         if fo_payload is not None:
             fo_time_plot = fo_payload["time_plot"]
-            n_fo = len(fo_time_plot) if max_points is None else min(len(fo_time_plot), max_points)
+            n_fo = (
+                len(fo_time_plot)
+                if max_points is None
+                else min(len(fo_time_plot), max_points)
+            )
             fo_ax = axes[3]
             if n_fo == 0 or len(fo_payload["traces"]) == 0:
                 fo_ax.text(0.5, 0.5, "FO data not available", ha="center", va="center")
                 fo_ax.set_yticks([])
             else:
                 for trace, label in zip(fo_payload["traces"], fo_payload["labels"]):
-                    fo_ax.plot(fo_time_plot[:n_fo], trace[:n_fo], linewidth=0.8, label=label)
-                fo_ax.set_ylabel("FO strain")
+                    fo_ax.plot(
+                        fo_time_plot[:n_fo], trace[:n_fo], linewidth=0.8, label=label
+                    )
+                fo_ax.set_ylabel("FO strain (\u03b5, dimensionless)")
                 fo_ax.legend(loc="upper right", fontsize=8)
             fo_ax.grid(True, alpha=0.3)
 
@@ -507,7 +524,7 @@ def inspect_netcdf(
 
 if __name__ == "__main__":
     # Hardcoded path for easy testing (change as needed)
-    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260405_111215_10mGL_6000channels\EVENT_0323.nc"
+    file_path = r"P:\11210978-erju-ai\holten_db\netcdf_20260405_001947_10mGL_3000channels\EVENT_0014.nc"
 
     # Plotting switch: set True to show sample accelerometer plots, False to disable
     PLOT_ACCEL_SAMPLES = True

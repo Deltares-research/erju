@@ -119,9 +119,8 @@ def _read_axis_mask_for_sensor(
 def compute_pgv_z_mms(velocity_z_mms: np.ndarray) -> float:
     """Return peak ground velocity from the z-channel of the stored velocity trace.
 
-    The /acc/<SENSOR_ID>/acceleration_mps2 variable is named after the original
-    sensor output but contains pre-processed velocity in mm/s.  No integration
-    is applied here; the target is simply max(abs(signal_z)).
+    The /acc/<SENSOR_ID>/velocity_mms variable stores pre-processed velocity
+    in mm/s.  The target is simply max(abs(signal_z)).
     """
     v = np.asarray(velocity_z_mms, dtype=np.float64)
     if v.size == 0:
@@ -355,10 +354,20 @@ def validate_row_eligibility(
         return False, "missing_sensor_group"
 
     sensor_group = acc_root.groups[sensor_id]
-    if "acceleration_mps2" not in sensor_group.variables:
-        return False, "missing_acceleration_mps2"
+    # Support both the current name (velocity_mms) and the legacy name used
+    # in NetCDF files built before the rename.
+    _vel_var = next(
+        (
+            n
+            for n in ("velocity_mms", "acceleration_mps2")
+            if n in sensor_group.variables
+        ),
+        None,
+    )
+    if _vel_var is None:
+        return False, "missing_velocity_mms"
 
-    accel = np.asarray(sensor_group.variables["acceleration_mps2"][:], dtype=np.float64)
+    accel = np.asarray(sensor_group.variables[_vel_var][:], dtype=np.float64)
     if accel.ndim != 2 or accel.shape[1] < 3 or accel.shape[0] < 2:
         return False, "invalid_accel_shape"
 
