@@ -55,7 +55,7 @@ TIMEZONE = "UTC"
 # )
 # FO_DATA_PATH = r"C:\fo_holten_sample"
 FO_DATA_PATH = (
-    r"F:\recording_2024-08-26T12_59_54Z_5kHzping_1kHzlog_1mCS_2mGL_3000channels"
+    r"F:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
 )
 
 # Enable/disable FO extraction per event.
@@ -99,8 +99,8 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # ==============================================================================
 
 # Time range for extracting accelerometer events
-ACCEL_START_DATE = "2024-08-26 13:00:00"
-ACCEL_END_DATE = "2024-08-29 07:50:00"
+ACCEL_START_DATE = "2024-08-29 08:00:00"
+ACCEL_END_DATE = "2024-09-06 12:00:00"
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
@@ -170,7 +170,7 @@ NAME_FORMAT = "EVENT_{:04d}"
 DATABASE_INCLUDE_METADATA = True
 
 # Pipeline version (for reproducibility tracking)
-PIPELINE_VERSION = "1.0.0"
+PIPELINE_VERSION = "1.1.0"
 
 # ==============================================================================
 # NETCDF VARIABLE NAMING + METADATA

@@ -363,9 +363,19 @@ def create_netcdf_database(
                     long_name_override=axis_mask_long_name,
                 )
 
-                # Acceleration matrix [time, axis] - uses inherited acc_axis dimension
+                # Acceleration/velocity matrix [time, axis].
+                # MP1–MP13 store velocity in mm/s; MP14–MP19 store raw
+                # acceleration in g.  Choose the variable config accordingly.
+                _sensor_unit = getattr(config, "ACCEL_SENSOR_DATA_UNIT", {}).get(
+                    sensor_id, "velocity_mms"
+                )
+                _var_acc_cfg = (
+                    config.VAR_ACCELERATION_G
+                    if _sensor_unit == "acceleration_g"
+                    else config.VAR_ACCELERATION
+                )
                 accel_var = acc_grp.createVariable(
-                    config.VAR_ACCELERATION["name"],
+                    _var_acc_cfg["name"],
                     "f4",
                     ("acc_time", "acc_axis"),
                     compression="zlib" if compression_level > 0 else None,
@@ -374,7 +384,7 @@ def create_netcdf_database(
                 accel_var[:, 0] = trace_x
                 accel_var[:, 1] = trace_y
                 accel_var[:, 2] = trace_z
-                _apply_config_attributes(accel_var, config.VAR_ACCELERATION)
+                _apply_config_attributes(accel_var, _var_acc_cfg)
 
             # ===================================================================
             # FO modality (optional): meta_fo, geometry_fo, fo
