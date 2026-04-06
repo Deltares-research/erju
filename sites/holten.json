@@ -181,6 +181,8 @@
         "gauge_length": 10.0,
         "gauge_length_unit": "m",
         "spatial_sampling_interval": 1.0,
-        "spatial_sampling_interval_unit": "m"
+        "spatial_sampling_interval_unit": "m",
+        "fo_first_channel": 1184,
+        "fo_last_channel": 1200
     }
 }

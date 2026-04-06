@@ -262,4 +262,6 @@ def extract_fo_event_data(
         "raw_description": fo_meta.get("raw_description"),
         "fibre_refractive_index": fo_meta.get("fibre_refractive_index"),
         "number_of_measurements": fo_meta.get("number_of_measurements"),
+        "fo_first_channel": first_channel,
+        "fo_last_channel": last_channel,
     }
