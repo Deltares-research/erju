@@ -65,6 +65,31 @@ def prepare_features(
 
 
 # ---------------------------------------------------------------------------
+# Feature engineering
+# ---------------------------------------------------------------------------
+
+
+def engineer_features(X: pd.DataFrame, fe_cfg: Any) -> pd.DataFrame:
+    """Apply training-time feature engineering to the feature matrix.
+
+    All derived features are computed from columns already in the Parquet — no
+    raw NetCDF data is needed.  Every transformation is controlled by flags in
+    FeatureEngineeringConfig, which is saved to config_snapshot.json so the
+    exact transformations applied in each experiment are fully traceable.
+
+    Currently adds (when add_geometry_features=True):
+      feat_log1p_distance  = log(1 + acc_distance_to_track_m)
+      feat_inv_distance_sq = 1 / (acc_distance_to_track_m^2 + 1)
+    """
+    X = X.copy()
+    if fe_cfg.add_geometry_features and "acc_distance_to_track_m" in X.columns:
+        d = X["acc_distance_to_track_m"].clip(lower=0.0)
+        X["feat_log1p_distance"] = np.log1p(d)
+        X["feat_inv_distance_sq"] = 1.0 / (d**2 + 1.0)
+    return X
+
+
+# ---------------------------------------------------------------------------
 # Event-level train / test split
 # ---------------------------------------------------------------------------
 

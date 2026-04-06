@@ -1,12 +1,16 @@
-"""Train XGBoost v1 regression model for PGV_z prediction.
+"""Train XGBoost v2 regression model for PGV_z prediction.
 
 Workflow:
   1. Load Parquet dataset
   2. Hold out a fixed test set (by event_id)
-  3. GroupKFold cross-validation on train+val events → OOF predictions
-  4. Train final model on all train+val data using mean OOF best_round
-  5. Evaluate final model on held-out test set
-  6. Save all artifacts to a versioned build folder
+  3. Prepare features + feature engineering (geometry features)
+  4. GroupKFold cross-validation on train+val events → OOF predictions
+  5. Train final model on all train+val data using mean OOF best_round
+  6. Evaluate final model on held-out test set
+  7. Save all artifacts to a versioned build folder
+
+All metrics and saved artifacts are in original mm/s units (target is
+back-transformed from log-space before reporting).
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from config_xgb import CONFIG
 from src.ml.xgb_utils import (
     build_split_manifest,
     create_build_folder,
+    engineer_features,
     extract_feature_importance,
     load_dataset,
     make_event_level_test_split,
@@ -71,7 +76,7 @@ def main() -> None:
     ]
 
     print("=" * 70)
-    print("XGBoost v1 — PGV_z Regression")
+    print("XGBoost v2 — PGV_z Regression")
     print("=" * 70)
     print(f"Input : {parquet_path}")
     print(f"Build : {build_dir}")
@@ -113,7 +118,7 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------
-    # 3. Prepare features
+    # 3. Prepare features + feature engineering
     # ------------------------------------------------------------------
     print("\n[3/6] Preparing features ...")
     X_tv, y_tv, groups_tv = prepare_features(
@@ -128,24 +133,46 @@ def main() -> None:
         identifier_cols=cfg.features.identifier_cols,
         string_cols=cfg.features.string_cols,
     )
+    X_tv = engineer_features(X_tv, cfg.fe)
+    X_test = engineer_features(X_test, cfg.fe)
     feature_names: List[str] = list(X_tv.columns)
     print(f"      Feature count: {len(feature_names)}")
+    if cfg.fe.add_geometry_features:
+        print("      + feat_log1p_distance, feat_inv_distance_sq added")
+    if cfg.fe.log_transform_target:
+        print("      + log1p target transform enabled (metrics reported in mm/s)")
     log_lines.append(f"Feature count: {len(feature_names)}")
+
+    # Apply log1p to the target for training.  y_tv / y_test are kept in
+    # original mm/s for computing reported metrics and saving artifacts.
+    if cfg.fe.log_transform_target:
+        y_tv_model = pd.Series(np.log1p(y_tv.values), index=y_tv.index)
+        y_test_model = pd.Series(np.log1p(y_test.values), index=y_test.index)
+    else:
+        y_tv_model = y_tv
+        y_test_model = y_test
 
     # ------------------------------------------------------------------
     # 4. GroupKFold cross-validation
     # ------------------------------------------------------------------
-    print(f"\n[4/6] GroupKFold CV ({cfg.split.n_cv_folds} folds by event_id) ...")
-    oof_preds, fold_history, best_rounds = train_groupkfold(
+    cv_note = " (fold metrics in log-space)" if cfg.fe.log_transform_target else ""
+    print(
+        f"\n[4/6] GroupKFold CV ({cfg.split.n_cv_folds} folds by event_id){cv_note} ..."
+    )
+    oof_preds_model, fold_history, best_rounds = train_groupkfold(
         X=X_tv,
-        y=y_tv,
+        y=y_tv_model,
         groups=groups_tv,
         model_cfg=cfg.model,
         n_folds=cfg.split.n_cv_folds,
         verbose=cfg.verbose_folds,
     )
 
-    oof_metrics = _metrics(y_tv.values, oof_preds)
+    # Back-transform OOF predictions to mm/s before computing metrics.
+    oof_preds_mms = (
+        np.expm1(oof_preds_model) if cfg.fe.log_transform_target else oof_preds_model
+    )
+    oof_metrics = _metrics(y_tv.values, oof_preds_mms)
     mean_best_round = int(round(np.mean(best_rounds)))
     print(f"\n  OOF RMSE : {oof_metrics['rmse']:.4f} mm/s")
     print(f"  OOF MAE  : {oof_metrics['mae']:.4f} mm/s")
@@ -162,7 +189,7 @@ def main() -> None:
 
     save_oof_predictions(
         train_val_df=train_val_df,
-        oof_preds=oof_preds,
+        oof_preds=oof_preds_mms,
         target_col=cfg.features.target_col,
         output_path=build_dir / cfg.output.oof_predictions_filename,
     )
@@ -178,7 +205,7 @@ def main() -> None:
     print(f"\n[5/6] Training final model ({mean_best_round} rounds on train+val) ...")
     final_model = train_final_model(
         X=X_tv,
-        y=y_tv,
+        y=y_tv_model,
         model_cfg=cfg.model,
         n_rounds=mean_best_round,
     )
@@ -188,8 +215,12 @@ def main() -> None:
     # 6. Evaluate on held-out test set
     # ------------------------------------------------------------------
     print("\n[6/6] Evaluating on held-out test set ...")
-    test_preds = final_model.predict(X_test)
-    test_metrics = _metrics(y_test.values, test_preds)
+    test_preds_model = final_model.predict(X_test)
+    # Back-transform to mm/s for interpretable metrics.
+    test_preds_mms = (
+        np.expm1(test_preds_model) if cfg.fe.log_transform_target else test_preds_model
+    )
+    test_metrics = _metrics(y_test.values, test_preds_mms)
 
     print(f"  Test RMSE : {test_metrics['rmse']:.4f} mm/s")
     print(f"  Test MAE  : {test_metrics['mae']:.4f} mm/s")
@@ -205,12 +236,17 @@ def main() -> None:
     save_json(build_dir / cfg.output.config_snapshot_filename, cfg.as_dict())
 
     summary = {
+        "experiment_notes": cfg.experiment_notes,
         "build_folder": str(build_dir),
         "input_parquet": str(parquet_path),
         "n_rows": int(len(df)),
         "n_events": int(n_events),
         "n_features": int(len(feature_names)),
         "feature_names": feature_names,
+        "feature_engineering": {
+            "log_transform_target": cfg.fe.log_transform_target,
+            "add_geometry_features": cfg.fe.add_geometry_features,
+        },
         "split": manifest,
         "oof_metrics": oof_metrics,
         "test_metrics": test_metrics,
@@ -234,25 +270,25 @@ def main() -> None:
 
     plot_predicted_vs_actual(
         y_true=y_tv.values,
-        y_pred=oof_preds,
+        y_pred=oof_preds_mms,
         title="OOF: Predicted vs Actual PGV_z",
         output_path=plots_dir / "oof_predicted_vs_actual.png",
     )
     plot_residuals(
         y_true=y_tv.values,
-        y_pred=oof_preds,
+        y_pred=oof_preds_mms,
         title="OOF",
         output_path=plots_dir / "oof_residuals.png",
     )
     plot_predicted_vs_actual(
         y_true=y_test.values,
-        y_pred=test_preds,
+        y_pred=test_preds_mms,
         title="Test: Predicted vs Actual PGV_z",
         output_path=plots_dir / "test_predicted_vs_actual.png",
     )
     plot_residuals(
         y_true=y_test.values,
-        y_pred=test_preds,
+        y_pred=test_preds_mms,
         title="Test",
         output_path=plots_dir / "test_residuals.png",
     )
