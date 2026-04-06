@@ -143,6 +143,13 @@ ACCEL_SIDE_OF_TRACK = _accel_site_config["side_of_track"]
 # If not specified, your writer can infer it from the data.
 ACCEL_AXIS_MASK = _accel_site_config["axis_mask"]
 
+# Physical data unit per sensor:
+#   "velocity_mms"   — free-field sensors (MP1–MP13); data stored in mm/s
+#   "acceleration_g" — in-track sensors at sleepers/ballast (MP14–MP19);
+#                      data stored as raw acceleration in g (from the DB)
+# Defaults to "velocity_mms" for any sensor not listed.
+ACCEL_SENSOR_DATA_UNIT = _accel_site_config.get("sensor_data_unit", {})
+
 # ==============================================================================
 # DATABASE OUTPUT CONFIGURATION
 # ==============================================================================
@@ -169,7 +176,7 @@ PIPELINE_VERSION = "1.0.0"
 # NETCDF VARIABLE NAMING + METADATA
 # ==============================================================================
 
-# Accelerometer axis labels (order must match acceleration_mps2 columns)
+# Accelerometer axis labels (order must match velocity_mms columns)
 ACCEL_AXIS_LABELS = ["x", "y", "z"]
 
 # Variable names and metadata (recommend using NetCDF/CF-style "long_name")
@@ -186,9 +193,17 @@ VAR_FREQUENCY = {
 }
 
 VAR_ACCELERATION = {
-    "name": "acceleration_mps2",
-    "units": "m/s^2",
-    "long_name": "Acceleration time series (x, y, z)",
+    "name": "velocity_mms",
+    "units": "mm/s",
+    "long_name": "Velocity time series (x, y, z)",
+}
+
+# Variable config for in-track sensors (MP14–MP19) that record raw
+# acceleration in g directly from the measurement database.
+VAR_ACCELERATION_G = {
+    "name": "acceleration_g",
+    "units": "g",
+    "long_name": "Acceleration time series (x, y, z) in units of g",
 }
 
 VAR_DISTANCE = {

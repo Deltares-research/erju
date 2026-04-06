@@ -141,6 +141,20 @@ def main() -> None:
                         )
                     else:
                         for sensor_id in sensor_ids:
+                            # Skip sensors that record a different physical
+                            # quantity (e.g. raw acceleration in g).
+                            if sensor_id in cfg.exclude_sensor_ids:
+                                skipped.append(
+                                    SkipRecord(
+                                        level="sensor",
+                                        event_id=event_id,
+                                        sensor_id=sensor_id,
+                                        reason="excluded_sensor_id_in_config",
+                                        file_path=str(nc_path),
+                                    )
+                                )
+                                continue
+
                             eligible, reason = validate_row_eligibility(
                                 dataset=dataset,
                                 sensor_id=sensor_id,
@@ -161,10 +175,19 @@ def main() -> None:
                                 continue
 
                             sensor_group = dataset.groups["acc"].groups[sensor_id]
-                            # acceleration_mps2 stores pre-processed velocity in
-                            # mm/s; target is peak absolute z-channel value.
+                            # velocity_mms stores pre-processed velocity in mm/s;
+                            # target is peak absolute z-channel value.
+                            # Fall back to legacy name for files built before the rename.
+                            _vel_var = next(
+                                (
+                                    n
+                                    for n in ("velocity_mms", "acceleration_mps2")
+                                    if n in sensor_group.variables
+                                ),
+                                "velocity_mms",
+                            )
                             vel_z_mms = np.asarray(
-                                sensor_group.variables["acceleration_mps2"][:],
+                                sensor_group.variables[_vel_var][:],
                                 dtype=np.float64,
                             )[:, 2]
 

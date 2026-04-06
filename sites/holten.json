@@ -173,6 +173,26 @@
                 0,
                 1
             ]
+        },
+        "sensor_data_unit": {
+            "MP1":  "velocity_mms",
+            "MP2":  "velocity_mms",
+            "MP3":  "velocity_mms",
+            "MP4":  "velocity_mms",
+            "MP5":  "velocity_mms",
+            "MP6":  "velocity_mms",
+            "MP7":  "velocity_mms",
+            "MP8":  "velocity_mms",
+            "MP9":  "velocity_mms",
+            "MP10": "velocity_mms",
+            "MP12": "velocity_mms",
+            "MP13": "velocity_mms",
+            "MP14": "acceleration_g",
+            "MP15": "acceleration_g",
+            "MP16": "acceleration_g",
+            "MP17": "acceleration_g",
+            "MP18": "acceleration_g",
+            "MP19": "acceleration_g"
         }
     },
     "fibre_optics": {

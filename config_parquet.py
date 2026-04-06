@@ -13,7 +13,7 @@ from typing import List, Tuple, Dict, Any
 class TargetConfig:
     """Target definition settings.
 
-    v1: the /acc/<SENSOR_ID>/acceleration_mps2 variable stores pre-processed
+    v1: the /acc/<SENSOR_ID>/velocity_mms variable stores pre-processed
     velocity in mm/s.  The target is therefore the peak absolute value of
     the z-channel — no integration is performed.
     """
@@ -128,6 +128,14 @@ class ParquetV1Config:
     # Debug: limit to first N files (0 = no limit).
     # Set to a small number (e.g. 5) for quick smoke-tests.
     max_files: int = 0
+
+    # Sensors to exclude from Parquet output.
+    # MP14-MP19 are in-track sensors (sleepers + ballast depth) that record
+    # raw acceleration in g — not velocity in mm/s — so they cannot serve as
+    # PGV_z targets and must be excluded from the ML dataset.
+    exclude_sensor_ids: List[str] = field(
+        default_factory=lambda: ["MP14", "MP15", "MP16", "MP17", "MP18", "MP19"]
+    )
 
     output: OutputConfig = field(default_factory=OutputConfig)
 
