@@ -62,9 +62,9 @@ SENSOR_GEOMETRY: dict[str, dict] = {
 # USER INPUT — edit these values, then run the script
 # ===========================================================================
 
-EVENT_NUMBER = 10  # integer 1–254  (held-out test events only)
+EVENT_NUMBER = 8  # integer 1–254  (held-out test events only)
 
-DISTANCE_M = 5.0  # distance to track in metres
+DISTANCE_M = 16  # distance to track in metres
 # available: 2.0 | 4.0 | 5.0 | 8.0 | 16.0 | 25.0
 
 TRACK_SIDE = -1  # side of track: -1 = left, 0 = unknown, +1 = right
@@ -74,7 +74,6 @@ SENSOR_ID = None  # optional: e.g. "MP12"  — if set, overrides DISTANCE_M
 # Set to None to use DISTANCE_M + TRACK_SIDE manually.
 
 # ===========================================================================
-
 
 # ---------------------------------------------------------------------------
 # Load artifacts once
@@ -217,6 +216,8 @@ def _plot(
             arrowprops=dict(arrowstyle="->", color="#4878CF", lw=0.8),
         )
 
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.set_xlabel("Distance to track (m)", fontsize=10)
     ax.set_ylabel("PGV$_z$ (mm/s)", fontsize=10)
     ax.set_title(
@@ -224,10 +225,8 @@ def _plot(
         f"Prediction: {chosen_dist:.0f} m, side={side_str} → {predicted:.2f} mm/s",
         fontsize=10,
     )
-    ax.set_xlim(0, max(all_dists.max(), chosen_dist) * 1.1 + 1)
-    ax.set_ylim(bottom=0)
     ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, which="both", alpha=0.3)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_event = event_id.replace(":", "-").replace("/", "-")
