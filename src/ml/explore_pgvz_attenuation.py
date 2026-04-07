@@ -215,36 +215,37 @@ def _plot_summary_all(df: pd.DataFrame, output_dir: Path) -> None:
     plt.close(fig)
 
 
-def _plot_summary_grouped(
+def _plot_summary_by_group(
     df: pd.DataFrame,
     group_col: str,
-    filename: str,
     title_label: str,
     output_dir: Path,
-) -> None:
+) -> list[str]:
+    """One PNG per group value, saved to output_dir/."""
     groups = sorted(df[group_col].dropna().unique())
-    n_events = df["event_id"].nunique()
-
-    cmap = plt.get_cmap("tab10")
-    colors = [cmap(i % 10) for i in range(len(groups))]
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for i, grp in enumerate(groups):
+    saved: list[str] = []
+    for grp in groups:
         sub = df[df[group_col] == grp]
         if sub.empty:
             continue
+        n_grp = sub["event_id"].nunique()
         stats = _agg_by_distance(sub)
-        _draw_band(ax, stats, color=colors[i], label=str(grp))
 
-    _finalise_ax(
-        ax,
-        f"PGV$_z$ attenuation by {title_label}  (N={n_events} total events, side: left)\n"
-        "Mean ± 1 std across events per distance",
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
-    fig.savefig(output_dir / filename, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        _draw_band(ax, stats, color="#4878CF", label=str(grp))
+        _finalise_ax(
+            ax,
+            f"PGV$_z$ attenuation — {title_label}: {grp}  (N={n_grp} events, side: left)\n"
+            "Mean ± 1 std across events per distance",
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_grp = str(grp).replace(" ", "_").replace("/", "-")
+        fname = f"summary_{group_col}_{safe_grp}.png"
+        fig.tight_layout()
+        fig.savefig(output_dir / fname, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        saved.append(fname)
+    return saved
 
 
 # ---------------------------------------------------------------------------
@@ -257,9 +258,19 @@ def main() -> None:
     print("  PGV_z attenuation explorer")
     print("=" * 60)
     print("Loading data ...")
+    # Load full dataset first to report how many events exist before side filter
+    df_all = pd.read_parquet(PARQUET)
+    df_all = df_all[~df_all["sensor_id"].isin(EXCLUDE_SENSOR_IDS)]
+    n_total = df_all["event_id"].nunique()
+
     df = _load_data()
     n_events = df["event_id"].nunique()
-    print(f"  {len(df)} rows | {n_events} unique events | side={SIDE_FILTER}")
+    n_dropped = n_total - n_events
+    print(f"  Total events (all sides) : {n_total}")
+    print(f"  Events with side={SIDE_FILTER} sensors: {n_events}")
+    if n_dropped:
+        print(f"  Note: {n_dropped} events had no side={SIDE_FILTER} sensor → excluded from all plots")
+    print(f"  Rows used: {len(df)}")
 
     # --- Individual plots ---
     indiv_dir = OUTPUT_DIR / "individual"
@@ -276,15 +287,13 @@ def main() -> None:
     _plot_summary_all(df, OUTPUT_DIR)
     print("  summary_all.png saved.")
 
-    _plot_summary_grouped(
-        df, "train_type", "summary_by_traintype.png", "train type", OUTPUT_DIR
-    )
-    print("  summary_by_traintype.png saved.")
+    saved_tt = _plot_summary_by_group(df, "train_type", "train type", OUTPUT_DIR)
+    for f in saved_tt:
+        print(f"  {f} saved.")
 
-    _plot_summary_grouped(
-        df, "track_number", "summary_by_track.png", "track number", OUTPUT_DIR
-    )
-    print("  summary_by_track.png saved.")
+    saved_tr = _plot_summary_by_group(df, "track_number", "track number", OUTPUT_DIR)
+    for f in saved_tr:
+        print(f"  {f} saved.")
 
     print(f"\nAll done. Plots saved to: {OUTPUT_DIR}")
 
