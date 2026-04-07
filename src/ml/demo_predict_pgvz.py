@@ -1,14 +1,9 @@
-"""Interactive demo: predict PGV_z at a chosen distance for a test event.
+"""XGBoost v003 demo — predict PGV_z at a chosen distance for a test event.
 
-Usage (from project root):
-    python src/ml/demo_predict_pgvz.py
-
-The user is prompted to pick:
-  - An event number (1-254, from the v003 held-out test set)
-  - A distance to track (from the 6 sensor distances available in the data)
-
-The model predicts PGV_z (mm/s) at that distance and compares it to the
-real measured values at every sensor for that event.
+Usage:
+  1. Edit the USER INPUT block below
+  2. Run:  python src/ml/demo_predict_pgvz.py
+  3. The result is printed to the console and a PNG is saved to the model plots folder.
 """
 
 from __future__ import annotations
@@ -46,6 +41,39 @@ DIST_SENSOR_MAP = {
     16.0: ["MP1"],
     25.0: ["MP2"],
 }
+
+# Known geometry for each free-field sensor (used when SENSOR_ID is set)
+SENSOR_GEOMETRY: dict[str, dict] = {
+    "MP1": {"distance_m": 16.0, "side": -1},
+    "MP2": {"distance_m": 25.0, "side": -1},
+    "MP3": {"distance_m": 2.0, "side": 1},
+    "MP4": {"distance_m": 2.0, "side": -1},
+    "MP5": {"distance_m": 4.0, "side": 1},
+    "MP6": {"distance_m": 4.0, "side": 1},
+    "MP7": {"distance_m": 4.0, "side": -1},
+    "MP8": {"distance_m": 4.0, "side": -1},
+    "MP9": {"distance_m": 4.0, "side": -1},
+    "MP10": {"distance_m": 8.0, "side": -1},
+    "MP12": {"distance_m": 5.0, "side": -1},
+    "MP13": {"distance_m": 5.0, "side": -1},
+}
+
+# ===========================================================================
+# USER INPUT — edit these values, then run the script
+# ===========================================================================
+
+EVENT_NUMBER = 10  # integer 1–254  (held-out test events only)
+
+DISTANCE_M = 5.0  # distance to track in metres
+# available: 2.0 | 4.0 | 5.0 | 8.0 | 16.0 | 25.0
+
+TRACK_SIDE = -1  # side of track: -1 = left, 0 = unknown, +1 = right
+
+SENSOR_ID = None  # optional: e.g. "MP12"  — if set, overrides DISTANCE_M
+# and TRACK_SIDE with that sensor's known geometry.
+# Set to None to use DISTANCE_M + TRACK_SIDE manually.
+
+# ===========================================================================
 
 
 # ---------------------------------------------------------------------------
@@ -97,12 +125,14 @@ def _get_fo_feature_row(test_df: pd.DataFrame, event_id: str, cfg: dict) -> pd.S
 def _predict_at_distance(
     feature_row: pd.Series,
     distance_m: float,
+    track_side: int,
     cfg: dict,
     model: xgb.XGBRegressor,
 ) -> float:
-    """Overwrite distance in the feature row and predict PGV_z (mm/s)."""
+    """Overwrite distance and side in the feature row and predict PGV_z (mm/s)."""
     row = feature_row.copy()
     row["acc_distance_to_track_m"] = distance_m
+    row["acc_side_of_track"] = track_side
 
     X = pd.DataFrame([row])
 
@@ -131,9 +161,13 @@ def _plot(
     event_id: str,
     event_rows: pd.DataFrame,
     chosen_dist: float,
+    track_side: int,
+    sensor_label: str,
     predicted: float,
     output_dir: Path,
 ) -> Path:
+
+    side_str = {-1: "left", 0: "unknown", 1: "right"}.get(track_side, str(track_side))
 
     # Actual values per sensor, sorted by distance
     actual = (
@@ -147,13 +181,28 @@ def _plot(
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    ax.scatter(all_dists, all_actuals, s=90, zorder=5, color="#4878CF",
-               label="Actual PGV$_z$ (measured sensors)",
-               edgecolors="white", linewidths=0.6)
+    ax.scatter(
+        all_dists,
+        all_actuals,
+        s=90,
+        zorder=5,
+        color="#4878CF",
+        label="Actual PGV$_z$ (measured sensors)",
+        edgecolors="white",
+        linewidths=0.6,
+    )
     ax.plot(all_dists, all_actuals, "--", color="#4878CF", lw=1.0, alpha=0.5)
-    ax.scatter(chosen_dist, predicted, s=160, zorder=6, color="#D65F5F", marker="*",
-               label=f"Model prediction @ {chosen_dist:.0f} m → {predicted:.2f} mm/s",
-               edgecolors="white", linewidths=0.6)
+    ax.scatter(
+        chosen_dist,
+        predicted,
+        s=160,
+        zorder=6,
+        color="#D65F5F",
+        marker="*",
+        label=f"Model prediction @ {chosen_dist:.0f} m, side={side_str} → {predicted:.2f} mm/s",
+        edgecolors="white",
+        linewidths=0.6,
+    )
     ax.axvline(chosen_dist, color="#D65F5F", lw=0.8, ls=":", alpha=0.6)
 
     mask = np.isclose(all_dists, chosen_dist)
@@ -163,15 +212,16 @@ def _plot(
             f"Actual = {actual_at_dist:.2f} mm/s",
             xy=(chosen_dist, actual_at_dist),
             xytext=(chosen_dist + 0.8, actual_at_dist + 0.2),
-            fontsize=8, color="#4878CF",
+            fontsize=8,
+            color="#4878CF",
             arrowprops=dict(arrowstyle="->", color="#4878CF", lw=0.8),
         )
 
     ax.set_xlabel("Distance to track (m)", fontsize=10)
     ax.set_ylabel("PGV$_z$ (mm/s)", fontsize=10)
     ax.set_title(
-        f"PGV$_z$ attenuation — Event: {event_id}\n"
-        f"XGBoost v003 prediction at {chosen_dist:.0f} m = {predicted:.2f} mm/s",
+        f"PGV$_z$ attenuation — Event #{sensor_label} ({event_id})\n"
+        f"Prediction: {chosen_dist:.0f} m, side={side_str} → {predicted:.2f} mm/s",
         fontsize=10,
     )
     ax.set_xlim(0, max(all_dists.max(), chosen_dist) * 1.1 + 1)
@@ -181,54 +231,18 @@ def _plot(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_event = event_id.replace(":", "-").replace("/", "-")
-    out_path = output_dir / f"demo_pgvz_{safe_event}_d{int(chosen_dist)}m.png"
+    side_tag = {-1: "L", 0: "U", 1: "R"}.get(track_side, str(track_side))
+    out_path = (
+        output_dir / f"demo_pgvz_{safe_event}_d{int(chosen_dist)}m_s{side_tag}.png"
+    )
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return out_path
-        # Accel Z
-        t_acc = signals["acc_time"]
-        z_acc = signals["acc_z"]
-        units = "mm/s" if "velocity" in signals["acc_units"] else "g"
-        ax_acc.plot(t_acc, z_acc, lw=0.7, color="#4878CF")
-        ax_acc.set_xlabel("Time rel. to event t0 (s)", fontsize=9)
-        ax_acc.set_ylabel(f"Velocity Z ({units})", fontsize=9)
-        ax_acc.set_title(
-            f"Accelerometer Z — {sensor_id} ({chosen_dist:.0f} m)", fontsize=9
-        )
-        ax_acc.grid(True, alpha=0.3)
-        ax_acc.tick_params(labelsize=8)
-
-        # FO centre channel (bandpass filtered)
-        t_fo = signals["fo_time"]
-        fo_sig = signals["fo_centre_bp"]
-        ax_fo.plot(t_fo, fo_sig, lw=0.7, color="#6ACC65")
-        ax_fo.set_xlabel("Time rel. to event t0 (s)", fontsize=9)
-        ax_fo.set_ylabel("FO strain (ε, bandpass 1–100 Hz)", fontsize=9)
-        ax_fo.set_title("FO — centre channel (bandpass filtered)", fontsize=9)
-        ax_fo.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-        ax_fo.grid(True, alpha=0.3)
-        ax_fo.tick_params(labelsize=8)
-    else:
-        fig.text(
-            0.5,
-            0.02,
-            "(Raw signal traces not available — NetCDF file not found)",
-            ha="center",
-            fontsize=8,
-            color="grey",
-        )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    safe_event = event_id.replace(":", "-").replace("/", "-")
-    out_path = output_dir / f"demo_pgvz_{safe_event}_d{int(chosen_dist)}m.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return out_path
 
 
 # ---------------------------------------------------------------------------
-# Main interactive loop
+# Main — run once with the USER INPUT variables above
 # ---------------------------------------------------------------------------
 
 
@@ -240,78 +254,84 @@ def main() -> None:
     cfg, model, test_df, events = _load_artifacts()
     n_events = len(events)
 
-    print(f"\n  Test set: {n_events} events (held-out, never seen during training)")
-    print(f"\n  Available distances: {AVAILABLE_DISTANCES_M} m")
-    print("  Sensors per distance:")
-    for d, sensors in DIST_SENSOR_MAP.items():
-        print(f"    {d:5.1f} m  →  {', '.join(sensors)}")
+    # --- Resolve inputs ---
+    event_number = EVENT_NUMBER
+    distance_m = DISTANCE_M
+    track_side = TRACK_SIDE
+    sensor_id = SENSOR_ID
 
-    while True:
-        print("\n" + "-" * 60)
-
-        # --- Event selection ---
-        print(f"\n  Enter event number [1–{n_events}]  (or 'q' to quit)")
-        raw = input("  Event number: ").strip()
-        if raw.lower() == "q":
-            print("  Bye!")
-            break
-        try:
-            event_num = int(raw)
-            if not (1 <= event_num <= n_events):
-                raise ValueError
-        except ValueError:
-            print(f"  Invalid — please enter a number between 1 and {n_events}.")
-            continue
-
-        event_id = events[event_num - 1]
-        print(f"  Selected: event #{event_num}  →  {event_id}")
-
-        # --- Distance selection ---
-        dist_str = "  |  ".join([f"{d:.0f} m" for d in AVAILABLE_DISTANCES_M])
-        print(f"\n  Available distances:  {dist_str}")
-        raw_d = input("  Distance (m): ").strip()
-        try:
-            chosen_dist = float(raw_d)
-            if chosen_dist not in AVAILABLE_DISTANCES_M:
-                raise ValueError
-        except ValueError:
-            print(f"  Invalid — please choose from {AVAILABLE_DISTANCES_M}.")
-            continue
-
-        # --- Predict ---
-        feature_row, event_rows = _get_fo_feature_row(test_df, event_id, cfg)
-        predicted = _predict_at_distance(feature_row, chosen_dist, cfg, model)
-
-        # --- Find actual at chosen distance (if sensor exists) ---
-        actual_rows = event_rows[
-            np.isclose(event_rows["acc_distance_to_track_m"], chosen_dist)
-        ]
-
-        print(f"\n  ─── Result ───────────────────────────────────────")
-        print(f"  Event          : {event_id}")
-        print(f"  Distance       : {chosen_dist:.1f} m")
-        print(f"  Predicted PGVz : {predicted:.3f} mm/s")
-        if not actual_rows.empty:
-            for _, r in actual_rows.iterrows():
-                print(
-                    f"  Actual PGVz    : {r['target_pgv_z_mms']:.3f} mm/s"
-                    f"  (sensor {r['sensor_id']},"
-                    f"  error = {predicted - r['target_pgv_z_mms']:+.3f} mm/s)"
-                )
-        else:
-            print(f"  Actual PGVz    : no sensor at this distance in the dataset")
-        print(f"  ──────────────────────────────────────────────────")
-
-        # --- Plot ---
-        out_path = _plot(
-            event_id, event_rows, chosen_dist, predicted, sensor_id, signals, OUTPUT_DIR
+    if sensor_id is not None:
+        if sensor_id not in SENSOR_GEOMETRY:
+            raise ValueError(
+                f"SENSOR_ID '{sensor_id}' not recognised. "
+                f"Valid options: {sorted(SENSOR_GEOMETRY)}"
+            )
+        distance_m = SENSOR_GEOMETRY[sensor_id]["distance_m"]
+        track_side = SENSOR_GEOMETRY[sensor_id]["side"]
+        print(
+            f"  SENSOR_ID={sensor_id} → distance={distance_m} m, "
+            f"side={track_side} (overrides DISTANCE_M and TRACK_SIDE)"
         )
-        print(f"\n  Plot saved: {out_path}")
 
-        again = input("\n  Try another event? [y/n]: ").strip().lower()
-        if again != "y":
-            print("  Bye!")
-            break
+    # --- Validate ---
+    if not (1 <= event_number <= n_events):
+        raise ValueError(f"EVENT_NUMBER must be 1–{n_events}, got {event_number}")
+    if distance_m not in AVAILABLE_DISTANCES_M:
+        raise ValueError(
+            f"DISTANCE_M={distance_m} not in available distances: {AVAILABLE_DISTANCES_M}"
+        )
+    if track_side not in (-1, 0, 1):
+        raise ValueError(f"TRACK_SIDE must be -1, 0 or 1, got {track_side}")
+
+    event_id = events[event_number - 1]
+    side_str = {-1: "left", 0: "unknown", 1: "right"}.get(track_side, str(track_side))
+    sensor_label = sensor_id if sensor_id else f"#{event_number}"
+
+    print(f"\n  Event   : #{event_number}  →  {event_id}")
+    print(f"  Distance: {distance_m} m")
+    print(f"  Side    : {track_side} ({side_str})")
+    if sensor_id:
+        print(f"  Sensor  : {sensor_id}")
+
+    # --- Predict ---
+    feature_row, event_rows = _get_fo_feature_row(test_df, event_id, cfg)
+    predicted = _predict_at_distance(feature_row, distance_m, track_side, cfg, model)
+
+    # --- Actual value(s) at chosen distance ---
+    actual_rows = event_rows[
+        np.isclose(event_rows["acc_distance_to_track_m"], distance_m)
+    ]
+    if sensor_id is not None and not actual_rows.empty:
+        mask_sensor = actual_rows["sensor_id"] == sensor_id
+        if mask_sensor.any():
+            actual_rows = actual_rows[mask_sensor]
+
+    print(f"\n  ─── Result ──────────────────────────────────────────")
+    print(f"  Event          : {event_id}")
+    print(f"  Distance       : {distance_m} m  |  Side: {track_side} ({side_str})")
+    print(f"  Predicted PGVz : {predicted:.3f} mm/s")
+    if not actual_rows.empty:
+        for _, r in actual_rows.iterrows():
+            err = predicted - r["target_pgv_z_mms"]
+            print(
+                f"  Actual PGVz    : {r['target_pgv_z_mms']:.3f} mm/s  "
+                f"(sensor {r['sensor_id']},  error = {err:+.3f} mm/s)"
+            )
+    else:
+        print(f"  Actual PGVz    : no sensor at {distance_m} m in the dataset")
+    print(f"  ─────────────────────────────────────────────────────")
+
+    # --- Plot ---
+    out_path = _plot(
+        event_id,
+        event_rows,
+        distance_m,
+        track_side,
+        sensor_label,
+        predicted,
+        OUTPUT_DIR,
+    )
+    print(f"\n  Plot saved: {out_path}")
 
 
 if __name__ == "__main__":
