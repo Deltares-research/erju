@@ -34,7 +34,7 @@ import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from src.ml.xgb_utils import engineer_features, prepare_features
+from src.ml.xgboost.xgb_utils import engineer_features, prepare_features
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -64,6 +64,15 @@ VERSION_LABELS = [
     "v004\n(octave bands)",
 ]
 COLORS = ["#4878CF", "#6ACC65", "#D65F5F", "#9B59B6"]
+
+# MLP builds to append (one entry per run)
+MLP_VERSIONS = [
+    "mlp_v001_20260408_180508",
+]
+MLP_LABELS = [
+    "MLP v1\n(79→64→1)",
+]
+MLP_COLORS = ["#E67E22"]
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +159,20 @@ def main() -> None:
         y_true, y_pred, sensor_ids = load_version(build_dir, df_full)
         results.append((y_true, y_pred, sensor_ids))
 
-    n_versions = len(VERSIONS)
+    # Load MLP predictions from saved predictions.parquet (test split only)
+    for vdir in MLP_VERSIONS:
+        build_dir = MODELS_ROOT / vdir
+        print(f"Loading {vdir} (MLP predictions.parquet) ...")
+        pred_df = pd.read_parquet(build_dir / "predictions.parquet")
+        test_df = pred_df[pred_df["split"] == "test"].reset_index(drop=True)
+        y_true = test_df["target_pgv_z_mms"].values
+        y_pred = test_df["y_pred"].values
+        sids = test_df["sensor_id"].values
+        results.append((y_true, y_pred, sids))
+
+    all_labels = VERSION_LABELS + MLP_LABELS
+    all_colors = COLORS + MLP_COLORS
+    n_versions = len(all_labels)
 
     # ------------------------------------------------------------------
     # Figure
@@ -162,14 +184,14 @@ def main() -> None:
         gridspec_kw={"hspace": 0.45, "wspace": 0.30},
     )
     fig.suptitle(
-        "XGBoost — Held-out Test Set: Predicted vs Actual PGV$_z$\n"
+        "XGBoost & MLP — Held-out Test Set: Predicted vs Actual PGV$_z$\n"
         "(one point per sensor-event pair)",
         fontsize=12,
         y=0.98,
     )
 
     for col, (label, color, (y_true, y_pred, _)) in enumerate(
-        zip(VERSION_LABELS, COLORS, results)
+        zip(all_labels, all_colors, results)
     ):
         ax_scatter = axes[0, col]
         ax_resid = axes[1, col]
@@ -236,10 +258,15 @@ def main() -> None:
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
         )
 
-    # Save to latest v004 build plots folder
-    latest_dir = MODELS_ROOT / VERSIONS[-1][0] / "plots"
+    # Save to the latest model's build folder (MLP if present, else last XGB)
+    latest_build = MLP_VERSIONS[-1] if MLP_VERSIONS else VERSIONS[-1][0]
+    latest_dir = MODELS_ROOT / latest_build / "plots"
     latest_dir.mkdir(parents=True, exist_ok=True)
-    out_path = latest_dir / "test_predictions_comparison_v001_v002_v003_v004.png"
+    # Build filename from all version names so it's always unique and traceable
+    xgb_tag = "_".join(v[0].split("_")[1] for v in VERSIONS)  # e.g. v001_v002_v003_v004
+    mlp_tag = "_".join(v.split("_")[1] for v in MLP_VERSIONS)  # e.g. v001
+    out_name = f"test_predictions_comparison_xgb_{xgb_tag}_mlp_{mlp_tag}.png"
+    out_path = latest_dir / out_name
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"\nSaved: {out_path}")

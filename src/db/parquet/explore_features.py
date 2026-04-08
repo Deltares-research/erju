@@ -45,12 +45,12 @@ IMPORTANCE_CSV = Path(
 # Analysis flags — set False to skip
 RUN_1_DISTRIBUTIONS = False
 RUN_2_CORRELATIONS = False
-RUN_3_IMPORTANCE_CORR = True
+RUN_3_IMPORTANCE_CORR = False
 RUN_4_TARGET_DISTANCE = False
-RUN_5_PAIRPLOT = False
+RUN_5_PAIRPLOT = True
 
 # Pair-plot / heatmap top-N
-TOP_N = 12
+TOP_N = 8
 
 # ── Output dirs ──────────────────────────────────────────────────────────────
 BASE_OUT = PARQUET_PATH.parent / "plots"
@@ -537,20 +537,207 @@ if RUN_3_IMPORTANCE_CORR:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ANALYSIS 4 — Target vs distance  (placeholder)
+# ANALYSIS 4 — Target vs distance scatter
 # ══════════════════════════════════════════════════════════════════════════════
 if RUN_4_TARGET_DISTANCE:
     print("\n=== Analysis 4: Target vs distance ===")
-    # TODO
-    pass
+
+    sub = df[
+        [
+            TARGET,
+            "acc_distance_to_track_m",
+            "train_type",
+            "train_speed_kmh",
+            "track_number",
+            "sensor_id",
+        ]
+    ].dropna()
+
+    # ── 4A  Coloured by train_type ───────────────────────────────────────
+    print("[4A] Scatter coloured by train_type …")
+    train_types = sorted(sub["train_type"].unique())
+    palette = sns.color_palette("tab10", len(train_types))
+    color_map = dict(zip(train_types, palette))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for tt in train_types:
+        mask = sub["train_type"] == tt
+        ax.scatter(
+            sub.loc[mask, "acc_distance_to_track_m"],
+            sub.loc[mask, TARGET],
+            s=10,
+            alpha=0.35,
+            color=color_map[tt],
+            label=tt,
+            rasterized=True,
+        )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Distance to track (m)  [log]", fontsize=10)
+    ax.set_ylabel("PGV-Z (mm/s)  [log]", fontsize=10)
+    ax.set_title(
+        "Target vs distance — coloured by train_type", fontsize=12, fontweight="bold"
+    )
+    ax.legend(
+        title="train_type", fontsize=7, title_fontsize=8, markerscale=2, framealpha=0.8
+    )
+    ax.grid(which="both", alpha=0.2)
+    fig.tight_layout()
+    _savefig(fig, TGTD_DIR, "04A_target_vs_distance_traintype.png")
+
+    # ── 4B  Coloured by train_speed ───────────────────────────────────────
+    print("[4B] Scatter coloured by train_speed …")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sc = ax.scatter(
+        sub["acc_distance_to_track_m"],
+        sub[TARGET],
+        c=sub["train_speed_kmh"],
+        cmap="plasma",
+        s=10,
+        alpha=0.4,
+        rasterized=True,
+    )
+    cbar = fig.colorbar(sc, ax=ax, pad=0.01)
+    cbar.set_label("Train speed (km/h)", fontsize=9)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Distance to track (m)  [log]", fontsize=10)
+    ax.set_ylabel("PGV-Z (mm/s)  [log]", fontsize=10)
+    ax.set_title(
+        "Target vs distance — coloured by train speed", fontsize=12, fontweight="bold"
+    )
+    ax.grid(which="both", alpha=0.2)
+    fig.tight_layout()
+    _savefig(fig, TGTD_DIR, "04B_target_vs_distance_speed.png")
+
+    # ── 4C  One facet per sensor_id (shows per-sensor attenuation curves) ──
+    print("[4C] Facet plot per sensor_id …")
+    sensors = sorted(sub["sensor_id"].unique())
+    ncols = 4
+    nrows = int(np.ceil(len(sensors) / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(ncols * 4, nrows * 3.2), sharex=False, sharey=False
+    )
+    fig.suptitle("PGV-Z vs distance — per sensor", fontsize=13, fontweight="bold")
+    for ax, sid in zip(axes.flat, sensors):
+        sdf = sub[sub["sensor_id"] == sid]
+        for tt in train_types:
+            mask = sdf["train_type"] == tt
+            if mask.sum() == 0:
+                continue
+            ax.scatter(
+                sdf.loc[mask, "acc_distance_to_track_m"],
+                sdf.loc[mask, TARGET],
+                s=8,
+                alpha=0.4,
+                color=color_map[tt],
+                label=tt,
+                rasterized=True,
+            )
+        dist_val = sdf["acc_distance_to_track_m"].median()
+        ax.set_title(f"{sid}  (d={dist_val:.1f} m)", fontsize=8, fontweight="bold")
+        ax.set_yscale("log")
+        ax.set_xlabel("dist (m)", fontsize=7)
+        ax.set_ylabel("PGV-Z", fontsize=7)
+        ax.tick_params(labelsize=6)
+        ax.grid(alpha=0.2)
+    # hide unused axes
+    for ax in axes.flat[len(sensors) :]:
+        ax.set_visible(False)
+    # shared legend
+    handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=color_map[tt],
+            markersize=6,
+            label=tt,
+        )
+        for tt in train_types
+    ]
+    fig.legend(
+        handles=handles,
+        title="train_type",
+        fontsize=7,
+        title_fontsize=8,
+        loc="lower right",
+        ncol=2,
+    )
+    fig.tight_layout(rect=[0, 0.03, 1, 0.97])
+    _savefig(fig, TGTD_DIR, "04C_target_vs_distance_per_sensor.png")
+
+    print("[4] Target vs distance done.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ANALYSIS 5 — Pair plot  (placeholder)
+# ANALYSIS 5 — Seaborn pair plot (top-N features by XGB gain + target)
 # ══════════════════════════════════════════════════════════════════════════════
 if RUN_5_PAIRPLOT:
     print("\n=== Analysis 5: Pair plot ===")
-    # TODO
-    pass
+
+    fi = pd.read_csv(IMPORTANCE_CSV)
+    top_feats = fi.sort_values("gain", ascending=False).head(TOP_N)["feature"].tolist()
+    top_feats = [f for f in top_feats if f in df.columns]
+
+    # Build working frame including raw target for binning
+    pair_df = df[top_feats + [TARGET]].copy()
+
+    # PGV-Z colour bins
+    BIN_EDGES = [0, 1, 2, 3, 4, np.inf]
+    BIN_LABELS = ["0-1", "1-2", "2-3", "3-4", "4+"]
+    pair_df["pgvz_bin"] = pd.cut(
+        pair_df[TARGET], bins=BIN_EDGES, labels=BIN_LABELS, right=False
+    ).astype(str)
+    pair_df = pair_df.drop(columns=[TARGET])
+
+    # Log-transform positive FO features for readability
+    for col in top_feats:
+        if pair_df[col].gt(0).all():
+            pair_df[col] = np.log1p(pair_df[col])
+            pair_df.rename(columns={col: f"log_{col}"}, inplace=True)
+
+    # Subsample to keep the plot fast (seaborn pairplot is O(n^2) per cell)
+    MAX_ROWS = 3000
+    if len(pair_df) > MAX_ROWS:
+        pair_df = pair_df.sample(MAX_ROWS, random_state=42)
+
+    feat_cols_plot = [c for c in pair_df.columns if c != "pgvz_bin"]
+    print(
+        f"  Plotting pair plot with {len(feat_cols_plot)} variables "
+        f"on {len(pair_df):,} rows …"
+    )
+
+    BIN_PALETTE = {
+        "0-1": "#4daf4a",  # green
+        "1-2": "#377eb8",  # blue
+        "2-3": "#ff7f00",  # orange
+        "3-4": "#e41a1c",  # red
+        "4+": "#984ea3",  # purple
+    }
+
+    pg = sns.pairplot(
+        pair_df,
+        vars=feat_cols_plot,
+        hue="pgvz_bin",
+        hue_order=BIN_LABELS,
+        palette=BIN_PALETTE,
+        diag_kind="kde",
+        plot_kws={"alpha": 0.3, "s": 10, "rasterized": True},
+        diag_kws={"fill": True, "alpha": 0.4},
+    )
+    pg.figure.suptitle(
+        f"Pair plot — top {TOP_N} features by XGB gain  │  coloured by PGV-Z bin (mm/s)",
+        y=1.01,
+        fontsize=12,
+        fontweight="bold",
+    )
+    pg._legend.set_title("PGV-Z (mm/s)")
+    out_path = BASE_OUT / "05_pairplot_top_features.png"
+    pg.figure.savefig(out_path, dpi=120, bbox_inches="tight")
+    plt.close(pg.figure)
+    print(f"  Saved: {out_path.relative_to(BASE_OUT)}")
+    print("[5] Pair plot done.")
 
 print("\nDone.")

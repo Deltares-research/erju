@@ -21,7 +21,7 @@ import pandas as pd
 import xgboost as xgb
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from src.ml.xgb_utils import engineer_features, prepare_features
+from src.ml.xgboost.xgb_utils import engineer_features, prepare_features
 
 # ---------------------------------------------------------------------------
 # Config — points to v003 artifacts
