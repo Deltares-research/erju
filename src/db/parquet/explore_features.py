@@ -44,8 +44,8 @@ IMPORTANCE_CSV = Path(
 
 # Analysis flags — set False to skip
 RUN_1_DISTRIBUTIONS = False
-RUN_2_CORRELATIONS = True
-RUN_3_IMPORTANCE_CORR = False
+RUN_2_CORRELATIONS = False
+RUN_3_IMPORTANCE_CORR = True
 RUN_4_TARGET_DISTANCE = False
 RUN_5_PAIRPLOT = False
 
@@ -433,12 +433,107 @@ if RUN_2_CORRELATIONS:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ANALYSIS 3 — Importance vs correlation  (placeholder)
+# ANALYSIS 3 — Feature importance vs Spearman correlation scatter
 # ══════════════════════════════════════════════════════════════════════════════
 if RUN_3_IMPORTANCE_CORR:
     print("\n=== Analysis 3: Importance vs correlation ===")
-    # TODO
-    pass
+
+    # Build Spearman rho for every numeric feature if not already done
+    EXCLUDE_COLS = {
+        TARGET,
+        "event_id",
+        "site_id",
+        "sensor_id",
+        "train_type",
+        "train_type_code",
+    }
+    feat_cols = [
+        c
+        for c in df.columns
+        if c not in EXCLUDE_COLS and pd.api.types.is_numeric_dtype(df[c])
+    ]
+
+    y = df[TARGET].dropna()
+    valid_idx = y.index
+    rho_vals: dict[str, float] = {}
+    for col in feat_cols:
+        x = df.loc[valid_idx, col].dropna()
+        common = x.index.intersection(valid_idx)
+        if len(common) < 30:
+            continue
+        rho, _ = spearmanr(x.loc[common], y.loc[common])
+        rho_vals[col] = rho
+    rho_series = pd.Series(rho_vals)
+
+    # Load importance
+    fi = pd.read_csv(IMPORTANCE_CSV)
+    fi = fi[fi["feature"].isin(rho_series.index)].copy()
+    fi["rho"] = fi["feature"].map(rho_series)
+
+    # Normalise gain to 0-1 for point sizing
+    fi["gain_norm"] = fi["gain"] / fi["gain"].max()
+
+    # Colour by feature group
+    def _feat_group(name: str) -> str:
+        if "distance" in name or "side" in name or "track" in name:
+            return "geometry"
+        if "fo_td" in name:
+            return "FO time-domain"
+        if "fo_oct" in name:
+            return "FO octave band"
+        if "train_speed" in name:
+            return "train metadata"
+        return "other"
+
+    fi["group"] = fi["feature"].apply(_feat_group)
+    GROUP_COLORS = {
+        "geometry": "steelblue",
+        "FO time-domain": "darkorange",
+        "FO octave band": "mediumseagreen",
+        "train metadata": "orchid",
+        "other": "gray",
+    }
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+    for grp, gdf in fi.groupby("group"):
+        ax.scatter(
+            gdf["rho"],
+            gdf["gain"],
+            s=gdf["gain_norm"] * 300 + 20,
+            color=GROUP_COLORS.get(grp, "gray"),
+            alpha=0.75,
+            edgecolors="white",
+            linewidths=0.4,
+            label=grp,
+            zorder=3,
+        )
+
+    # Label top features by gain
+    top_label = fi.nlargest(15, "gain")
+    for _, row in top_label.iterrows():
+        ax.annotate(
+            row["feature"],
+            xy=(row["rho"], row["gain"]),
+            xytext=(4, 4),
+            textcoords="offset points",
+            fontsize=6.5,
+            color="#333333",
+        )
+
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.set_xlabel("Spearman rho (vs target)", fontsize=10)
+    ax.set_ylabel("XGB gain (normalised feature importance)", fontsize=10)
+    ax.set_title(
+        "XGBoost gain vs Spearman correlation with target\n"
+        "(point size proportional to gain; top-15 annotated)",
+        fontsize=11,
+        fontweight="bold",
+    )
+    ax.legend(title="Feature group", fontsize=8, title_fontsize=8)
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    _savefig(fig, CORR_DIR, "03_importance_vs_spearman.png")
+    print("[3] Importance vs correlation done.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
