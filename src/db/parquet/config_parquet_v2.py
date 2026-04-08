@@ -125,7 +125,7 @@ class ParquetV2Config:
 
     sort_rows_by: List[str] = field(default_factory=lambda: ["event_id", "sensor_id"])
 
-    max_files: int = 5
+    max_files: int = 0
 
     exclude_sensor_ids: List[str] = field(
         default_factory=lambda: ["MP14", "MP15", "MP16", "MP17", "MP18", "MP19"]
