@@ -109,7 +109,7 @@ def main() -> None:
         dropped = before - len(df)
         print(
             f"      Excluded sensor_ids {cfg.exclude_sensor_ids}: "
-            f"-{dropped:,} rows → {len(df):,} rows remaining"
+            f"-{dropped:,} rows -> {len(df):,} rows remaining"
         )
         log_lines.append(
             f"Excluded sensor_ids: {cfg.exclude_sensor_ids} (-{dropped} rows)"
@@ -333,7 +333,7 @@ def main() -> None:
         output_dir=fold_curves_dir,
         metric=cfg.model.eval_metric,
     )
-    print(f"  Per-fold curves saved → {fold_curves_dir}")
+    print(f"  Per-fold curves saved -> {fold_curves_dir}")
 
     # Aggregated CV curve (mean ± std across folds)
     plot_aggregated_cv_curves(

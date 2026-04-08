@@ -81,7 +81,7 @@ class XGBTrainingConfig:
 
     # Update this path after build_parquet_v2.py finishes
     input_parquet: str = (
-        r"P:\11210978-erju-ai\holten_parquet\FILL_IN_V2_PARQUET_PATH\dataset.parquet"
+        r"P:\11210978-erju-ai\holten_parquet\parquet_v002_20260408_151746\dataset.parquet"
     )
     output_root_folder: str = r"P:\11210978-erju-ai\holten_models"
 

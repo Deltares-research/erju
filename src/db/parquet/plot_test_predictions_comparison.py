@@ -1,4 +1,4 @@
-"""Plot held-out test set predictions for XGBoost v001, v002, v003.
+"""Plot held-out test set predictions for XGBoost v001, v002, v003, v004.
 
 For each version:
   - Reconstructs the exact test set using the saved split_manifest.json
@@ -7,11 +7,14 @@ For each version:
   - Runs model.predict() on the held-out test features
   - Back-transforms predictions if log1p target transform was used
 
-Output: one PNG saved to the latest v003 build folder under plots/
-  test_predictions_comparison_v001_v002_v003.png
+Note: v001-v003 use Parquet v1 (linear 5-Hz FO bands).
+      v004 uses Parquet v2 (1/3-octave FO bands) — loaded separately.
 
-Layout: 3 columns (one per version), 2 rows:
-  Row 1 — Predicted vs Actual scatter (with 1:1 line + ±2 mm/s band)
+Output: one PNG saved to the latest v004 build folder under plots/
+  test_predictions_comparison_v001_v002_v003_v004.png
+
+Layout: 4 columns (one per version), 2 rows:
+  Row 1 — Predicted vs Actual scatter (with 1:1 line + +-2 mm/s band)
   Row 2 — Residuals vs Actual (with zero line)
 """
 
@@ -37,18 +40,30 @@ from src.ml.xgb_utils import engineer_features, prepare_features
 # Paths
 # ---------------------------------------------------------------------------
 MODELS_ROOT = Path(r"P:\11210978-erju-ai\holten_models")
-PARQUET_PATH = Path(
+
+# Parquet v1 — used by v001, v002, v003
+PARQUET_V1 = Path(
     r"P:\11210978-erju-ai\holten_parquet\parquet_v001_20260406_031129\dataset.parquet"
+)
+# Parquet v2 — used by v004 (1/3-octave bands)
+PARQUET_V2 = Path(
+    r"P:\11210978-erju-ai\holten_parquet\parquet_v002_20260408_151746\dataset.parquet"
 )
 
 VERSIONS = [
-    "xgb_v001_20260406_131814",
-    "xgb_v002_20260406_134240",
-    "xgb_v003_20260406_194334",
+    ("xgb_v001_20260406_131814", PARQUET_V1),
+    ("xgb_v002_20260406_134240", PARQUET_V1),
+    ("xgb_v003_20260406_194334", PARQUET_V1),
+    ("xgb_v004_20260408_165448", PARQUET_V2),
 ]
 
-VERSION_LABELS = ["v001\n(baseline)", "v002\n(log + geom)", "v003\n(MP1–13 only)"]
-COLORS = ["#4878CF", "#6ACC65", "#D65F5F"]
+VERSION_LABELS = [
+    "v001\n(baseline)",
+    "v002\n(log + geom)",
+    "v003\n(MP1-13 only)",
+    "v004\n(octave bands)",
+]
+COLORS = ["#4878CF", "#6ACC65", "#D65F5F", "#9B59B6"]
 
 
 # ---------------------------------------------------------------------------
@@ -121,23 +136,29 @@ def load_version(build_dir: Path, df_full: pd.DataFrame):
 
 
 def main() -> None:
-    print("Loading Parquet ...")
-    df_full = pd.read_parquet(PARQUET_PATH)
+    print("Loading Parquet files ...")
+    df_v1 = pd.read_parquet(PARQUET_V1)
+    df_v2 = pd.read_parquet(PARQUET_V2)
 
     results = []
-    for vdir in VERSIONS:
+    for vdir, parquet_path in VERSIONS:
         build_dir = MODELS_ROOT / vdir
-        print(f"Loading {vdir} ...")
+        df_full = df_v1 if parquet_path == PARQUET_V1 else df_v2
+        print(
+            f"Loading {vdir} (parquet {'v1' if parquet_path == PARQUET_V1 else 'v2'}) ..."
+        )
         y_true, y_pred, sensor_ids = load_version(build_dir, df_full)
         results.append((y_true, y_pred, sensor_ids))
+
+    n_versions = len(VERSIONS)
 
     # ------------------------------------------------------------------
     # Figure
     # ------------------------------------------------------------------
     fig, axes = plt.subplots(
         2,
-        3,
-        figsize=(15, 9),
+        n_versions,
+        figsize=(n_versions * 4.5, 9),
         gridspec_kw={"hspace": 0.45, "wspace": 0.30},
     )
     fig.suptitle(
@@ -215,10 +236,10 @@ def main() -> None:
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
         )
 
-    # Save to latest v003 build plots folder
-    out_dir = MODELS_ROOT / VERSIONS[-1] / "plots"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "test_predictions_comparison_v001_v002_v003.png"
+    # Save to latest v004 build plots folder
+    latest_dir = MODELS_ROOT / VERSIONS[-1][0] / "plots"
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    out_path = latest_dir / "test_predictions_comparison_v001_v002_v003_v004.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"\nSaved: {out_path}")
