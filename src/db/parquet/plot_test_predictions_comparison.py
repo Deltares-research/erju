@@ -68,11 +68,19 @@ COLORS = ["#4878CF", "#6ACC65", "#D65F5F", "#9B59B6"]
 # MLP builds to append (one entry per run)
 MLP_VERSIONS = [
     "mlp_v001_20260408_180508",
+    "mlp_v002_20260408_181957",
+    "mlp_v003_20260408_182326",
+    "mlp_v004_20260408_183030",
+    "mlp_v005_20260408_183514",
 ]
 MLP_LABELS = [
-    "MLP v1\n(79→64→1)",
+    "MLP v1\n(79->64->1)",
+    "MLP v2\n(256->128->64)",
+    "MLP v3\n(v2+drop=0.2)",
+    "MLP v4\n(v2+drop=0.1+LR)",
+    "MLP v5\n(v2+BatchNorm)",
 ]
-MLP_COLORS = ["#E67E22"]
+MLP_COLORS = ["#E67E22", "#1ABC9C", "#E74C3C", "#8E44AD", "#2980B9"]
 
 
 # ---------------------------------------------------------------------------

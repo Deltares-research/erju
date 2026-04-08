@@ -26,7 +26,7 @@ from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # ── Target build folder ───────────────────────────────────────────────────────
-BUILD_DIR = Path(r"P:\11210978-erju-ai\holten_models\mlp_v001_20260408_180508")
+BUILD_DIR = Path(r"P:\11210978-erju-ai\holten_models\mlp_v005_20260408_183514")
 
 # ── Load artefacts ────────────────────────────────────────────────────────────
 hist = pd.read_csv(BUILD_DIR / "training_history.csv")

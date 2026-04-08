@@ -65,7 +65,7 @@ class FeatureEngineeringConfig:
 # ── Model architecture ─────────────────────────────────────────────────────────
 @dataclass
 class ModelConfig:
-    hidden_sizes: List[int] = field(default_factory=lambda: [64])
+    hidden_sizes: List[int] = field(default_factory=lambda: [256, 128, 64])
     activation: str = "relu"  # "relu" | "tanh" | "gelu"
     dropout: float = 0.0  # 0 = no dropout for v1
 
@@ -81,8 +81,6 @@ class TrainConfig:
     patience: int = 30
     # Save a checkpoint every N epochs (in addition to the best-model checkpoint)
     checkpoint_every_n_epochs: int = 50
-    # LR scheduler: ReduceLROnPlateau (factor=0.5, patience=15) — off by default
-    lr_scheduler: bool = False
     # TensorBoard log directory (relative to build folder)
     tensorboard_subdir: str = "runs"
 
@@ -90,7 +88,7 @@ class TrainConfig:
 # ── Top-level config ──────────────────────────────────────────────────────────
 @dataclass
 class Config:
-    version_name: str = "mlp_v001"
+    version_name: str = "mlp_v002"
     parquet_path: Path = PARQUET_PATH
     models_root: Path = MODELS_ROOT
     data: DataConfig = field(default_factory=DataConfig)
