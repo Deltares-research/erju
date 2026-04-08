@@ -22,7 +22,7 @@ SITE_NAME = "Holten"
 
 # Load site-specific configuration from JSON file
 # This automatically loads measurement points, sensor mappings, distances, etc.
-_config_dir = Path(__file__).parent
+_config_dir = Path(__file__).resolve().parents[3]  # project root (d:\codes\erju)
 _site_config_file = _config_dir / "sites" / f"{SITE_NAME.lower()}.json"
 
 if not _site_config_file.exists():

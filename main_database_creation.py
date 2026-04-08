@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-import config_db as config
+import src.db.netcdf.config_db as config
 from src.utils.db_utils import fetch_multi_mp_accel_data
 from src.utils.fo_utils import extract_fo_event_data
 from src.db.netcdf import create_netcdf_database

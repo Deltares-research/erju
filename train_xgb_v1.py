@@ -21,7 +21,7 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 
-from config_xgb import CONFIG
+from src.ml.config_xgb import CONFIG
 from src.ml.xgb_utils import (
     build_split_manifest,
     create_build_folder,

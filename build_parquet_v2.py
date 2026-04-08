@@ -13,7 +13,7 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 
-from config_parquet_v2 import CONFIG
+from src.db.parquet.config_parquet_v2 import CONFIG
 from src.db.parquet.parquet_v2_utils import (
     SkipRecord,
     assemble_output_row,
