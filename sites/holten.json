@@ -9,6 +9,7 @@
             "Meetjournal_MP4_Holten_zuid_2m_C",
             "Meetjournal_MP5_Holten_noord_4m_C",
             "Meetjournal_MP6_Holten_noord_4m_D",
+            "Meetjournal_MP6_Holten_noord_4m_B",
             "Meetjournal_MP7_Holten_zuid_4m_B",
             "Meetjournal_MP8_Holten_zuid_4m_C",
             "Meetjournal_MP9_Holten_zuid_4m_D",
@@ -29,6 +30,7 @@
             "Meetjournal_MP4_Holten_zuid_2m_C": "MP4",
             "Meetjournal_MP5_Holten_noord_4m_C": "MP5",
             "Meetjournal_MP6_Holten_noord_4m_D": "MP6",
+            "Meetjournal_MP6_Holten_noord_4m_B": "MP6",
             "Meetjournal_MP7_Holten_zuid_4m_B": "MP7",
             "Meetjournal_MP8_Holten_zuid_4m_C": "MP8",
             "Meetjournal_MP9_Holten_zuid_4m_D": "MP9",
@@ -202,7 +204,7 @@
         "gauge_length_unit": "m",
         "spatial_sampling_interval": 1.0,
         "spatial_sampling_interval_unit": "m",
-        "fo_first_channel": 1184,
-        "fo_last_channel": 1200
+        "fo_first_channel": 0,
+        "fo_last_channel": 3000
     }
 }

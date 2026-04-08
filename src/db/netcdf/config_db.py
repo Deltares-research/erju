@@ -65,7 +65,7 @@ FO_ENABLE = True
 FO_READER = "optasense"
 
 # FO channel window definition around center channel.
-FO_CENTER_CHANNEL = 1190
+FO_CENTER_CHANNEL = 1194  # Line D center channel (1192 = line B, 1194 = line D/C, 1196 = line E)
 FO_CHANNEL_HALF_WINDOW = 25
 
 # Optional: side-of-track convention for FO cable relative to track.
@@ -98,9 +98,12 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # ACCELEROMETER EVENT EXTRACTION CONFIGURATION
 # ==============================================================================
 
-# Time range for extracting accelerometer events
-ACCEL_START_DATE = "2024-09-06 11:58:00"
-ACCEL_END_DATE = "2024-09-09 07:00:00"
+# Time range for extracting accelerometer events.
+# Phase-2 campaign: 2024-09-01 → 2024-09-30.
+# FO recording (F:\recording_2024-09-06T11_58_54Z_...) starts Sep 6; events
+# before that date will have no FO data but are still captured with accel only.
+ACCEL_START_DATE = "2024-09-01 00:00:00"
+ACCEL_END_DATE   = "2024-09-30 23:59:59"
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
