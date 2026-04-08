@@ -100,8 +100,8 @@ class ParquetV2Config:
     # IO — same NetCDF sources as v1
     input_netcdf_folders: List[str] = field(
         default_factory=lambda: [
-            r"P:\11210978-erju-ai\holten_db\netcdf_20260405_001947_10mGL_3000channels",
-            r"P:\11210978-erju-ai\holten_db\netcdf_20260405_111215_10mGL_6000channels",
+            r"P:\11210978-erju-ai\holten_db\netcdf_20260406_194947_10mGL_3000channels",
+            r"P:\11210978-erju-ai\holten_db\netcdf_20260407_105509_10mGL_6000channels",
         ]
     )
     output_root_folder: str = r"P:\11210978-erju-ai\holten_parquet"
