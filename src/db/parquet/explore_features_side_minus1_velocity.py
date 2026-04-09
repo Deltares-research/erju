@@ -156,6 +156,15 @@ TRAIN_GROUP_COLOR_MAP = dict(
     zip(TRAIN_GROUPS_PRESENT, sns.color_palette("tab10", len(TRAIN_GROUPS_PRESENT)))
 )
 
+# Distance-group metadata (exact sensor distances in this filtered set).
+DISTANCE_GROUP_VALUES = sorted(df["acc_distance_to_track_m"].dropna().unique())
+DISTANCE_GROUP_LABELS = [f"{float(v):g}m" for v in DISTANCE_GROUP_VALUES]
+DISTANCE_VALUE_TO_LABEL = dict(zip(DISTANCE_GROUP_VALUES, DISTANCE_GROUP_LABELS))
+df["distance_group"] = df["acc_distance_to_track_m"].map(DISTANCE_VALUE_TO_LABEL)
+DISTANCE_GROUP_COLOR_MAP = dict(
+    zip(DISTANCE_GROUP_LABELS, sns.color_palette("viridis", len(DISTANCE_GROUP_LABELS)))
+)
+
 # ── Octave band ordering (low to high frequency) ─────────────────────────────
 BAND_ORDER = [
     "1_00hz",
@@ -246,8 +255,12 @@ def _group_hist(
     title: str,
     log_x: bool = False,
     legend: bool = False,
+    hue_col: str = "train_type_group",
+    hue_order: list[str] | None = None,
+    palette: dict[str, tuple[float, float, float]] | None = None,
+    legend_title: str = "train_type_group",
 ) -> None:
-    sub = data[[col, "train_type_group"]].dropna().copy()
+    sub = data[[col, hue_col]].dropna().copy()
     if log_x:
         sub = sub[sub[col] > 0]
     if sub.empty:
@@ -259,9 +272,9 @@ def _group_hist(
     sns.histplot(
         data=sub,
         x=col,
-        hue="train_type_group",
-        hue_order=TRAIN_GROUPS_PRESENT,
-        palette=TRAIN_GROUP_COLOR_MAP,
+        hue=hue_col,
+        hue_order=hue_order,
+        palette=palette,
         element="step",
         fill=False,
         stat="density",
@@ -278,7 +291,7 @@ def _group_hist(
     ax.tick_params(labelsize=7)
     ax.grid(axis="y", alpha=0.3)
     if ax.legend_ is not None:
-        ax.legend_.set_title("train_type_group")
+        ax.legend_.set_title(legend_title)
         for txt in ax.legend_.get_texts():
             txt.set_fontsize(7)
 
@@ -337,7 +350,7 @@ if RUN_1_DISTRIBUTIONS:
         "Raw values by train_type_group",
         legend=True,
     )
-    tmp = df[[TARGET, "train_type_group"]].dropna().copy()
+    tmp = df[[TARGET, "train_type_group", "distance_group"]].dropna().copy()
     tmp["log_target"] = np.log1p(tmp[TARGET])
     _group_hist(
         axes[1],
@@ -423,6 +436,105 @@ if RUN_1_DISTRIBUTIONS:
 
     fig.tight_layout(rect=[0, 0.01, 1, 0.98])
     _savefig(fig, DIST_DIR, "01A_target_distribution_group_panels.png")
+
+    # 1A-4: All distance groups overlaid in one plot
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    fig.suptitle(
+        "Target: PGV-Z (mm/s) — distance_group overlay",
+        fontsize=13,
+        fontweight="bold",
+    )
+    _group_hist(
+        axes[0],
+        df,
+        TARGET,
+        "PGV-Z (mm/s)",
+        "Raw values by distance_group",
+        legend=True,
+        hue_col="distance_group",
+        hue_order=DISTANCE_GROUP_LABELS,
+        palette=DISTANCE_GROUP_COLOR_MAP,
+        legend_title="distance_group",
+    )
+    _group_hist(
+        axes[1],
+        tmp,
+        "log_target",
+        "log1p(PGV-Z)",
+        "log1p-transformed by distance_group",
+        legend=False,
+        hue_col="distance_group",
+        hue_order=DISTANCE_GROUP_LABELS,
+        palette=DISTANCE_GROUP_COLOR_MAP,
+        legend_title="distance_group",
+    )
+    fig.tight_layout()
+    _savefig(fig, DIST_DIR, "01A_target_distribution_distance_overlay.png")
+
+    # 1A-5: One panel per distance group
+    n_dist_groups = len(DISTANCE_GROUP_LABELS)
+    raw_ymax_dist = 1.0
+    log_ymax_dist = 1.0
+    for dlabel in DISTANCE_GROUP_LABELS:
+        dvals = df.loc[df["distance_group"] == dlabel, TARGET].dropna().to_numpy()
+        if dvals.size == 0:
+            continue
+        raw_counts, _ = np.histogram(dvals, bins=raw_bins)
+        log_counts, _ = np.histogram(np.log1p(dvals), bins=log_bins)
+        raw_ymax_dist = max(raw_ymax_dist, float(raw_counts.max()))
+        log_ymax_dist = max(log_ymax_dist, float(log_counts.max()))
+
+    fig, axes = plt.subplots(
+        n_dist_groups,
+        2,
+        figsize=(12, max(2.8 * n_dist_groups, 8.0)),
+        sharex="col",
+        sharey="col",
+    )
+    if n_dist_groups == 1:
+        axes = np.array([axes])
+    fig.suptitle(
+        "Target: PGV-Z (mm/s) — one row per distance_group",
+        fontsize=13,
+        fontweight="bold",
+    )
+    for row_idx, dlabel in enumerate(DISTANCE_GROUP_LABELS):
+        dvals = df.loc[df["distance_group"] == dlabel, TARGET].dropna()
+        clr = DISTANCE_GROUP_COLOR_MAP[dlabel]
+
+        axes[row_idx, 0].hist(
+            dvals,
+            bins=raw_bins,
+            color=clr,
+            edgecolor="white",
+            linewidth=0.2,
+        )
+        axes[row_idx, 0].set_xlabel("PGV-Z (mm/s)", fontsize=8)
+        axes[row_idx, 0].set_ylabel("Count", fontsize=8)
+        axes[row_idx, 0].set_title(f"{dlabel} — raw (n={len(dvals):,})", fontsize=9)
+        axes[row_idx, 0].tick_params(labelsize=7)
+        axes[row_idx, 0].grid(axis="y", alpha=0.3)
+        axes[row_idx, 0].set_xlim(raw_xmin, raw_xmax)
+        axes[row_idx, 0].set_ylim(0, raw_ymax_dist * 1.05)
+
+        dlog = np.log1p(dvals)
+        axes[row_idx, 1].hist(
+            dlog,
+            bins=log_bins,
+            color=clr,
+            edgecolor="white",
+            linewidth=0.2,
+        )
+        axes[row_idx, 1].set_xlabel("log1p(PGV-Z)", fontsize=8)
+        axes[row_idx, 1].set_ylabel("Count", fontsize=8)
+        axes[row_idx, 1].set_title(f"{dlabel} — log1p", fontsize=9)
+        axes[row_idx, 1].tick_params(labelsize=7)
+        axes[row_idx, 1].grid(axis="y", alpha=0.3)
+        axes[row_idx, 1].set_xlim(log_xmin, log_xmax)
+        axes[row_idx, 1].set_ylim(0, log_ymax_dist * 1.05)
+
+    fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+    _savefig(fig, DIST_DIR, "01A_target_distribution_distance_panels.png")
 
     # ── 1B  Geometry features ─────────────────────────────────────────────────
     print("[1B] Geometry features …")
