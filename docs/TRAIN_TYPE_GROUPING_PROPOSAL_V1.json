@@ -1,0 +1,136 @@
+{
+    "source_file": "docs/TRAIN_TYPES_PARQUET_V2_UNIQUE.json",
+    "proposal_version": "v1",
+    "notes": [
+        "User-requested anchor groups included: ICM, SPR_A, SNG, GO, DDZ_DDX, ICR.",
+        "Input has DDZ (not DDX); group name kept as DDZ_DDX so future DDX labels can map there too.",
+        "No train_type left uncategorized in this proposal."
+    ],
+    "group_priority_order": [
+        "ICM",
+        "SPR_A",
+        "SNG",
+        "GO",
+        "DDZ_DDX",
+        "ICR",
+        "VIRM",
+        "OTHER"
+    ],
+    "groups_summary": {
+        "ICM": {
+            "n_train_type_labels": 2,
+            "n_rows": 6395
+        },
+        "SPR_A": {
+            "n_train_type_labels": 2,
+            "n_rows": 1889
+        },
+        "SNG": {
+            "n_train_type_labels": 2,
+            "n_rows": 5141
+        },
+        "GO": {
+            "n_train_type_labels": 34,
+            "n_rows": 1943
+        },
+        "DDZ_DDX": {
+            "n_train_type_labels": 1,
+            "n_rows": 1787
+        },
+        "ICR": {
+            "n_train_type_labels": 4,
+            "n_rows": 1548
+        },
+        "VIRM": {
+            "n_train_type_labels": 1,
+            "n_rows": 258
+        },
+        "OTHER": {
+            "n_train_type_labels": 6,
+            "n_rows": 295
+        }
+    },
+    "group_to_train_types": {
+        "ICM": [
+            "ICM",
+            "ICM + IC(B) + IC(A)"
+        ],
+        "SPR_A": [
+            "SPR(A)",
+            "SNG + SPR(A)"
+        ],
+        "SNG": [
+            "SNG",
+            "SNG + LM(A)"
+        ],
+        "GO": [
+            "GO(A) + GO(E)",
+            "GO(A) + GO(E) + GO(B)",
+            "GO(A) + GO(E) + GO(C) + GO(B)",
+            "GO(B) + GO(A) + GO(E)",
+            "GO(B) + GO(NA) + GO(C) + GO(A)",
+            "GO(C) + GO(A) + GO(E)",
+            "GO(C) + GO(B) + GO(A) + GO(E)",
+            "GO(C) + GO(D) + GO(A)",
+            "GO(C) + GO(D) + GO(A) + GO(B)",
+            "GO(C) + GO(D) + GO(A) + GO(B) + GO(E)",
+            "GO(C) + GO(D) + GO(A) + GO(E)",
+            "GO(C) + GO(D) + GO(A) + ICNG",
+            "GO(C) + GO(D) + GO(B)",
+            "GO(C) + GO(D) + GO(B) + GO(E)",
+            "GO(D)",
+            "GO(D) + GO(A)",
+            "GO(D) + GO(A) + GO(B)",
+            "GO(D) + GO(A) + GO(B) + GO(E)",
+            "GO(D) + GO(A) + GO(C) + GO(B)",
+            "GO(D) + GO(A) + GO(E)",
+            "GO(D) + GO(B) + GO(A)",
+            "GO(D) + GO(B) + GO(A) + GO(C) + GO(E)",
+            "GO(D) + GO(B) + GO(C) + GO(A)",
+            "GO(D) + GO(C)",
+            "GO(D) + GO(C) + GO(A)",
+            "GO(D) + GO(E)",
+            "GO(D) + GO(E) + GO(A)",
+            "GO(D) + GO(E) + GO(B) + GO(A)",
+            "GO(D) + GO(E) + GO(C)",
+            "GO(D) + GO(E) + GO(C) + GO(A)",
+            "GO(D) + GO(E) + GO(C) + GO(B)",
+            "GO(E) + GO(A)",
+            "GO(E) + GO(B) + GO(A)",
+            "GO(E) + GO(B) + GO(C) + GO(A)"
+        ],
+        "DDZ_DDX": [
+            "DDZ"
+        ],
+        "ICR": [
+            "IC(D) + ICR + IC(A)",
+            "ICR + IC(D) + IC(A)",
+            "ICR + IC(E) + IC(A)",
+            "LM(A) + ICR + LM(D)"
+        ],
+        "VIRM": [
+            "VIRM"
+        ],
+        "OTHER": [
+            "INT(A) + INT(D)",
+            "LLR(D)",
+            "LL(D)",
+            "LM(A)",
+            "UTS(B)",
+            "IC(B) + IC(A)"
+        ]
+    },
+    "implementation_hint": {
+        "rule_order": [
+            "if contains ICM -> ICM",
+            "if contains SPR(A) -> SPR_A",
+            "if contains SNG -> SNG",
+            "if contains GO( -> GO",
+            "if equals DDZ or DDX -> DDZ_DDX",
+            "if contains ICR -> ICR",
+            "if contains VIRM -> VIRM",
+            "if contains INT( or LLR( or LL( or LM( or UTS( or IC( or ICNG -> OTHER",
+            "else -> OTHER"
+        ]
+    }
+}

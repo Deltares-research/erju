@@ -1,7 +1,7 @@
 """explore_features.py — Feature distribution & analysis script for parquet v2.
 
 Run from the project root:
-    python src/db/parquet/explore_features.py
+    python src/db/parquet/explore_features_side_minus1_velocity.py
 
 Analyses produced:
   1. Distributions
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
+import json
 
 import matplotlib
 
@@ -45,6 +46,11 @@ IMPORTANCE_CSV = Path(
 TRAIN_TYPE_GROUPING_JSON = Path(
     r"d:\codes\erju\docs\TRAIN_TYPE_GROUPING_PROPOSAL_V1.json"
 )
+SITE_CONFIG_JSON = Path(r"d:\codes\erju\sites\holten.json")
+
+# Filter for this variant
+FILTER_SIDE_OF_TRACK = -1
+FILTER_SENSOR_UNIT = "velocity_mms"
 
 # Analysis flags — set False to skip
 RUN_1_DISTRIBUTIONS = True
@@ -58,7 +64,7 @@ TOP_N = 8
 
 # ── Output dirs ──────────────────────────────────────────────────────────────
 RUN_TAG = datetime.now().strftime("%Y%m%d_%H%M%S")
-BASE_OUT = PARQUET_PATH.parent / "plots" / f"run_{RUN_TAG}"
+BASE_OUT = PARQUET_PATH.parent / "plots" / "side_minus1_velocity_mms" / f"run_{RUN_TAG}"
 DIST_DIR = BASE_OUT / "distributions"
 CORR_DIR = BASE_OUT / "correlations"
 TGTD_DIR = BASE_OUT / "target_analysis"
@@ -72,6 +78,36 @@ print("Loading parquet …")
 df = pd.read_parquet(PARQUET_PATH)
 TARGET = "target_pgv_z_mms"
 print(f"  {df.shape[0]:,} rows  x  {df.shape[1]} columns")
+
+if not SITE_CONFIG_JSON.exists():
+    raise FileNotFoundError(f"Site config not found: {SITE_CONFIG_JSON}")
+
+with open(SITE_CONFIG_JSON, "r", encoding="utf-8") as f:
+    _site_cfg = json.load(f)
+
+sensor_unit_map = _site_cfg.get("accelerometer", {}).get("sensor_data_unit", {})
+velocity_sensor_ids = {
+    sid for sid, unit in sensor_unit_map.items() if str(unit) == FILTER_SENSOR_UNIT
+}
+
+rows_before_filter = len(df)
+df = df[
+    (df["acc_side_of_track"] == FILTER_SIDE_OF_TRACK)
+    & (df["sensor_id"].isin(velocity_sensor_ids))
+].copy()
+print(
+    "Applied filters: "
+    f"acc_side_of_track == {FILTER_SIDE_OF_TRACK}, "
+    f"sensor unit == {FILTER_SENSOR_UNIT}"
+)
+print(
+    f"  Rows after filter: {len(df):,} "
+    f"(kept {100.0 * len(df) / max(rows_before_filter, 1):.1f}% of parquet rows)"
+)
+if len(df) == 0:
+    raise ValueError(
+        "Filtered dataset is empty. Check filter values and source parquet."
+    )
 
 
 def _load_train_type_group_mapping(path: Path) -> tuple[dict[str, str], list[str]]:
@@ -316,12 +352,32 @@ if RUN_1_DISTRIBUTIONS:
 
     # 1A-3: One panel per group (readable comparison)
     n_groups = len(TRAIN_GROUPS_PRESENT)
+    all_raw = df[TARGET].dropna()
+    all_log = np.log1p(all_raw)
+
+    raw_xmin, raw_xmax = float(all_raw.min()), float(all_raw.max())
+    log_xmin, log_xmax = float(all_log.min()), float(all_log.max())
+    raw_bins = np.linspace(raw_xmin, raw_xmax, 50)
+    log_bins = np.linspace(log_xmin, log_xmax, 50)
+
+    # Compute global y-limits so all panels are directly comparable.
+    raw_ymax = 1.0
+    log_ymax = 1.0
+    for grp in TRAIN_GROUPS_PRESENT:
+        gvals = df.loc[df["train_type_group"] == grp, TARGET].dropna().to_numpy()
+        if gvals.size == 0:
+            continue
+        raw_counts, _ = np.histogram(gvals, bins=raw_bins)
+        log_counts, _ = np.histogram(np.log1p(gvals), bins=log_bins)
+        raw_ymax = max(raw_ymax, float(raw_counts.max()))
+        log_ymax = max(log_ymax, float(log_counts.max()))
+
     fig, axes = plt.subplots(
         n_groups,
         2,
         figsize=(12, max(3.0 * n_groups, 8.0)),
-        sharex=False,
-        sharey=False,
+        sharex="col",
+        sharey="col",
     )
     if n_groups == 1:
         axes = np.array([axes])
@@ -334,18 +390,25 @@ if RUN_1_DISTRIBUTIONS:
         gvals = df.loc[df["train_type_group"] == grp, TARGET].dropna()
         clr = TRAIN_GROUP_COLOR_MAP[grp]
 
-        _log_hist(
-            axes[row_idx, 0],
+        axes[row_idx, 0].hist(
             gvals,
-            clr,
-            "PGV-Z (mm/s)",
-            f"{grp} — raw (n={len(gvals):,})",
+            bins=raw_bins,
+            color=clr,
+            edgecolor="white",
+            linewidth=0.2,
         )
+        axes[row_idx, 0].set_xlabel("PGV-Z (mm/s)", fontsize=8)
+        axes[row_idx, 0].set_ylabel("Count", fontsize=8)
+        axes[row_idx, 0].set_title(f"{grp} — raw (n={len(gvals):,})", fontsize=9)
+        axes[row_idx, 0].tick_params(labelsize=7)
+        axes[row_idx, 0].grid(axis="y", alpha=0.3)
+        axes[row_idx, 0].set_xlim(raw_xmin, raw_xmax)
+        axes[row_idx, 0].set_ylim(0, raw_ymax * 1.05)
 
         glog = np.log1p(gvals)
         axes[row_idx, 1].hist(
             glog,
-            bins=50,
+            bins=log_bins,
             color=clr,
             edgecolor="white",
             linewidth=0.2,
@@ -355,6 +418,8 @@ if RUN_1_DISTRIBUTIONS:
         axes[row_idx, 1].set_title(f"{grp} — log1p", fontsize=9)
         axes[row_idx, 1].tick_params(labelsize=7)
         axes[row_idx, 1].grid(axis="y", alpha=0.3)
+        axes[row_idx, 1].set_xlim(log_xmin, log_xmax)
+        axes[row_idx, 1].set_ylim(0, log_ymax * 1.05)
 
     fig.tight_layout(rect=[0, 0.01, 1, 0.98])
     _savefig(fig, DIST_DIR, "01A_target_distribution_group_panels.png")
@@ -834,9 +899,14 @@ if RUN_4_TARGET_DISTANCE:
     ncols = 4
     nrows = int(np.ceil(len(sensors) / ncols))
     fig, axes = plt.subplots(
-        nrows, ncols, figsize=(ncols * 4, nrows * 3.2), sharex=False, sharey=False
+        nrows, ncols, figsize=(ncols * 4, nrows * 3.2), sharex=True, sharey=True
     )
     fig.suptitle("PGV-Z vs distance — per sensor", fontsize=13, fontweight="bold")
+    x_min = float(sub["acc_distance_to_track_m"].min())
+    x_max = float(sub["acc_distance_to_track_m"].max())
+    y_pos = sub[TARGET][sub[TARGET] > 0]
+    y_min = float(y_pos.min()) if not y_pos.empty else 1e-6
+    y_max = float(sub[TARGET].max())
     for ax, sid in zip(axes.flat, sensors):
         sdf = sub[sub["sensor_id"] == sid]
         for grp in train_groups:
@@ -859,6 +929,8 @@ if RUN_4_TARGET_DISTANCE:
         ax.set_ylabel("PGV-Z", fontsize=7)
         ax.tick_params(labelsize=6)
         ax.grid(alpha=0.2)
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
     # hide unused axes
     for ax in axes.flat[len(sensors) :]:
         ax.set_visible(False)

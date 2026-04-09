@@ -12,6 +12,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from time import perf_counter
 
 
 def _apply_config_attributes(nc_var, var_config: dict, long_name_override: str = None):
@@ -143,6 +144,12 @@ def create_netcdf_database(
 
     output_files = []
     total_events = len(events_dict)
+    write_t0 = perf_counter()
+
+    print(
+        f"  NetCDF writer: starting {total_events} event(s) "
+        f"(compression_level={compression_level})"
+    )
 
     for local_idx, (event_id, event_data) in enumerate(events_dict.items(), start=1):
         # Generate file ID and path
@@ -153,6 +160,13 @@ def create_netcdf_database(
         # Extract metadata
         metadata = event_data["event_metadata"]
         mps = event_data["measurement_points"]
+        has_fo = bool(event_data.get("fo_data", {}).get("found", False))
+
+        if local_idx <= 3:
+            print(
+                f"    [{local_idx:>4}/{total_events}] event_id={event_id} "
+                f"sensors={len(mps)} fo={has_fo}"
+            )
 
         # Reference time (t0) - convert to UTC if needed
         t0_naive = datetime.strptime(metadata["start_time"], "%Y-%m-%d %H:%M:%S")
@@ -610,8 +624,21 @@ def create_netcdf_database(
 
         output_files.append(str(netcdf_path))
 
-        # Print progress
-        if local_idx % 10 == 0 or local_idx == total_events:
-            print(f"  Created {local_idx}/{total_events} files...")
+        # Print progress at meaningful checkpoints.
+        if local_idx == total_events:
+            elapsed = perf_counter() - write_t0
+            print(
+                f"  Created {local_idx}/{total_events} files "
+                f"(100.0%) in {elapsed:.1f}s"
+            )
+        elif local_idx % 50 == 0:
+            elapsed = perf_counter() - write_t0
+            pct = 100.0 * local_idx / total_events
+            rate = local_idx / elapsed if elapsed > 0 else 0.0
+            eta = (total_events - local_idx) / rate if rate > 0 else float("nan")
+            print(
+                f"  Created {local_idx}/{total_events} files "
+                f"({pct:.1f}%) | {rate:.2f} files/s | ETA {eta:.1f}s"
+            )
 
     return output_files
