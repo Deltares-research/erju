@@ -195,6 +195,85 @@
             "MP17": "acceleration_g",
             "MP18": "acceleration_g",
             "MP19": "acceleration_g"
+        },
+        "measurement_point_aliases": {
+            "Meetjournal_MP6_Holten_noord_4m_B": "Meetjournal_MP6_Holten_noord_4m_D"
+        },
+        "line_geometry": {
+            "fo_window_half_width_channels": 10,
+            "line_center_channel": {
+                "line_A": 1184,
+                "line_B": 1192,
+                "line_C": 1194,
+                "line_D": 1196,
+                "line_E": 1204
+            },
+            "sensor_line_map": {
+                "MP1": "line_C",
+                "MP2": "line_C",
+                "MP3": "line_C",
+                "MP4": "line_C",
+                "MP5": "line_C",
+                "MP6": "line_D",
+                "MP7": "line_B",
+                "MP8": "line_C",
+                "MP9": "line_D",
+                "MP10": "line_C",
+                "MP12": "line_A",
+                "MP13": "line_E"
+            },
+            "line_sensors_by_distance": {
+                "line_A": [
+                    "MP12"
+                ],
+                "line_B": [
+                    "MP7"
+                ],
+                "line_C": [
+                    "MP3",
+                    "MP4",
+                    "MP5",
+                    "MP8",
+                    "MP10",
+                    "MP1",
+                    "MP2"
+                ],
+                "line_D": [
+                    "MP6",
+                    "MP9"
+                ],
+                "line_E": [
+                    "MP13"
+                ]
+            },
+            "line_sensors_distance_m": {
+                "line_A": [
+                    5.0
+                ],
+                "line_B": [
+                    4.0
+                ],
+                "line_C": [
+                    2.0,
+                    2.0,
+                    4.0,
+                    4.0,
+                    8.0,
+                    16.0,
+                    25.0
+                ],
+                "line_D": [
+                    4.0,
+                    4.0
+                ],
+                "line_E": [
+                    5.0
+                ]
+            },
+            "perpendicular_direction_sign": {
+                "-1": "away_from_track_negative",
+                "1": "away_from_track_positive"
+            }
         }
     },
     "fibre_optics": {

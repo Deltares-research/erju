@@ -13,6 +13,7 @@ import sys
 import csv
 from pathlib import Path
 from datetime import datetime, timedelta
+from time import perf_counter
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -83,7 +84,10 @@ def main():
     total_events_found = 0
     fo_report_rows = []
 
+    run_t0 = perf_counter()
+
     for chunk_idx, (chunk_start_dt, chunk_end_dt) in enumerate(chunk_ranges, start=1):
+        chunk_t0 = perf_counter()
         chunk_start = chunk_start_dt.strftime(DATE_FMT)
         chunk_end = chunk_end_dt.strftime(DATE_FMT)
 
@@ -105,6 +109,35 @@ def main():
 
         n_events = len(events_dict)
         total_events_found += n_events
+
+        if n_events > 0:
+            sensor_presence_counts = {}
+            per_event_sensor_counts = []
+            for event_data in events_dict.values():
+                sensor_ids = list(event_data["measurement_points"].keys())
+                per_event_sensor_counts.append(len(sensor_ids))
+                for sid in sensor_ids:
+                    sensor_presence_counts[sid] = sensor_presence_counts.get(sid, 0) + 1
+
+            expected_sensors = sorted(set(config.ACCEL_SENSOR_ID_MAP.values()))
+            missing_sensor_global = [
+                sid for sid in expected_sensors if sensor_presence_counts.get(sid, 0) == 0
+            ]
+
+            print(
+                f"  Events fetched: {n_events} | "
+                f"Sensors/event min-avg-max: "
+                f"{min(per_event_sensor_counts)}-"
+                f"{(sum(per_event_sensor_counts) / len(per_event_sensor_counts)):.1f}-"
+                f"{max(per_event_sensor_counts)}"
+            )
+            if missing_sensor_global:
+                print(
+                    "  WARNING: Sensors with zero presence in this chunk: "
+                    + ", ".join(missing_sensor_global)
+                )
+            else:
+                print("  All configured sensor IDs appeared at least once in this chunk.")
 
         if n_events == 0:
             print("  No events in this chunk.")
@@ -151,7 +184,31 @@ def main():
                     }
                 )
 
+            chunk_fo_rows = fo_report_rows[-n_events:]
+            fo_found_count = sum(int(r["has_fo"]) for r in chunk_fo_rows)
+            fo_missing_count = n_events - fo_found_count
+            print(
+                f"  FO summary: found={fo_found_count} | missing={fo_missing_count} "
+                f"({(100.0 * fo_found_count / n_events):.1f}% coverage)"
+            )
+
+            # Show top FO miss reasons for quick debugging.
+            miss_reason_counts = {}
+            for row in chunk_fo_rows:
+                if int(row["has_fo"]) == 0:
+                    reason = str(row.get("reason", "unknown"))
+                    miss_reason_counts[reason] = miss_reason_counts.get(reason, 0) + 1
+            if miss_reason_counts:
+                sorted_reasons = sorted(
+                    miss_reason_counts.items(), key=lambda kv: kv[1], reverse=True
+                )
+                top_reasons = ", ".join(
+                    f"{reason}={count}" for reason, count in sorted_reasons[:5]
+                )
+                print(f"  FO missing reasons (top): {top_reasons}")
+
         print(f"  Writing {n_events} NetCDF file(s)...")
+        write_t0 = perf_counter()
         chunk_output_files = create_netcdf_database(
             events_dict=events_dict,
             output_folder=output_subfolder,
@@ -161,7 +218,14 @@ def main():
             compression_level=9 if config.DATABASE_COMPRESSION else 0,
             start_index=len(output_files) + 1,
         )
+        write_dt = perf_counter() - write_t0
         output_files.extend(chunk_output_files)
+
+        chunk_dt = perf_counter() - chunk_t0
+        print(
+            f"  Chunk complete: wrote {len(chunk_output_files)} file(s) | "
+            f"write_time={write_dt:.1f}s | total_chunk_time={chunk_dt:.1f}s"
+        )
 
     if len(output_files) == 0:
         print("\nNo events found! Check your date range and filters.")
@@ -171,6 +235,7 @@ def main():
     print(f"Total events found: {total_events_found}")
     print(f"\nCreated {len(output_files)} NetCDF files")
     print(f"Location: {output_subfolder}")
+    print(f"Total runtime: {perf_counter() - run_t0:.1f}s")
 
     if getattr(config, "FO_ENABLE", False) and getattr(
         config, "FO_SAVE_AVAILABILITY_REPORT", True
