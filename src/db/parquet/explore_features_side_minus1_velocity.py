@@ -58,6 +58,7 @@ RUN_2_CORRELATIONS = True
 RUN_3_IMPORTANCE_CORR = True
 RUN_4_TARGET_DISTANCE = True
 RUN_5_PAIRPLOT = True
+RUN_6_MP4_DIAGNOSTICS = True
 
 # Pair-plot / heatmap top-N
 TOP_N = 8
@@ -108,6 +109,15 @@ if len(df) == 0:
     raise ValueError(
         "Filtered dataset is empty. Check filter values and source parquet."
     )
+
+# Derive event datetime/week from event_id (e.g. 20240829_080626.mat).
+event_id_clean = df["event_id"].astype(str).str.replace(".mat", "", regex=False)
+event_ts_str = event_id_clean.str.slice(0, 15)
+df["event_dt"] = pd.to_datetime(event_ts_str, format="%Y%m%d_%H%M%S", errors="coerce")
+iso_cal = df["event_dt"].dt.isocalendar()
+df["event_week"] = (
+    iso_cal["year"].astype(str) + "-W" + iso_cal["week"].astype(str).str.zfill(2)
+)
 
 
 def _load_train_type_group_mapping(path: Path) -> tuple[dict[str, str], list[str]]:
@@ -535,6 +545,209 @@ if RUN_1_DISTRIBUTIONS:
 
     fig.tight_layout(rect=[0, 0.01, 1, 0.98])
     _savefig(fig, DIST_DIR, "01A_target_distribution_distance_panels.png")
+
+    # 1A-6: 2m subset only, separated by track number
+    print("[1A-6] Target distribution for 2m subset by track_number …")
+    df_2m = df[df["acc_distance_to_track_m"] == 2.0].dropna(subset=[TARGET]).copy()
+    track_vals = sorted(df_2m["track_number"].dropna().astype(int).unique().tolist())
+
+    if len(track_vals) == 0:
+        print("  WARNING: no 2m data found for track-separated target plot.")
+    else:
+        if len(track_vals) != 2:
+            print(
+                f"  WARNING: expected 2 track classes at 2m, found {len(track_vals)}: {track_vals}"
+            )
+
+        all_raw_2m = df_2m[TARGET].to_numpy()
+        all_log_2m = np.log1p(all_raw_2m)
+        raw_2m_xmin, raw_2m_xmax = float(all_raw_2m.min()), float(all_raw_2m.max())
+        log_2m_xmin, log_2m_xmax = float(all_log_2m.min()), float(all_log_2m.max())
+        raw_2m_bins = np.linspace(raw_2m_xmin, raw_2m_xmax, 50)
+        log_2m_bins = np.linspace(log_2m_xmin, log_2m_xmax, 50)
+
+        raw_2m_ymax = 1.0
+        log_2m_ymax = 1.0
+        for trk in track_vals:
+            tvals = df_2m.loc[df_2m["track_number"] == trk, TARGET].to_numpy()
+            if tvals.size == 0:
+                continue
+            rc, _ = np.histogram(tvals, bins=raw_2m_bins)
+            lc, _ = np.histogram(np.log1p(tvals), bins=log_2m_bins)
+            raw_2m_ymax = max(raw_2m_ymax, float(rc.max()))
+            log_2m_ymax = max(log_2m_ymax, float(lc.max()))
+
+        track_palette = sns.color_palette("Set2", max(len(track_vals), 2))
+        fig, axes = plt.subplots(
+            len(track_vals),
+            2,
+            figsize=(12, max(2.8 * len(track_vals), 6.0)),
+            sharex="col",
+            sharey="col",
+        )
+        if len(track_vals) == 1:
+            axes = np.array([axes])
+        fig.suptitle(
+            "Target: PGV-Z at 2m — one row per track_number",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+        for i, trk in enumerate(track_vals):
+            clr = track_palette[i % len(track_palette)]
+            tvals = df_2m.loc[df_2m["track_number"] == trk, TARGET].to_numpy()
+
+            axes[i, 0].hist(
+                tvals,
+                bins=raw_2m_bins,
+                color=clr,
+                edgecolor="white",
+                linewidth=0.2,
+            )
+            axes[i, 0].set_xlabel("PGV-Z (mm/s)", fontsize=8)
+            axes[i, 0].set_ylabel("Count", fontsize=8)
+            axes[i, 0].set_title(f"track {trk} — raw (n={len(tvals):,})", fontsize=9)
+            axes[i, 0].tick_params(labelsize=7)
+            axes[i, 0].grid(axis="y", alpha=0.3)
+            axes[i, 0].set_xlim(raw_2m_xmin, raw_2m_xmax)
+            axes[i, 0].set_ylim(0, raw_2m_ymax * 1.05)
+
+            tlog = np.log1p(tvals)
+            axes[i, 1].hist(
+                tlog,
+                bins=log_2m_bins,
+                color=clr,
+                edgecolor="white",
+                linewidth=0.2,
+            )
+            axes[i, 1].set_xlabel("log1p(PGV-Z)", fontsize=8)
+            axes[i, 1].set_ylabel("Count", fontsize=8)
+            axes[i, 1].set_title(f"track {trk} — log1p", fontsize=9)
+            axes[i, 1].tick_params(labelsize=7)
+            axes[i, 1].grid(axis="y", alpha=0.3)
+            axes[i, 1].set_xlim(log_2m_xmin, log_2m_xmax)
+            axes[i, 1].set_ylim(0, log_2m_ymax * 1.05)
+
+        fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+        _savefig(fig, DIST_DIR, "01A_target_distribution_2m_by_track_panels.png")
+
+    # 1A-7: All filtered data, separated by ISO week
+    print("[1A-7] Target distribution by event_week (all filtered rows) …")
+    week_df = df.dropna(subset=["event_week", TARGET]).copy()
+    week_order = sorted(week_df["event_week"].unique().tolist())
+
+    if len(week_order) == 0:
+        print("  WARNING: no parsable event_week values found.")
+    else:
+        week_palette = dict(zip(week_order, sns.color_palette("mako", len(week_order))))
+
+        # Overlay view
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        fig.suptitle(
+            "Target: PGV-Z (mm/s) — event_week overlay",
+            fontsize=13,
+            fontweight="bold",
+        )
+        _group_hist(
+            axes[0],
+            week_df,
+            TARGET,
+            "PGV-Z (mm/s)",
+            "Raw values by event_week",
+            legend=True,
+            hue_col="event_week",
+            hue_order=week_order,
+            palette=week_palette,
+            legend_title="event_week",
+        )
+
+        week_tmp = week_df[[TARGET, "event_week"]].copy()
+        week_tmp["log_target"] = np.log1p(week_tmp[TARGET])
+        _group_hist(
+            axes[1],
+            week_tmp,
+            "log_target",
+            "log1p(PGV-Z)",
+            "log1p-transformed by event_week",
+            legend=False,
+            hue_col="event_week",
+            hue_order=week_order,
+            palette=week_palette,
+            legend_title="event_week",
+        )
+        fig.tight_layout()
+        _savefig(fig, DIST_DIR, "01A_target_distribution_week_overlay.png")
+
+        # One row per week, shared scales
+        raw_w = week_df[TARGET].to_numpy()
+        log_w = np.log1p(raw_w)
+        raw_w_xmin, raw_w_xmax = float(raw_w.min()), float(raw_w.max())
+        log_w_xmin, log_w_xmax = float(log_w.min()), float(log_w.max())
+        raw_w_bins = np.linspace(raw_w_xmin, raw_w_xmax, 50)
+        log_w_bins = np.linspace(log_w_xmin, log_w_xmax, 50)
+
+        raw_w_ymax = 1.0
+        log_w_ymax = 1.0
+        for w in week_order:
+            wvals = week_df.loc[week_df["event_week"] == w, TARGET].to_numpy()
+            if wvals.size == 0:
+                continue
+            rc, _ = np.histogram(wvals, bins=raw_w_bins)
+            lc, _ = np.histogram(np.log1p(wvals), bins=log_w_bins)
+            raw_w_ymax = max(raw_w_ymax, float(rc.max()))
+            log_w_ymax = max(log_w_ymax, float(lc.max()))
+
+        fig, axes = plt.subplots(
+            len(week_order),
+            2,
+            figsize=(12, max(2.8 * len(week_order), 6.0)),
+            sharex="col",
+            sharey="col",
+        )
+        if len(week_order) == 1:
+            axes = np.array([axes])
+        fig.suptitle(
+            "Target: PGV-Z (mm/s) — one row per event_week",
+            fontsize=13,
+            fontweight="bold",
+        )
+        for i, w in enumerate(week_order):
+            clr = week_palette[w]
+            wvals = week_df.loc[week_df["event_week"] == w, TARGET].to_numpy()
+
+            axes[i, 0].hist(
+                wvals,
+                bins=raw_w_bins,
+                color=clr,
+                edgecolor="white",
+                linewidth=0.2,
+            )
+            axes[i, 0].set_xlabel("PGV-Z (mm/s)", fontsize=8)
+            axes[i, 0].set_ylabel("Count", fontsize=8)
+            axes[i, 0].set_title(f"{w} — raw (n={len(wvals):,})", fontsize=9)
+            axes[i, 0].tick_params(labelsize=7)
+            axes[i, 0].grid(axis="y", alpha=0.3)
+            axes[i, 0].set_xlim(raw_w_xmin, raw_w_xmax)
+            axes[i, 0].set_ylim(0, raw_w_ymax * 1.05)
+
+            wlog = np.log1p(wvals)
+            axes[i, 1].hist(
+                wlog,
+                bins=log_w_bins,
+                color=clr,
+                edgecolor="white",
+                linewidth=0.2,
+            )
+            axes[i, 1].set_xlabel("log1p(PGV-Z)", fontsize=8)
+            axes[i, 1].set_ylabel("Count", fontsize=8)
+            axes[i, 1].set_title(f"{w} — log1p", fontsize=9)
+            axes[i, 1].tick_params(labelsize=7)
+            axes[i, 1].grid(axis="y", alpha=0.3)
+            axes[i, 1].set_xlim(log_w_xmin, log_w_xmax)
+            axes[i, 1].set_ylim(0, log_w_ymax * 1.05)
+
+        fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+        _savefig(fig, DIST_DIR, "01A_target_distribution_week_panels.png")
 
     # ── 1B  Geometry features ─────────────────────────────────────────────────
     print("[1B] Geometry features …")
@@ -1149,5 +1362,324 @@ if RUN_5_PAIRPLOT:
     plt.close(pg.figure)
     print(f"  Saved: {out_path.relative_to(BASE_OUT)}")
     print("[5] Pair plot done.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ANALYSIS 6 — MP4-specific diagnostics (requested follow-up)
+# ══════════════════════════════════════════════════════════════════════════════
+if RUN_6_MP4_DIAGNOSTICS:
+    print("\n=== Analysis 6: MP4 diagnostics ===")
+
+    mp4 = df[(df["sensor_id"] == "MP4") & df[TARGET].notna()].copy()
+    if len(mp4) == 0:
+        print("[6] WARNING: no MP4 rows available after filters; skipping.")
+    else:
+        print(
+            f"[6] MP4 subset: rows={len(mp4):,} | "
+            f"unique events={mp4['event_id'].nunique():,}"
+        )
+
+        # 6A — grouped by speed bins (quantile bins)
+        print("[6A] MP4 target distribution by speed bins …")
+        mp4_speed = mp4.dropna(subset=["train_speed_kmh"]).copy()
+        if len(mp4_speed) < 20:
+            print(
+                "  WARNING: insufficient rows with train_speed_kmh for speed-bin plot."
+            )
+        else:
+            q = np.quantile(
+                mp4_speed["train_speed_kmh"].to_numpy(), [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+            )
+            q = np.unique(np.round(q, 3))
+            if len(q) < 3:
+                print(
+                    "  WARNING: speed values too concentrated to build quantile bins."
+                )
+            else:
+                labels = [f"{q[i]:.0f}-{q[i+1]:.0f} km/h" for i in range(len(q) - 1)]
+                mp4_speed["speed_bin"] = pd.cut(
+                    mp4_speed["train_speed_kmh"],
+                    bins=q,
+                    labels=labels,
+                    include_lowest=True,
+                    duplicates="drop",
+                )
+                speed_order = [
+                    x for x in labels if x in set(mp4_speed["speed_bin"].astype(str))
+                ]
+                mp4_speed = mp4_speed.dropna(subset=["speed_bin"])
+
+                raw = mp4_speed[TARGET].to_numpy()
+                log = np.log1p(raw)
+                raw_bins = np.linspace(float(raw.min()), float(raw.max()), 50)
+                log_bins = np.linspace(float(log.min()), float(log.max()), 50)
+
+                raw_ymax, log_ymax = 1.0, 1.0
+                for b in speed_order:
+                    vals = mp4_speed.loc[
+                        mp4_speed["speed_bin"].astype(str) == b, TARGET
+                    ].to_numpy()
+                    if vals.size == 0:
+                        continue
+                    rc, _ = np.histogram(vals, bins=raw_bins)
+                    lc, _ = np.histogram(np.log1p(vals), bins=log_bins)
+                    raw_ymax = max(raw_ymax, float(rc.max()))
+                    log_ymax = max(log_ymax, float(lc.max()))
+
+                fig, axes = plt.subplots(
+                    len(speed_order),
+                    2,
+                    figsize=(12, max(2.8 * len(speed_order), 7.0)),
+                    sharex="col",
+                    sharey="col",
+                )
+                if len(speed_order) == 1:
+                    axes = np.array([axes])
+                palette = sns.color_palette("crest", len(speed_order))
+                fig.suptitle(
+                    "MP4 (2m) target distribution — by speed bin",
+                    fontsize=13,
+                    fontweight="bold",
+                )
+                for i, b in enumerate(speed_order):
+                    vals = mp4_speed.loc[
+                        mp4_speed["speed_bin"].astype(str) == b, TARGET
+                    ].to_numpy()
+                    clr = palette[i]
+                    axes[i, 0].hist(
+                        vals, bins=raw_bins, color=clr, edgecolor="white", linewidth=0.2
+                    )
+                    axes[i, 1].hist(
+                        np.log1p(vals),
+                        bins=log_bins,
+                        color=clr,
+                        edgecolor="white",
+                        linewidth=0.2,
+                    )
+                    axes[i, 0].set_title(f"{b} — raw (n={len(vals):,})", fontsize=9)
+                    axes[i, 1].set_title(f"{b} — log1p", fontsize=9)
+                    axes[i, 0].set_ylabel("Count", fontsize=8)
+                    axes[i, 0].grid(axis="y", alpha=0.3)
+                    axes[i, 1].grid(axis="y", alpha=0.3)
+                    axes[i, 0].tick_params(labelsize=7)
+                    axes[i, 1].tick_params(labelsize=7)
+                    axes[i, 0].set_ylim(0, raw_ymax * 1.05)
+                    axes[i, 1].set_ylim(0, log_ymax * 1.05)
+                for ax in axes[:, 0]:
+                    ax.set_xlabel("PGV-Z (mm/s)", fontsize=8)
+                for ax in axes[:, 1]:
+                    ax.set_xlabel("log1p(PGV-Z)", fontsize=8)
+                fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+                _savefig(fig, DIST_DIR, "06A_mp4_target_distribution_speed_bins.png")
+
+        # 6B — grouped by raw train_type (top labels)
+        print("[6B] MP4 target distribution by raw train_type …")
+        mp4_tt = mp4.copy()
+        mp4_tt["train_type_raw"] = mp4_tt["train_type"].fillna("unknown").astype(str)
+        tt_counts = mp4_tt["train_type_raw"].value_counts()
+        top_tt = tt_counts.head(10).index.tolist()
+        mp4_top = mp4_tt[mp4_tt["train_type_raw"].isin(top_tt)].copy()
+
+        raw = mp4_top[TARGET].to_numpy()
+        log = np.log1p(raw)
+        raw_bins = np.linspace(float(raw.min()), float(raw.max()), 50)
+        log_bins = np.linspace(float(log.min()), float(log.max()), 50)
+
+        raw_ymax, log_ymax = 1.0, 1.0
+        for tt in top_tt:
+            vals = mp4_top.loc[mp4_top["train_type_raw"] == tt, TARGET].to_numpy()
+            if vals.size == 0:
+                continue
+            rc, _ = np.histogram(vals, bins=raw_bins)
+            lc, _ = np.histogram(np.log1p(vals), bins=log_bins)
+            raw_ymax = max(raw_ymax, float(rc.max()))
+            log_ymax = max(log_ymax, float(lc.max()))
+
+        fig, axes = plt.subplots(
+            len(top_tt),
+            2,
+            figsize=(12, max(2.7 * len(top_tt), 8.0)),
+            sharex="col",
+            sharey="col",
+        )
+        if len(top_tt) == 1:
+            axes = np.array([axes])
+        palette = sns.color_palette("rocket", len(top_tt))
+        fig.suptitle(
+            "MP4 (2m) target distribution — by raw train_type (top 10)",
+            fontsize=13,
+            fontweight="bold",
+        )
+        for i, tt in enumerate(top_tt):
+            vals = mp4_top.loc[mp4_top["train_type_raw"] == tt, TARGET].to_numpy()
+            clr = palette[i]
+            axes[i, 0].hist(
+                vals, bins=raw_bins, color=clr, edgecolor="white", linewidth=0.2
+            )
+            axes[i, 1].hist(
+                np.log1p(vals),
+                bins=log_bins,
+                color=clr,
+                edgecolor="white",
+                linewidth=0.2,
+            )
+            axes[i, 0].set_title(f"{tt} — raw (n={len(vals):,})", fontsize=8)
+            axes[i, 1].set_title(f"{tt} — log1p", fontsize=8)
+            axes[i, 0].set_ylabel("Count", fontsize=8)
+            axes[i, 0].grid(axis="y", alpha=0.3)
+            axes[i, 1].grid(axis="y", alpha=0.3)
+            axes[i, 0].tick_params(labelsize=7)
+            axes[i, 1].tick_params(labelsize=7)
+            axes[i, 0].set_ylim(0, raw_ymax * 1.05)
+            axes[i, 1].set_ylim(0, log_ymax * 1.05)
+        for ax in axes[:, 0]:
+            ax.set_xlabel("PGV-Z (mm/s)", fontsize=8)
+        for ax in axes[:, 1]:
+            ax.set_xlabel("log1p(PGV-Z)", fontsize=8)
+        fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+        _savefig(fig, DIST_DIR, "06B_mp4_target_distribution_raw_train_type_top10.png")
+
+        # 6B2 — grouped by train_type_group (same grouping system, MP4 only)
+        print("[6B2] MP4 target distribution by train_type_group …")
+        mp4_grp = mp4.copy()
+        grp_order = [
+            g
+            for g in TRAIN_GROUPS_PRESENT
+            if g in set(mp4_grp["train_type_group"].dropna().unique())
+        ]
+
+        if len(grp_order) == 0:
+            print("  WARNING: no train_type_group labels found for MP4.")
+        else:
+            raw = mp4_grp[TARGET].to_numpy()
+            log = np.log1p(raw)
+            raw_bins = np.linspace(float(raw.min()), float(raw.max()), 50)
+            log_bins = np.linspace(float(log.min()), float(log.max()), 50)
+
+            raw_ymax, log_ymax = 1.0, 1.0
+            for grp in grp_order:
+                vals = mp4_grp.loc[
+                    mp4_grp["train_type_group"] == grp, TARGET
+                ].to_numpy()
+                if vals.size == 0:
+                    continue
+                rc, _ = np.histogram(vals, bins=raw_bins)
+                lc, _ = np.histogram(np.log1p(vals), bins=log_bins)
+                raw_ymax = max(raw_ymax, float(rc.max()))
+                log_ymax = max(log_ymax, float(lc.max()))
+
+            fig, axes = plt.subplots(
+                len(grp_order),
+                2,
+                figsize=(12, max(2.7 * len(grp_order), 8.0)),
+                sharex="col",
+                sharey="col",
+            )
+            if len(grp_order) == 1:
+                axes = np.array([axes])
+
+            fig.suptitle(
+                "MP4 (2m) target distribution — by train_type_group",
+                fontsize=13,
+                fontweight="bold",
+            )
+            for i, grp in enumerate(grp_order):
+                vals = mp4_grp.loc[
+                    mp4_grp["train_type_group"] == grp, TARGET
+                ].to_numpy()
+                clr = TRAIN_GROUP_COLOR_MAP.get(grp, "gray")
+                axes[i, 0].hist(
+                    vals,
+                    bins=raw_bins,
+                    color=clr,
+                    edgecolor="white",
+                    linewidth=0.2,
+                )
+                axes[i, 1].hist(
+                    np.log1p(vals),
+                    bins=log_bins,
+                    color=clr,
+                    edgecolor="white",
+                    linewidth=0.2,
+                )
+                axes[i, 0].set_title(f"{grp} — raw (n={len(vals):,})", fontsize=8)
+                axes[i, 1].set_title(f"{grp} — log1p", fontsize=8)
+                axes[i, 0].set_ylabel("Count", fontsize=8)
+                axes[i, 0].grid(axis="y", alpha=0.3)
+                axes[i, 1].grid(axis="y", alpha=0.3)
+                axes[i, 0].tick_params(labelsize=7)
+                axes[i, 1].tick_params(labelsize=7)
+                axes[i, 0].set_ylim(0, raw_ymax * 1.05)
+                axes[i, 1].set_ylim(0, log_ymax * 1.05)
+            for ax in axes[:, 0]:
+                ax.set_xlabel("PGV-Z (mm/s)", fontsize=8)
+            for ax in axes[:, 1]:
+                ax.set_xlabel("log1p(PGV-Z)", fontsize=8)
+            fig.tight_layout(rect=[0, 0.01, 1, 0.98])
+            _savefig(fig, DIST_DIR, "06B2_mp4_target_distribution_train_type_group.png")
+
+        # 6C — time-of-day and day-of-week effects
+        print("[6C] MP4 target diagnostics by hour/day …")
+        mp4_time = mp4.dropna(subset=["event_dt"]).copy()
+        mp4_time["log_target"] = np.log1p(mp4_time[TARGET])
+        mp4_time["hour"] = mp4_time["event_dt"].dt.hour
+        mp4_time["hour_bin"] = pd.cut(
+            mp4_time["hour"],
+            bins=[0, 4, 8, 12, 16, 20, 24],
+            labels=["00-04", "04-08", "08-12", "12-16", "16-20", "20-24"],
+            right=False,
+            include_lowest=True,
+        )
+        mp4_time["day_of_week"] = mp4_time["event_dt"].dt.day_name()
+        day_order = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ]
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
+        fig.suptitle(
+            "MP4 (2m) log-target diagnostics — time patterns",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+        sns.boxplot(
+            data=mp4_time,
+            x="hour_bin",
+            y="log_target",
+            ax=axes[0],
+            color="#4c78a8",
+            fliersize=1.5,
+        )
+        axes[0].set_title("log1p(PGV-Z) by hour bin", fontsize=10)
+        axes[0].set_xlabel("hour bin", fontsize=9)
+        axes[0].set_ylabel("log1p(PGV-Z)", fontsize=9)
+        axes[0].tick_params(axis="x", rotation=25, labelsize=8)
+        axes[0].grid(axis="y", alpha=0.25)
+
+        sns.boxplot(
+            data=mp4_time,
+            x="day_of_week",
+            y="log_target",
+            order=day_order,
+            ax=axes[1],
+            color="#f58518",
+            fliersize=1.5,
+        )
+        axes[1].set_title("log1p(PGV-Z) by day of week", fontsize=10)
+        axes[1].set_xlabel("day of week", fontsize=9)
+        axes[1].set_ylabel("log1p(PGV-Z)", fontsize=9)
+        axes[1].tick_params(axis="x", rotation=30, labelsize=8)
+        axes[1].grid(axis="y", alpha=0.25)
+
+        fig.tight_layout(rect=[0, 0.01, 1, 0.95])
+        _savefig(fig, DIST_DIR, "06C_mp4_logtarget_time_patterns.png")
+
+        print("[6] MP4 diagnostics done.")
 
 print("\nDone.")
