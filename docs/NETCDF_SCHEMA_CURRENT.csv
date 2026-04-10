@@ -1,53 +1,56 @@
-group,root,name,type,size,dimensions,units,notes
-general attribute,ROOT,event_id,string,scalar,,-,Unique identifier for this train passage event
-general attribute,ROOT,site_id,string,scalar,,-,Site name
-general attribute,ROOT,event_t0_utc,string (ISO UTC),scalar,,-,Shared event reference time for all modalities
-general attribute,ROOT,created_utc,string (ISO UTC),scalar,,-,NetCDF creation timestamp
-general attribute,ROOT,pipeline_version,string,scalar,,-,Pipeline version from config
-general attribute,ROOT,software_git_hash,string,scalar,,-,Currently set to N/A
-query attribute,ROOT,query_start_date,string,scalar,,-,Only when metadata inclusion is enabled
-query attribute,ROOT,query_end_date,string,scalar,,-,Only when metadata inclusion is enabled
-query attribute,ROOT,query_train_type_filter,string,scalar,,-,Filter used to fetch events
-query attribute,ROOT,query_track_filter,string,scalar,,-,Filter used to fetch events
-query attribute,ROOT,query_timezone,string,scalar,,-,Time basis used during query
-dimension,ROOT,acc_axis,int dimension,3,acc_axis,-,Fixed accelerometer axis count
-dimension,ROOT,fo_channel,int dimension,N_fo_channel,fo_channel,-,Present only when FO data exists
-variable,ROOT/meta_acc,train_type,string,scalar,,-,Train classification
-variable,ROOT/meta_acc,event_start_offset_s,float32,scalar,,s,Event start offset relative to event_t0_utc
-variable,ROOT/meta_acc,event_end_offset_s,float32,scalar,,s,Event end offset relative to event_t0_utc
-variable,ROOT/meta_acc,train_speed_kmh,float32,scalar,,km/h,Train speed from source DB
-variable,ROOT/meta_acc,track_number,int32,scalar,,-,Track number from source DB; missing_value = -1
-dimension,ROOT/geometry_acc,acc_sensor,int dimension,N_acc_sensor,acc_sensor,-,Number of accelerometer sensors in event
-variable,ROOT/geometry_acc,acc_sensor_id,string,N_acc_sensor,(acc_sensor),-,Stable sensor IDs such as MP1 or MP6
-variable,ROOT/geometry_acc,axis_labels,string,3,(acc_axis),-,Usually x y z
-variable,ROOT/geometry_acc,acc_distance_to_track_m,float32,N_acc_sensor,(acc_sensor),m,Sensor distance to track
-variable,ROOT/geometry_acc,acc_side_of_track,int8,N_acc_sensor,(acc_sensor),-,Convention: -1 left 0 unknown +1 right
-variable,ROOT/geometry_acc,axis_mask,int8,N_acc_sensor x 3,(acc_sensor; acc_axis),-,Global per-sensor axis availability mask
-dimension,ROOT/acc/<SENSOR_ID>,acc_time,int dimension,N_acc_time_sensor,acc_time,-,Time samples for this specific sensor
-variable,ROOT/acc/<SENSOR_ID>,time_s,float64,N_acc_time_sensor,(acc_time),s,Relative to event_t0_utc
-variable,ROOT/acc/<SENSOR_ID>,fs_hz,float32,scalar,,Hz,Sensor sampling frequency
-variable,ROOT/acc/<SENSOR_ID>,axis_mask,int8,3,(acc_axis),-,Per-sensor axis mask for this group
-variable,ROOT/acc/<SENSOR_ID>,velocity_mms,float32,N_acc_time_sensor x 3,(acc_time; acc_axis),mm/s,Velocity time series (x, y, z)
-variable,ROOT/meta_fo,fo_reader,string,scalar,,-,FO reader type (for example optasense); only when FO found
-variable,ROOT/meta_fo,fo_file_count,int32,scalar,,-,Number of concatenated FO files
-variable,ROOT/meta_fo,acquisition_id,string,scalar,,-,FO acquisition ID from file metadata when available
-variable,ROOT/meta_fo,gauge_length,float32,scalar,,-,FO gauge length from file metadata or manual fallback
-variable,ROOT/meta_fo,gauge_length_unit,string,scalar,,-,Unit for gauge_length
-variable,ROOT/meta_fo,spatial_sampling_interval,float32,scalar,,-,FO spatial sampling interval from file metadata or manual fallback
-variable,ROOT/meta_fo,spatial_sampling_interval_unit,string,scalar,,-,Unit for spatial_sampling_interval
-variable,ROOT/meta_fo,raw_data_unit,string,scalar,,-,Raw FO data unit from file metadata
-variable,ROOT/meta_fo,raw_description,string,scalar,,-,Raw FO data description from file metadata
-variable,ROOT/meta_fo,fibre_refractive_index,float32,scalar,,-,Fibre refractive index from file metadata
-variable,ROOT/meta_fo,number_of_measurements,int32,scalar,,-,Number of FO samples in source measurement
-variable,ROOT/geometry_fo,centre_fo_channel,int32,scalar,,-,Configured center FO channel
-variable,ROOT/geometry_fo,fo_channel_half_window,int32,scalar,,-,Channels taken on each side of center
-variable,ROOT/geometry_fo,fo_side_of_track,int8,scalar,,-,Convention: -1 left 0 unknown +1 right
-variable,ROOT/geometry_fo,fo_aprox_distance_to_track_m,float32,scalar,,m,Approximate FO distance to track centerline
-variable,ROOT/geometry_fo,fo_channel_id,int32,N_fo_channel,(fo_channel),-,Absolute channel numbers
-variable,ROOT/geometry_fo,fo_channel_position_m,float32,N_fo_channel,(fo_channel),-,Currently literal channel values no distance conversion
-variable,ROOT/geometry_fo,fo_channel_spacing_m,float32,scalar,,m,Optional from FO metadata when available
-variable,ROOT/geometry_fo,fo_gauge_length_m,float32,scalar,,m,Optional from FO metadata when available
-dimension,ROOT/fo,fo_time,int dimension,N_fo_time,fo_time,-,FO time samples in event window
-variable,ROOT/fo,time_s,float64,N_fo_time,(fo_time),s,Relative to event_t0_utc
-variable,ROOT/fo,fs_hz,float32,scalar,,Hz,FO sampling frequency
-variable,ROOT/fo,strain,float32,N_fo_time x N_fo_channel,(fo_time; fo_channel),-,Raw FO strain window around center channel
+group,root,name,type,size,dimensions,units,notes,schema_version
+general attribute,ROOT,event_id,string,scalar,,-,Unique identifier for this train passage event,v1
+general attribute,ROOT,site_id,string,scalar,,-,Site name,v1
+general attribute,ROOT,event_t0_utc,string (ISO UTC),scalar,,-,Shared event reference time for all modalities,v1
+general attribute,ROOT,created_utc,string (ISO UTC),scalar,,-,NetCDF creation timestamp,v1
+general attribute,ROOT,pipeline_version,string,scalar,,-,Pipeline version from config,v1
+general attribute,ROOT,software_git_hash,string,scalar,,-,Currently set to N/A,v1
+query attribute,ROOT,query_start_date,string,scalar,,-,Only when metadata inclusion is enabled,v1
+query attribute,ROOT,query_end_date,string,scalar,,-,Only when metadata inclusion is enabled,v1
+query attribute,ROOT,query_train_type_filter,string,scalar,,-,Filter used to fetch events,v1
+query attribute,ROOT,query_track_filter,string,scalar,,-,Filter used to fetch events,v1
+query attribute,ROOT,query_timezone,string,scalar,,-,Time basis used during query,v1
+dimension,ROOT,acc_axis,int dimension,3,acc_axis,-,Fixed accelerometer axis count,v1
+dimension,ROOT,fo_channel,int dimension,N_fo_channel,fo_channel,-,Present only when FO data exists,v1
+variable,ROOT/meta_acc,train_type,string,scalar,,-,Train classification,v1
+variable,ROOT/meta_acc,event_start_offset_s,float32,scalar,,s,Event start offset relative to event_t0_utc,v1
+variable,ROOT/meta_acc,event_end_offset_s,float32,scalar,,s,Event end offset relative to event_t0_utc,v1
+variable,ROOT/meta_acc,train_speed_kmh,float32,scalar,,km/h,Train speed from source DB,v1
+variable,ROOT/meta_acc,track_number,int32,scalar,,-,Track number from source DB; missing_value = -1,v1
+dimension,ROOT/geometry_acc,acc_sensor,int dimension,N_acc_sensor,acc_sensor,-,Number of accelerometer sensors in event,v1
+variable,ROOT/geometry_acc,acc_sensor_id,string,N_acc_sensor,(acc_sensor),-,Stable sensor IDs such as MP1 or MP6,v1
+variable,ROOT/geometry_acc,axis_labels,string,3,(acc_axis),-,Usually x y z,v1
+variable,ROOT/geometry_acc,acc_distance_to_track_m,float32,N_acc_sensor,(acc_sensor),m,Sensor distance to track,v1
+variable,ROOT/geometry_acc,acc_side_of_track,int8,N_acc_sensor,(acc_sensor),-,Convention: -1 left 0 unknown +1 right,v1
+variable,ROOT/geometry_acc,axis_mask,int8,N_acc_sensor x 3,(acc_sensor; acc_axis),-,Global per-sensor axis availability mask,v1
+dimension,ROOT/acc/<SENSOR_ID>,acc_time,int dimension,N_acc_time_sensor,acc_time,-,Time samples for this specific sensor,v1
+variable,ROOT/acc/<SENSOR_ID>,time_s,float64,N_acc_time_sensor,(acc_time),s,Relative to event_t0_utc,v1
+variable,ROOT/acc/<SENSOR_ID>,fs_hz,float32,scalar,,Hz,Sensor sampling frequency,v1
+variable,ROOT/acc/<SENSOR_ID>,axis_mask,int8,3,(acc_axis),-,Per-sensor axis mask for this group,v1
+variable,ROOT/acc/<SENSOR_ID>,velocity_mms,float32,N_acc_time_sensor x 3,(acc_time; acc_axis),mm/s,Velocity time series (x y z); free-field sensors only (e.g. MP1-MP13),v1
+variable,ROOT/acc/<SENSOR_ID>,acceleration_g,float32,N_acc_time_sensor x 3,(acc_time; acc_axis),g,Acceleration time series (x y z) in g; in-track sensors only (e.g. MP14-MP19); mutually exclusive with velocity_mms,v2
+variable,ROOT/meta_fo,fo_reader,string,scalar,,-,FO reader type (for example optasense); only when FO found,v1
+variable,ROOT/meta_fo,fo_file_count,int32,scalar,,-,Number of concatenated FO files,v1
+variable,ROOT/meta_fo,acquisition_id,string,scalar,,-,FO acquisition ID from file metadata when available,v1
+variable,ROOT/meta_fo,gauge_length,float32,scalar,,-,FO gauge length from file metadata or manual fallback,v1
+variable,ROOT/meta_fo,gauge_length_unit,string,scalar,,-,Unit for gauge_length,v1
+variable,ROOT/meta_fo,spatial_sampling_interval,float32,scalar,,-,FO spatial sampling interval from file metadata or manual fallback,v1
+variable,ROOT/meta_fo,spatial_sampling_interval_unit,string,scalar,,-,Unit for spatial_sampling_interval,v1
+variable,ROOT/meta_fo,raw_data_unit,string,scalar,,-,Raw FO data unit from file metadata,v1
+variable,ROOT/meta_fo,raw_description,string,scalar,,-,Raw FO data description from file metadata,v1
+variable,ROOT/meta_fo,fibre_refractive_index,float32,scalar,,-,Fibre refractive index from file metadata,v1
+variable,ROOT/meta_fo,number_of_measurements,int32,scalar,,-,Number of FO samples in source measurement,v1
+variable,ROOT/geometry_fo,centre_fo_channel,int32,scalar,,-,Configured center FO channel,v1
+variable,ROOT/geometry_fo,fo_channel_half_window,int32,scalar,,-,Channels taken on each side of center,v1
+variable,ROOT/geometry_fo,fo_side_of_track,int8,scalar,,-,Convention: -1 left 0 unknown +1 right,v1
+variable,ROOT/geometry_fo,fo_aprox_distance_to_track_m,float32,scalar,,m,Approximate FO distance to track centerline,v1
+variable,ROOT/geometry_fo,fo_channel_id,int32,N_fo_channel,(fo_channel),-,Absolute channel numbers,v1
+variable,ROOT/geometry_fo,fo_channel_position_m,float32,N_fo_channel,(fo_channel),-,Currently literal channel values no distance conversion,v1
+variable,ROOT/geometry_fo,fo_channel_spacing_m,float32,scalar,,m,Optional from FO metadata when available,v1
+variable,ROOT/geometry_fo,fo_gauge_length_m,float32,scalar,,m,Optional from FO metadata when available,v1
+variable,ROOT/geometry_fo,fo_first_channel,int32,scalar,,-,First absolute FO channel index selected from the DAS array; optional,v2
+variable,ROOT/geometry_fo,fo_last_channel,int32,scalar,,-,Last absolute FO channel index selected from the DAS array; optional,v2
+dimension,ROOT/fo,fo_time,int dimension,N_fo_time,fo_time,-,FO time samples in event window,v1
+variable,ROOT/fo,time_s,float64,N_fo_time,(fo_time),s,Relative to event_t0_utc,v1
+variable,ROOT/fo,fs_hz,float32,scalar,,Hz,FO sampling frequency,v1
+variable,ROOT/fo,strain,float32,N_fo_time x N_fo_channel,(fo_time; fo_channel),-,Raw FO strain window around center channel,v1
