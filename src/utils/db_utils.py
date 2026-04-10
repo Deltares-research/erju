@@ -233,8 +233,15 @@ def fetch_multi_mp_accel_data(
             get_timeseries=True,
         )
 
-        # Get the event timeseries dictionary for this MP
-        event_series = list(tim.values())[0] if tim else {}
+        # Merge timeseries from ALL campaigns into a flat {event_id: data} dict.
+        # When a location spans multiple campaigns (e.g. a sensor that was renamed
+        # between measurement periods), get_events_between_dates returns one entry
+        # per matching campaign table.  Taking only list(tim.values())[0] would
+        # silently discard all events from every campaign beyond the first.
+        event_series: dict = {}
+        if tim:
+            for campaign_data in tim.values():
+                event_series.update(campaign_data)
 
         # Get sensor ID from mapping (no string parsing)
         if mp_name not in sensor_id_map:
@@ -244,8 +251,19 @@ def fetch_multi_mp_accel_data(
             )
         sensor_id = sensor_id_map[mp_name]
 
-        # Process each event
-        for event, (event_id, data) in zip(events, event_series.items()):
+        # Process each event by looking up its timeseries by event_id (tijdsignaal,
+        # column index 7).  Direct lookup avoids the positional zip truncation that
+        # occurs when `events` contains rows from multiple campaigns but
+        # `event_series` only held one campaign's data.
+        for event in events:
+            event_id = event[7]  # tijdsignaal column
+
+            if event_id not in event_series:
+                # Timeseries file was not found for this event; skip sensor.
+                continue
+
+            data = event_series[event_id]
+
             # Unpack timeseries
             absolute_time, trace_x, trace_y, trace_z, time_window = unpack_timeseries(
                 event, data

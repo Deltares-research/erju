@@ -55,7 +55,7 @@ TIMEZONE = "UTC"
 # )
 # FO_DATA_PATH = r"C:\fo_holten_sample"
 FO_DATA_PATH = (
-    r"F:\recording_2024-09-06T11_58_54Z_5kHzping_1kHzlog_1mCS_10mGL_6000channels"
+    r"F:\recording_2024-08-29T08_01_16Z_5kHzping_1kHzlog_1mCS_10mGL_3000channels"
 )
 
 # Enable/disable FO extraction per event.
@@ -65,7 +65,9 @@ FO_ENABLE = True
 FO_READER = "optasense"
 
 # FO channel window definition around center channel.
-FO_CENTER_CHANNEL = 1194  # Line D center channel (1192 = line B, 1194 = line D/C, 1196 = line E)
+FO_CENTER_CHANNEL = (
+    1194  # Line D center channel (1192 = line B, 1194 = line D/C, 1196 = line E)
+)
 FO_CHANNEL_HALF_WINDOW = 25
 
 # Optional: side-of-track convention for FO cable relative to track.
@@ -102,8 +104,10 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # Phase-2 campaign: 2024-09-01 → 2024-09-30.
 # FO recording (F:\recording_2024-09-06T11_58_54Z_...) starts Sep 6; events
 # before that date will have no FO data but are still captured with accel only.
-ACCEL_START_DATE = "2024-09-06 11:55:00"
-ACCEL_END_DATE   = "2024-09-09 07:00:00"
+ACCEL_START_DATE = (
+    "2024-09-02 03:00:00"  # targeted rebuild: only the 41 missing-sensor events
+)
+ACCEL_END_DATE = "2024-09-02 08:00:00"
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
