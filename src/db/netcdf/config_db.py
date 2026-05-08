@@ -104,10 +104,8 @@ OUTPUT_FOLDER = r"P:\11210978-erju-ai\holten_db"
 # Phase-2 campaign: 2024-09-01 → 2024-09-30.
 # FO recording (F:\recording_2024-09-06T11_58_54Z_...) starts Sep 6; events
 # before that date will have no FO data but are still captured with accel only.
-ACCEL_START_DATE = (
-    "2024-09-02 03:00:00"  # targeted rebuild: only the 41 missing-sensor events
-)
-ACCEL_END_DATE = "2024-09-02 08:00:00"
+ACCEL_START_DATE = "2024-08-29 00:00:00"  # full Aug-Sep 2024 campaign start
+ACCEL_END_DATE = "2024-09-30 23:59:59"  # full campaign end
 
 # Query chunk size in days for large date ranges.
 # Use 1 for day-by-day processing. Set to None or <=0 to disable chunking.
