@@ -46,9 +46,9 @@
         },
         "distance_to_track_m": {
             "MP1": 16.0,
-            "MP2": 25.0,
+            "MP2": 23.0,
             "MP3": 2.0,
-            "MP4": 2.0,
+            "MP4": 2.5,
             "MP5": 4.0,
             "MP6": 4.0,
             "MP7": 4.0,
@@ -63,6 +63,45 @@
             "MP17": 0.0,
             "MP18": 0.0,
             "MP19": 0.0
+        },
+        "sensor_coordinates_m": {
+            "_comment": "X=along-track from line_C centre (1 ch = 1 m), Y=perpendicular from FO cable (positive = toward track)",
+            "MP1": {
+                "x": 0,
+                "y": -12
+            },
+            "MP2": {
+                "x": 0,
+                "y": -19
+            },
+            "MP4": {
+                "x": 0,
+                "y": 1.5
+            },
+            "MP7": {
+                "x": -2,
+                "y": 0
+            },
+            "MP8": {
+                "x": 0,
+                "y": 0
+            },
+            "MP9": {
+                "x": 2,
+                "y": 0
+            },
+            "MP10": {
+                "x": 0,
+                "y": -4
+            },
+            "MP12": {
+                "x": -10,
+                "y": -1
+            },
+            "MP13": {
+                "x": 10,
+                "y": -1
+            }
         },
         "side_of_track": {
             "MP1": -1,
@@ -200,7 +239,7 @@
             "Meetjournal_MP6_Holten_noord_4m_B": "Meetjournal_MP6_Holten_noord_4m_D"
         },
         "line_geometry": {
-            "fo_window_half_width_channels": 10,
+            "fo_window_half_width_channels": 5,
             "line_center_channel": {
                 "line_A": 1184,
                 "line_B": 1192,
@@ -247,6 +286,7 @@
                 ]
             },
             "line_sensors_distance_m": {
+                "_comment": "Perpendicular distance from sensor to track 1 (m). Order matches line_sensors_by_distance.",
                 "line_A": [
                     5.0
                 ],
@@ -255,12 +295,12 @@
                 ],
                 "line_C": [
                     2.0,
-                    2.0,
+                    2.5,
                     4.0,
                     4.0,
                     8.0,
                     16.0,
-                    25.0
+                    23.0
                 ],
                 "line_D": [
                     4.0,
@@ -278,12 +318,16 @@
     },
     "fibre_optics": {
         "fo_side_of_track": -1,
-        "fo_aprox_distance_to_track_m": 4.5,
+        "fo_aprox_distance_to_track_m": 4.0,
         "gauge_length": 10.0,
         "gauge_length_unit": "m",
         "spatial_sampling_interval": 1.0,
         "spatial_sampling_interval_unit": "m",
         "fo_first_channel": 0,
-        "fo_last_channel": 3000
+        "fo_last_channel": 3000,
+        "_geometry_note": "FO at Y=0, track 1 at Y=4.0m, track 2 at Y=8.0m (perpendicular from FO, positive toward track)",
+        "track_1_to_fo_m": 4.0,
+        "track_2_to_fo_m": 8.0,
+        "track_separation_m": 4.0
     }
 }
