@@ -51,18 +51,7 @@ from src.ml.xgboost.xgb_utils import (
 # Constants
 # ---------------------------------------------------------------------------
 
-_BANNER = (
-    r"""
-   ___     ___        _   _   _  
-  | __|   | _ \    _ | | | | | | 
-  | _|    |   /   | || | | |_| | 
-  |___|   |_|_\    \__/   \___/  
-_|"""
-    "" | _ | """""|_|"""
-    "" | _ | """""| 
-"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'
-"""
-)
+_BANNER = "=== XGBoost Physics-Attenuation Model ==="
 
 BENCHMARK_V4_RMSE = 1.79  # XGBoost v4 direct model
 
@@ -460,8 +449,8 @@ def main() -> None:
         ),
         "experiment_notes": cfg.experiment_notes,
     }
-    save_json(summary, build_dir / cfg.output.summary_filename)
-    save_json(cfg.as_dict(), build_dir / cfg.output.config_snapshot_filename)
+    save_json(build_dir / cfg.output.summary_filename, summary)
+    save_json(build_dir / cfg.output.config_snapshot_filename, cfg.as_dict())
 
     print()
     print("=" * 70)
