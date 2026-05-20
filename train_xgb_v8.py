@@ -47,6 +47,7 @@ from sklearn.model_selection import GroupKFold
 
 from src.ml.xgboost.config_xgb_v8 import CONFIG
 from src.ml.xgboost.xgb_utils import create_build_folder, save_json
+from src.utils.geometry_utils import apply_corrected_distances
 
 import matplotlib
 
@@ -402,7 +403,15 @@ def main() -> None:
     global_fit_json = v4_dir / "global_fit_summary.json"
     per_event_parquet = v4_dir / "attenuation_per_event.parquet"
 
+    # Auto-discover latest v2 build if configured path is missing
     v2_path = Path(cfg.input_parquet_v2)
+    if not v2_path.exists():
+        parquet_root = Path(r"P:\11210978-erju-ai\holten_parquet")
+        v2_builds = sorted(parquet_root.glob("parquet_v002_*"), key=lambda p: p.name)
+        if not v2_builds:
+            raise FileNotFoundError("No parquet_v002_* builds found.")
+        v2_path = v2_builds[-1] / "dataset.parquet"
+        print(f"  (auto-discovered latest v2: {v2_path})")
     build_dir = create_build_folder(cfg.output_root_path(), cfg.output.version_name)
     plots_dir = build_dir / cfg.output.plots_subfolder
     plots_dir.mkdir(exist_ok=True)
@@ -427,6 +436,10 @@ def main() -> None:
     # Filter sensors
     if fc.exclude_sensor_ids and fc.sensor_id_col in df_v2.columns:
         df_v2 = df_v2[~df_v2[fc.sensor_id_col].isin(fc.exclude_sensor_ids)]
+
+    # Ensure corrected distance columns are present
+    if "effective_distance_to_active_track_m" not in df_v2.columns:
+        df_v2 = apply_corrected_distances(df_v2)
 
     # Keep only valid rows for sensor-level work
     df_v2 = df_v2.dropna(subset=[fc.distance_col, fc.pgv_col])

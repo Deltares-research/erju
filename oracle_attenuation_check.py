@@ -27,12 +27,18 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from src.utils.geometry_utils import apply_corrected_distances
 
 # ---------------------------------------------------------------------------
 # Paths — auto-discover latest parquet_v004 build
 # ---------------------------------------------------------------------------
 PARQUET_ROOT = Path(r"P:\11210978-erju-ai\holten_parquet")
-V2_PARQUET = PARQUET_ROOT / "parquet_v002_20260408_151746" / "dataset.parquet"
+# Auto-discover latest v2 build
+v2_builds = sorted(PARQUET_ROOT.glob("parquet_v002_*"), key=lambda p: p.name)
+if not v2_builds:
+    raise FileNotFoundError("No parquet_v002_* builds found.")
+V2_PARQUET = v2_builds[-1] / "dataset.parquet"
+print(f"Using Parquet v2 build: {v2_builds[-1].name}")
 
 v4_builds = sorted(PARQUET_ROOT.glob("parquet_v004_*"), key=lambda p: p.name)
 if not v4_builds:
@@ -48,10 +54,22 @@ PER_EVENT_PARQUET = V4_DIR / "attenuation_per_event.parquet"
 # ---------------------------------------------------------------------------
 print("\nLoading sensor-level v2 data ...")
 df_v2 = pd.read_parquet(
-    V2_PARQUET, columns=["event_id", "acc_distance_to_track_m", "target_pgv_z_mms"]
+    V2_PARQUET,
+    columns=[
+        "event_id",
+        "sensor_id",
+        "track_number",
+        "acc_distance_to_track_m",
+        "target_pgv_z_mms",
+    ],
 )
-df_v2 = df_v2.dropna(subset=["acc_distance_to_track_m", "target_pgv_z_mms"])
+# Apply geometry correction (also adds effective_distance_to_active_track_m)
+df_v2 = apply_corrected_distances(df_v2)
+df_v2 = df_v2.dropna(
+    subset=["effective_distance_to_active_track_m", "target_pgv_z_mms"]
+)
 df_v2 = df_v2[df_v2["target_pgv_z_mms"] > 0]
+df_v2 = df_v2[df_v2["effective_distance_to_active_track_m"] > 0]
 print(
     f"  Sensor rows (valid): {len(df_v2):,}  |  Events: {df_v2['event_id'].nunique():,}"
 )
@@ -79,7 +97,7 @@ print(f"\nAfter join: {len(df):,} sensor rows  |  {df['event_id'].nunique():,} e
 # ---------------------------------------------------------------------------
 # Reconstruct PGV from oracle parameters
 # ---------------------------------------------------------------------------
-r = df["acc_distance_to_track_m"].values
+r = df["effective_distance_to_active_track_m"].values
 c_i = df["c_i"].values
 n_i = df["n_i"].values
 pgv_true = df["target_pgv_z_mms"].values

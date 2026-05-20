@@ -51,6 +51,7 @@ from src.ml.xgboost.xgb_utils import (
     make_event_level_test_split,
     save_json,
 )
+from src.utils.geometry_utils import apply_corrected_distances
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -182,10 +183,21 @@ def main() -> None:
     # 3. Load sensor-level v2 for sensor-level evaluation
     # ------------------------------------------------------------------
     sensor_parquet = Path(cfg.eval.sensor_parquet)
+    # Auto-discover latest v2 build if configured path is missing
+    if not sensor_parquet.exists():
+        parquet_root = Path(r"P:\11210978-erju-ai\holten_parquet")
+        v2_builds = sorted(parquet_root.glob("parquet_v002_*"), key=lambda p: p.name)
+        if not v2_builds:
+            raise FileNotFoundError("No parquet_v002_* builds found.")
+        sensor_parquet = v2_builds[-1] / "dataset.parquet"
+        print(f"  (auto-discovered latest v2: {sensor_parquet})")
     print(f"\nSensor-level v2: {sensor_parquet}")
     df_sensor = pd.read_parquet(sensor_parquet)
     if cfg.eval.exclude_sensor_ids:
         df_sensor = df_sensor[~df_sensor["sensor_id"].isin(cfg.eval.exclude_sensor_ids)]
+    # Ensure corrected distance columns are present
+    if "effective_distance_to_active_track_m" not in df_sensor.columns:
+        df_sensor = apply_corrected_distances(df_sensor)
 
     # ------------------------------------------------------------------
     # 4. Load event-level v4 + setup build folder

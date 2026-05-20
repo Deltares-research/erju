@@ -52,6 +52,7 @@ from src.ml.xgboost.xgb_utils import (
     train_groupkfold,
     write_build_log,
 )
+from src.utils.geometry_utils import apply_corrected_distances
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
@@ -70,6 +71,14 @@ def main() -> None:
     # Setup
     # ------------------------------------------------------------------
     parquet_path = cfg.input_parquet_path()
+    # Auto-discover latest v2 build if the configured path is missing
+    if not parquet_path.exists():
+        parquet_root = Path(r"P:\11210978-erju-ai\holten_parquet")
+        v2_builds = sorted(parquet_root.glob("parquet_v002_*"), key=lambda p: p.name)
+        if not v2_builds:
+            raise FileNotFoundError("No parquet_v002_* builds found.")
+        parquet_path = v2_builds[-1] / "dataset.parquet"
+        print(f"  (auto-discovered latest v2: {parquet_path})")
     if not parquet_path.exists():
         raise FileNotFoundError(f"Parquet dataset not found: {parquet_path}")
 
@@ -102,6 +111,11 @@ def main() -> None:
     print(
         f"      Rows: {len(df):,}  |  Events: {n_events:,}  |  Columns: {len(df.columns)}"
     )
+
+    # Apply geometry correction (no-op if new v2 build already has the column)
+    if "effective_distance_to_active_track_m" not in df.columns:
+        df = apply_corrected_distances(df)
+        print("      Distance correction applied from holten.json.")
 
     if cfg.exclude_sensor_ids:
         before = len(df)

@@ -47,7 +47,7 @@
         "distance_to_track_m": {
             "MP1": 16.0,
             "MP2": 23.0,
-            "MP3": 2.0,
+            "MP3": 2.5,
             "MP4": 2.5,
             "MP5": 4.0,
             "MP6": 4.0,
@@ -64,8 +64,50 @@
             "MP18": 0.0,
             "MP19": 0.0
         },
+        "distance_to_track_1_m": {
+            "_comment": "Perpendicular Y-distance (|y_sensor - 4|) from each sensor to track 1 (y=4 m). Computed from sensor_coordinates_m.",
+            "MP1": 16.0,
+            "MP2": 23.0,
+            "MP3": 6.5,
+            "MP4": 2.5,
+            "MP5": 8.0,
+            "MP6": 8.0,
+            "MP7": 4.0,
+            "MP8": 4.0,
+            "MP9": 4.0,
+            "MP10": 8.0,
+            "MP12": 5.0,
+            "MP13": 5.0,
+            "MP14": 0.0,
+            "MP15": 0.0,
+            "MP16": 0.0,
+            "MP17": 0.0,
+            "MP18": 0.0,
+            "MP19": 0.0
+        },
+        "distance_to_track_2_m": {
+            "_comment": "Perpendicular Y-distance (|y_sensor - 8|) from each sensor to track 2 (y=8 m). Computed from sensor_coordinates_m.",
+            "MP1": 20.0,
+            "MP2": 27.0,
+            "MP3": 2.5,
+            "MP4": 6.5,
+            "MP5": 4.0,
+            "MP6": 4.0,
+            "MP7": 8.0,
+            "MP8": 8.0,
+            "MP9": 8.0,
+            "MP10": 12.0,
+            "MP12": 9.0,
+            "MP13": 9.0,
+            "MP14": 4.0,
+            "MP15": 4.0,
+            "MP16": 4.0,
+            "MP17": 4.0,
+            "MP18": 4.0,
+            "MP19": 4.0
+        },
         "sensor_coordinates_m": {
-            "_comment": "X=along-track from line_C centre (1 ch = 1 m), Y=perpendicular from FO cable (positive = toward track)",
+            "_comment": "Coordinate system: FO cable at Y=0, Track 1 at Y=4, Track 2 at Y=8. Line C at X=0 (centre). X=along-track position in metres (1 FO channel = 1 m). Y=perpendicular from FO cable (positive toward and beyond tracks; negative below FO).",
             "MP1": {
                 "x": 0,
                 "y": -12
@@ -74,9 +116,21 @@
                 "x": 0,
                 "y": -19
             },
+            "MP3": {
+                "x": 0,
+                "y": 10.5
+            },
             "MP4": {
                 "x": 0,
                 "y": 1.5
+            },
+            "MP5": {
+                "x": 0,
+                "y": 12
+            },
+            "MP6": {
+                "x": 2,
+                "y": 12
             },
             "MP7": {
                 "x": -2,
@@ -101,6 +155,30 @@
             "MP13": {
                 "x": 10,
                 "y": -1
+            },
+            "MP14": {
+                "x": 0,
+                "y": 4
+            },
+            "MP15": {
+                "x": 0,
+                "y": 4
+            },
+            "MP16": {
+                "x": 0,
+                "y": 4
+            },
+            "MP17": {
+                "x": 0,
+                "y": 4
+            },
+            "MP18": {
+                "x": 0,
+                "y": 4
+            },
+            "MP19": {
+                "x": 0,
+                "y": 4
             }
         },
         "side_of_track": {
@@ -286,7 +364,7 @@
                 ]
             },
             "line_sensors_distance_m": {
-                "_comment": "Perpendicular distance from sensor to track 1 (m). Order matches line_sensors_by_distance.",
+                "_comment": "Perpendicular Y-distance to nearest track (m). Side=-1 sensors → track 1; side=+1 sensors → track 2. Order matches line_sensors_by_distance.",
                 "line_A": [
                     5.0
                 ],
@@ -294,7 +372,7 @@
                     4.0
                 ],
                 "line_C": [
-                    2.0,
+                    2.5,
                     2.5,
                     4.0,
                     4.0,

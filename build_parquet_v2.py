@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from src.db.parquet.config_parquet_v2 import CONFIG
+from src.utils.geometry_utils import apply_corrected_distances
 from src.db.parquet.parquet_v2_utils import (
     SkipRecord,
     assemble_output_row,
@@ -261,6 +262,18 @@ def main() -> None:
         summary["warnings_count"] = len(summary["warnings"])
     else:
         df = pd.DataFrame(rows)
+
+        # Fix distances: override acc_distance_to_track_m with correct geometry
+        # from holten.json and add effective_distance_to_active_track_m.
+        # The raw NetCDF values use field-label distances (always track 1, some
+        # values rounded / wrong). This must be applied before any downstream
+        # attenuation fitting or feature engineering.
+        df = apply_corrected_distances(df)
+        print(
+            f"\nDistance correction applied: "
+            f"acc_distance_to_track_m overridden, "
+            f"effective_distance_to_active_track_m added."
+        )
 
         if cfg.feature_families.include_train_type_code:
             train_type_mapping = _build_train_type_code(df)
