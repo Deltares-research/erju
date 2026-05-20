@@ -17,7 +17,6 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold
 import xgboost as xgb
 
-
 # ---------------------------------------------------------------------------
 # Build folder
 # ---------------------------------------------------------------------------
@@ -78,14 +77,22 @@ def engineer_features(X: pd.DataFrame, fe_cfg: Any) -> pd.DataFrame:
     exact transformations applied in each experiment are fully traceable.
 
     Currently adds (when add_geometry_features=True):
-      feat_log1p_distance  = log(1 + acc_distance_to_track_m)
-      feat_inv_distance_sq = 1 / (acc_distance_to_track_m^2 + 1)
+      feat_log1p_distance  = log(1 + effective_distance_to_active_track_m)
+      feat_inv_distance_sq = 1 / (effective_distance_to_active_track_m^2 + 1)
+    Falls back to acc_distance_to_track_m if the effective column is absent
+    (e.g. when loading an old parquet v2 build).
     """
     X = X.copy()
-    if fe_cfg.add_geometry_features and "acc_distance_to_track_m" in X.columns:
-        d = X["acc_distance_to_track_m"].clip(lower=0.0)
-        X["feat_log1p_distance"] = np.log1p(d)
-        X["feat_inv_distance_sq"] = 1.0 / (d**2 + 1.0)
+    if fe_cfg.add_geometry_features:
+        dist_col = (
+            "effective_distance_to_active_track_m"
+            if "effective_distance_to_active_track_m" in X.columns
+            else "acc_distance_to_track_m"
+        )
+        if dist_col in X.columns:
+            d = X[dist_col].clip(lower=0.0)
+            X["feat_log1p_distance"] = np.log1p(d)
+            X["feat_inv_distance_sq"] = 1.0 / (d**2 + 1.0)
     return X
 
 

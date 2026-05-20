@@ -114,7 +114,7 @@ class EvalConfig:
             "MP19",
         ]
     )
-    distance_col: str = "acc_distance_to_track_m"
+    distance_col: str = "effective_distance_to_active_track_m"
     pgv_col: str = "target_pgv_z_mms"
 
 

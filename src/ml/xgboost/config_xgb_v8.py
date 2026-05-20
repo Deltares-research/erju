@@ -103,7 +103,7 @@ class FeatureConfig:
     pgv_col: str = "target_pgv_z_mms"
 
     # Distance column (kept as a raw feature AND used for physics transforms)
-    distance_col: str = "acc_distance_to_track_m"
+    distance_col: str = "effective_distance_to_active_track_m"
 
     # Side-of-track (kept as feature — will be label-encoded if string)
     side_col: str = "acc_side_of_track"
