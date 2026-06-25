@@ -3,27 +3,34 @@ data/
 
 # Ignore Python virtual environments
 venv/
-.venv/  # Some setups use ".venv"
+.venv/
 env/
 
-# Ignore IDE/editor-specific folders
-.idea/  # JetBrains (PyCharm, WebStorm, etc.)
-.vscode/  # VS Code settings
-*.swp  # Vim swap files
+# IDE / editor folders
+# JetBrains (PyCharm, etc.)
+.idea/
+# VS Code user settings
+.vscode/
+# Vim swap files
+*.swp
 
-# Ignore compiled Python files
+# Compiled Python files
 __pycache__/
 *.pyc
 *.pyo
 
-# Ignore Jupyter notebook checkpoints
+# Jupyter notebook checkpoints
 notebooks/.ipynb_checkpoints/
 
-# Ignore log files and debugging artifacts
+# Log files and debugging artifacts
 *.log
 logs/
-logs/**
 
-# Ignore cache and temporary files
-.DS_Store  # macOS system file
-Thumbs.db  # Windows thumbnail cache
+# macOS / Windows system files
+.DS_Store
+Thumbs.db
+
+# Generated output plots produced by root-level scripts at runtime
+# (oracle_attenuation_check.py, report_*.py, predict_pgv.py, etc.)
+/*.png
+/*.svg
