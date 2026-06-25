@@ -1,0 +1,159 @@
+======================================================================
+FO Time-Series Data Audit
+Timestamp : 2026-06-25 19:38:36
+Target channel : 1194
+======================================================================
+
+[1/7] Input folders:
+  [OK] P:\11210978-erju-ai\holten_db\netcdf_20260406_194947_10mGL_3000channels
+  [OK] P:\11210978-erju-ai\holten_db\netcdf_20260407_105509_10mGL_6000channels
+
+  NetCDF files found : 1,741
+
+[2/7] Auditing 1,741 files ...
+
+[3/7] Cross-checking with Parquet v2 / v4 ...
+  Parquet v2 : 1,697 unique events  (P:\11210978-erju-ai\holten_parquet\parquet_v002_20260509_180119\dataset.parquet)
+  Parquet v4 : 1,697 unique events  (P:\11210978-erju-ai\holten_parquet\parquet_v004_20260509_190849\dataset.parquet)
+
+  Unique event_ids in NetCDF files : 1,741
+  In Parquet v2 but NOT in NetCDF  : 0
+  In NetCDF but NOT in Parquet v2  : 44
+  In Parquet v4 but NOT in NetCDF  : 0
+
+[4/7] FO signal quality
+--------------------------------------------------
+  Files with /fo group          : 1,739 / 1,741  (99.9%)
+  Files with /fo/strain         : 1,739 / 1,741  (99.9%)
+  Files with /fo/fs_hz          : 1,739 / 1,741  (99.9%)
+  Files with parse error        : 0 / 1,741  (0.0%)
+
+  Sampling rate (fs_hz):
+      1000.0 Hz  →  1,739 files  (99.9%)
+
+[5/7] Duration and shape distributions
+--------------------------------------------------
+
+  Event duration (seconds)  [N=1,739]
+    min     :     0.00 s
+    p5      :    25.45 s
+    p25     :    26.56 s
+    median  :    28.34 s
+    p75     :    30.88 s
+    p95     :    46.29 s
+    max     :    58.57 s
+    mean    :    30.06 s
+    std     :     5.81 s
+
+  Duration histogram:
+  [     0.0,      4.9)      1  
+  [     4.9,      9.8)      1  
+  [     9.8,     14.6)      0  
+  [    14.6,     19.5)      0  
+  [    19.5,     24.4)      0  
+  [    24.4,     29.3)    999  ##############################
+  [    29.3,     34.2)    542  ################
+  [    34.2,     39.0)     34  #
+  [    39.0,     43.9)     44  #
+  [    43.9,     48.8)     90  ##
+  [    48.8,     53.7)     26  
+  [    53.7,     58.6)      2  
+
+  FO n_samples  [N=1,739]
+    min=1  p5=25,454  p25=26,559  median=28,344  p75=30,884  p95=46,293  max=58,567
+
+  FO n_channels  [N=1,739]
+    min=51  median=51  max=51
+    n_channels= 51 : 1,739 files  (99.9%)
+
+[6/7] Channel 1194 availability
+--------------------------------------------------
+  Files with geometry_fo group    : 1,739 / 1,741  (99.9%)
+  Files with fo_channel_id var    : 1,739 / 1,741  (99.9%)
+  Files where ch 1194 is present : 1,739 / 1,741  (99.9%)
+  Files where ch 1194 is MISSING : 2 / 1,741
+
+  Array index of ch 1194 in /fo/strain:
+    index= 29 : 1,739 files  (99.9%)
+
+  Stored channel range in /fo/strain:
+    fo_channel_min: min=1,165  max=1,165  mode=1,165
+    fo_channel_max: min=1,215  max=1,215  mode=1,215
+
+[7/7] Accelerometer target coverage and metadata
+--------------------------------------------------
+
+  Accelerometers:
+    Events with ≥1 acc sensor           : 1,741  (100.0%)
+    Events with ≥1 velocity_mms sensor  : 1,700  (97.6%)
+    Events with ≥1 finite PGV_z         : 1,700  (97.6%)
+    Events with NO valid PGV_z          : 41  (2.4%)
+
+  Distribution of n_sensors_velocity_mms per event (excluding 0):
+    n_sensors=11 : 730 events
+    n_sensors=12 : 970 events
+
+  Train metadata:
+    train_type available     : 1,741  (100.0%)
+    train_speed_kmh valid    : 1,738  (99.8%)
+    train_speed_kmh missing  : 3  (0.2%)
+    track_number available   : 1,741  (100.0%)
+
+======================================================================
+FIXED-LENGTH RECOMMENDATION
+======================================================================
+
+Modal fs = 1000 Hz
+
+Candidate fixed lengths  (events padded / cropped / exact):
+   T (samples)    Duration    Padded   Cropped     Exact  % coverage
+  ------------  ----------  --------  --------  --------  ----------
+         3,000       3.0 s         1     1,738         0        0.1%
+         5,000       5.0 s         1     1,738         0        0.1%
+         7,500       7.5 s         2     1,737         0        0.1%
+        10,000      10.0 s         2     1,737         0        0.1%
+        15,000      15.0 s         2     1,737         0        0.1%
+        20,000      20.0 s         2     1,737         0        0.1%
+        25,000      25.0 s        15     1,724         0        0.9%
+        30,000      30.0 s     1,159       580         0       66.6%
+
+  p5  duration → 25,454 samples  (25.5 s)
+  p25 duration → 26,559 samples  (26.6 s)
+  p50 duration → 28,344 samples  (28.3 s)
+
+  NOTE: p5 strategy means ~5% of events would need padding at T=p5.
+  If events cluster at a common round length, use that length directly.
+  Review the duration histogram above before deciding T.
+
+======================================================================
+MEMORY ESTIMATE (waveform dataset, float32)
+======================================================================
+
+  N events = 1,741 (unique event_ids)
+  dtype   = float32  (4 bytes / sample)
+
+   T (samples)    Duration     Size (MB)
+  ------------  ----------  ------------
+         3,000       3.0 s          19.9
+         5,000       5.0 s          33.2
+         7,500       7.5 s          49.8
+        10,000      10.0 s          66.4
+        15,000      15.0 s          99.6
+        20,000      20.0 s         132.8
+        25,000      25.0 s         166.0
+        30,000      30.0 s         199.2
+
+  (This is for the waveforms.npy file only, one row per event.)
+  (Sensor-level training pairs are stored in event_index.parquet.)
+
+======================================================================
+SUMMARY
+======================================================================
+  Total NetCDF files          : 1,741
+  Parse errors                : 0
+  Valid FO strain             : 1,739  (99.9%)
+  Channel 1194 available       : 1,739  (99.9%)
+  Events with finite PGV_z    : 1,700  (97.6%)
+  Duration: p5=25.5 s  median=28.3 s  p95=46.3 s
+  Parquet v2 event coverage   : 1,697 / 1,697 events matched in NetCDF
+======================================================================
