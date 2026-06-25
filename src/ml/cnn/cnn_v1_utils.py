@@ -76,7 +76,11 @@ def _act(name: str) -> nn.Module:
 
 
 class WaveformCNN(nn.Module):
-    """1D CNN encoder + MLP head predicting a scalar (log PGV_z)."""
+    """1D CNN encoder + MLP head predicting a scalar (log PGV_z).
+
+    When ``use_waveform`` is False the encoder is dropped entirely and the model
+    becomes a plain MLP on the scalar features — the scalar-only baseline.
+    """
 
     def __init__(
         self,
@@ -89,24 +93,31 @@ class WaveformCNN(nn.Module):
         head_hidden: List[int],
         head_dropout: float,
         activation: str = "relu",
+        use_waveform: bool = True,
     ) -> None:
         super().__init__()
+        self.use_waveform = use_waveform
 
-        layers: List[nn.Module] = []
-        in_ch = 1
-        for out_ch, k, s in zip(conv_channels, conv_kernels, conv_strides):
-            layers.append(
-                nn.Conv1d(in_ch, out_ch, kernel_size=k, stride=s, padding=k // 2)
-            )
-            if use_batchnorm:
-                layers.append(nn.BatchNorm1d(out_ch))
-            layers.append(_act(activation))
-            if conv_dropout > 0:
-                layers.append(nn.Dropout(conv_dropout))
-            in_ch = out_ch
-        self.encoder = nn.Sequential(*layers)
-        self.pool = nn.AdaptiveAvgPool1d(1)               # global average pool
-        self.embed_dim = in_ch
+        if use_waveform:
+            layers: List[nn.Module] = []
+            in_ch = 1
+            for out_ch, k, s in zip(conv_channels, conv_kernels, conv_strides):
+                layers.append(
+                    nn.Conv1d(in_ch, out_ch, kernel_size=k, stride=s, padding=k // 2)
+                )
+                if use_batchnorm:
+                    layers.append(nn.BatchNorm1d(out_ch))
+                layers.append(_act(activation))
+                if conv_dropout > 0:
+                    layers.append(nn.Dropout(conv_dropout))
+                in_ch = out_ch
+            self.encoder = nn.Sequential(*layers)
+            self.pool = nn.AdaptiveAvgPool1d(1)           # global average pool
+            self.embed_dim = in_ch
+        else:
+            self.encoder = None
+            self.pool = None
+            self.embed_dim = 0
 
         head_layers: List[nn.Module] = []
         h_in = self.embed_dim + n_scalars
@@ -120,9 +131,12 @@ class WaveformCNN(nn.Module):
         self.head = nn.Sequential(*head_layers)
 
     def forward(self, wave: torch.Tensor, scalars: torch.Tensor) -> torch.Tensor:
-        z = self.encoder(wave)                            # (B, C, T')
-        z = self.pool(z).squeeze(-1)                      # (B, C)
-        h = torch.cat([z, scalars], dim=1)                # (B, C + F)
+        if self.use_waveform:
+            z = self.encoder(wave)                        # (B, C, T')
+            z = self.pool(z).squeeze(-1)                  # (B, C)
+            h = torch.cat([z, scalars], dim=1)            # (B, C + F)
+        else:
+            h = scalars                                   # (B, F)
         return self.head(h).squeeze(-1)                   # (B,)
 
 

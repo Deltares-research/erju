@@ -21,6 +21,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -177,13 +178,88 @@ def _plot_residuals_vs(x, resid, xlabel, title, out_path, logx=False):
     plt.close(fig)
 
 
+def _plot_residuals_by_cropped(resid, was_cropped, out_path):
+    """Boxplot of log residuals split by whether the event waveform was cropped."""
+    groups = [resid[~was_cropped], resid[was_cropped]]
+    labels = [
+        f"padded/exact\n(n={int((~was_cropped).sum())})",
+        f"cropped >30 s\n(n={int(was_cropped.sum())})",
+    ]
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.boxplot(groups, tick_labels=labels, showmeans=True)
+    ax.axhline(0, color="k", lw=1.0, ls="--")
+    ax.axhline(np.log(2), color="r", lw=0.8, ls=":")
+    ax.axhline(-np.log(2), color="r", lw=0.8, ls=":")
+    ax.set_ylabel("residual log(pred/true)")
+    ax.set_title("CNN v1 — residuals by crop status")
+    ax.grid(True, ls=":", alpha=0.5, axis="y")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+def _plot_residuals_vs_duration(duration_s, resid, was_cropped, out_path):
+    """Scatter of log residuals vs original event duration, coloured by crop."""
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.scatter(duration_s[~was_cropped], resid[~was_cropped], s=8, alpha=0.3,
+               color="steelblue", label="padded/exact")
+    ax.scatter(duration_s[was_cropped], resid[was_cropped], s=8, alpha=0.3,
+               color="crimson", label="cropped >30 s")
+    ax.axhline(0, color="k", lw=1.2, ls="--")
+    ax.axhline(np.log(2), color="r", lw=0.8, ls=":")
+    ax.axhline(-np.log(2), color="r", lw=0.8, ls=":")
+    ax.axvline(30.0, color="gray", lw=0.8, ls="--", label="30 s crop length")
+    ax.set_xlabel("original event duration [s]")
+    ax.set_ylabel("residual log(pred/true)")
+    ax.set_title("CNN v1 — residuals vs original duration")
+    ax.legend(fontsize=8)
+    ax.grid(True, ls=":", alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Train CNN v1 FO waveform baseline.")
+    p.add_argument("--no-metadata", action="store_true",
+                   help="Mode A: waveform + distance only (drop train metadata).")
+    p.add_argument("--no-waveform", action="store_true",
+                   help="Scalar-only baseline: distance (+metadata), no waveform.")
+    p.add_argument("--no-batchnorm", action="store_true",
+                   help="Disable BatchNorm in the conv encoder.")
+    p.add_argument("--tag", type=str, default="",
+                   help="Suffix appended to the build folder name.")
+    return p.parse_args()
+
+
+def _apply_overrides(cfg, args) -> str:
+    """Apply CLI ablation overrides to CONFIG; return a descriptive tag."""
+    tag_parts: List[str] = []
+    if args.no_metadata:
+        cfg.features.use_metadata = False
+        tag_parts.append("modeA")
+    if args.no_waveform:
+        cfg.model.use_waveform = False
+        tag_parts.append("scalaronly")
+    if args.no_batchnorm:
+        cfg.model.use_batchnorm = False
+        tag_parts.append("nobn")
+    if args.tag:
+        tag_parts.append(args.tag)
+    return "_".join(tag_parts)
+
+
 def main() -> None:
     cfg = CONFIG
+    args = _parse_args()
+    run_tag = _apply_overrides(cfg, args)
+
     torch.manual_seed(cfg.train.seed)
     np.random.seed(cfg.train.seed)
 
@@ -206,9 +282,11 @@ def main() -> None:
     index_df = pd.read_parquet(wave_dir / "event_index.parquet")
     index_ok = index_df[index_df["build_status"] == "ok"].copy()
     index_ok["waveform_row_idx"] = index_ok["waveform_row_idx"].astype(int)
-    row_by_event = dict(
-        zip(index_ok["event_id"].astype(str), index_ok["waveform_row_idx"])
-    )
+    index_ok["event_id"] = index_ok["event_id"].astype(str)
+    row_by_event = dict(zip(index_ok["event_id"], index_ok["waveform_row_idx"]))
+    # Per-event crop diagnostics (for residual analysis later).
+    cropped_by_event = dict(zip(index_ok["event_id"], index_ok["was_cropped"]))
+    duration_by_event = dict(zip(index_ok["event_id"], index_ok["duration_original_s"]))
     # Fixed global amplitude scale (strain -> microstrain). One constant for the
     # whole dataset; preserves relative amplitude (not per-event normalization).
     waveforms = (waveforms.astype(np.float32) * np.float32(cfg.data.waveform_scale))
@@ -230,6 +308,8 @@ def main() -> None:
     df["event_id"] = df["event_id"].astype(str)
     df = df[df["event_id"].isin(row_by_event)].reset_index(drop=True)
     df["waveform_row_idx"] = df["event_id"].map(row_by_event).astype(int)
+    df["was_cropped"] = df["event_id"].map(cropped_by_event).astype(bool)
+    df["duration_original_s"] = df["event_id"].map(duration_by_event).astype(float)
     print(f"Sensor rows    : {len(df):,}  |  events: {df['event_id'].nunique():,}")
 
     # ------------------------------------------------------------------
@@ -299,12 +379,18 @@ def main() -> None:
         head_hidden=mc.head_hidden,
         head_dropout=mc.head_dropout,
         activation=mc.activation,
+        use_waveform=mc.use_waveform,
     )
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model params   : {n_params:,}")
+    print(f"  waveform      : {mc.use_waveform}  |  batchnorm: {mc.use_batchnorm}")
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    build_dir = cfg.output_root_path() / f"{cfg.output.version_name}_{ts}"
+    folder_name = f"{cfg.output.version_name}"
+    if run_tag:
+        folder_name += f"_{run_tag}"
+    folder_name += f"_{ts}"
+    build_dir = cfg.output_root_path() / folder_name
     plots_dir = build_dir / cfg.output.plots_subfolder
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -364,6 +450,19 @@ def main() -> None:
     print(f"  R2(PGV_z)     = {metrics_test['r2_mms']:.4f}")
     print(f"  delta vs v4   = {metrics_test['rmse_mms'] - cfg.benchmark_v4_rmse:+.4f} mm/s")
 
+    # Breakdown by crop status (was the event waveform cropped at 30 s?)
+    was_cropped_test = df_test["was_cropped"].to_numpy(bool)
+    duration_test = df_test["duration_original_s"].to_numpy(float)
+    crop_breakdown: Dict[str, Dict[str, float]] = {}
+    for label, mask in [("not_cropped", ~was_cropped_test), ("cropped", was_cropped_test)]:
+        if mask.sum() > 1:
+            m = compute_metrics(pgv_true_test[mask], pgv_pred_test[mask], eps=eps)
+            crop_breakdown[label] = {"n": int(mask.sum()), **m}
+    print("\n  Residual breakdown by crop status:")
+    for label, m in crop_breakdown.items():
+        print(f"    {label:12s} n={m['n']:4d}  RMSE={m['rmse_mms']:.4f} mm/s  "
+              f"RMSE(log)={m['rmse_log']:.4f}  MAE(log)={m['mae_log']:.4f}")
+
     # ------------------------------------------------------------------
     # 9. Plots
     # ------------------------------------------------------------------
@@ -383,6 +482,13 @@ def main() -> None:
         pgv_true_test, resid_log,
         "measured PGV_z [mm/s]", "CNN v1 — residuals vs PGV",
         plots_dir / "residuals_vs_pgv.png", logx=True,
+    )
+    _plot_residuals_by_cropped(
+        resid_log, was_cropped_test, plots_dir / "residuals_by_cropped.png",
+    )
+    _plot_residuals_vs_duration(
+        duration_test, resid_log, was_cropped_test,
+        plots_dir / "residuals_vs_duration.png",
     )
     # Learning curve
     hist_df = pd.DataFrame(artifacts.history)
@@ -407,10 +513,11 @@ def main() -> None:
     hist_df.to_csv(build_dir / cfg.output.history_filename, index=False)
 
     pred_df = df_test[["event_id", cfg.data.sensor_col, cfg.data.distance_col,
-                       cfg.data.pgv_col]].copy()
+                       cfg.data.pgv_col, "was_cropped", "duration_original_s"]].copy()
     pred_df["pgv_pred_mms"] = pgv_pred_test
     pred_df["log_pgv_true"] = np.log(np.clip(pgv_true_test, eps, None))
     pred_df["log_pgv_pred"] = log_pred_test
+    pred_df["resid_log"] = resid_log
     pred_df.to_parquet(build_dir / cfg.output.predictions_filename, index=False)
 
     split_manifest = {
@@ -426,17 +533,21 @@ def main() -> None:
 
     summary = {
         "version": cfg.output.version_name,
+        "run_tag": run_tag,
         "created": datetime.now().isoformat(timespec="seconds"),
         "device": str(device),
         "waveform_build": str(wave_dir),
         "parquet_v2": str(v2_path),
         "n_params": int(n_params),
         "feature_names": feat_names,
+        "use_waveform": cfg.model.use_waveform,
+        "use_batchnorm": cfg.model.use_batchnorm,
         "metadata_mode": "B" if cfg.features.use_metadata else "A",
         "best_epoch": artifacts.best_epoch,
         "best_val_loss": artifacts.best_val_loss,
         "metrics_test": metrics_test,
         "metrics_val": metrics_val,
+        "metrics_test_by_crop": crop_breakdown,
         "benchmark_v4_rmse": cfg.benchmark_v4_rmse,
         "delta_vs_v4_mms": metrics_test["rmse_mms"] - cfg.benchmark_v4_rmse,
     }

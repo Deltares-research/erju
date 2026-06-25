@@ -75,6 +75,7 @@ class FeatureConfig:
 class ModelConfig:
     """1D CNN encoder + MLP head."""
 
+    use_waveform: bool = True                # False -> scalar-only MLP baseline
     conv_channels: List[int] = field(default_factory=lambda: [32, 64, 128, 128])
     conv_kernels: List[int] = field(default_factory=lambda: [15, 9, 7, 5])
     conv_strides: List[int] = field(default_factory=lambda: [2, 2, 2, 2])
