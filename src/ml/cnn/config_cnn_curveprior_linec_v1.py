@@ -140,6 +140,9 @@ class TrainConfig:
     # Prediction clamping for numerical stability
     pred_log_clamp_min: float = -10.0
     pred_log_clamp_max: float = 5.0
+    
+    # Attenuation exponent mode: fit_corrected, fixed_oracle, fit_current_old
+    n_mode: str = "fit_corrected"
 
 
 @dataclass
@@ -166,7 +169,7 @@ class Config:
     output: OutputConfig = field(default_factory=OutputConfig)
 
 
-def get_variant_config(variant: str) -> Config:
+def get_variant_config(variant: str, n_mode: str = "fit_corrected") -> Config:
     """Get configuration preset for variant.
     
     Variants:
@@ -174,8 +177,16 @@ def get_variant_config(variant: str) -> Config:
       P2 — curve + residual (lambda_residual=0.05)
       P3 — curve + residual + MP4 weighting
       P4 — curve + residual + MP4 weighting + monotonicity
+    
+    Args:
+      variant: Model variant (P1, P2, P3, P4)
+      n_mode: Attenuation exponent mode:
+        - "fit_corrected": Fit on train split using event-intercept method
+        - "fixed_oracle": Use oracle reference values (1.0777, 1.3300)
+        - "fit_current_old": Use current (wrong) fitting method (for debug only)
     """
     cfg = Config()
+    cfg.train.n_mode = n_mode
     
     if variant == "P1":
         # Curve-only: no residual, no weighting

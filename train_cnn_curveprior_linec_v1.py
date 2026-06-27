@@ -276,25 +276,27 @@ def make_event_splits(
     return train_idx, val_idx, test_idx
 
 
-# ==================================================================================
-# FIT ATTENUATION EXPONENT ON TRAIN SPLIT
-# ==================================================================================
-
-def fit_attenuation_exponents(
-    targets_log: np.ndarray,
-    distances: np.ndarray,
-    tracks: np.ndarray,
+def fit_attenuation_exponents_corrected(
+    targets_log: np.ndarray,  # (n_events, 5)
+    distances: np.ndarray,     # (n_events, 5)
+    tracks: np.ndarray,        # (n_events,)
     r0: float = 10.0,
 ) -> Tuple[float, float]:
-    """Fit track-specific attenuation exponents using least squares.
+    """Fit track-specific attenuation exponents using event-intercept corrected method.
     
-    For each track, minimize:
-      sum_j (y_ij + n * log(r_j / r0) - c_i)^2
+    Model: y_ij = c_i - n_track * log(r_j / r0)
     
-    This simplifies to linear regression on transformed variables.
+    where:
+      y_ij = log(PGV) at event i, sensor j
+      c_i = event-specific intercept (intensity)
+      n_track = global attenuation exponent for track
+      r_j = distance to sensor j
+      r0 = reference distance
+    
+    For each event, center the predictors and targets, then fit global n using least squares.
     """
     print("\n" + "=" * 80)
-    print("FITTING ATTENUATION EXPONENTS ON TRAIN SPLIT")
+    print("FITTING ATTENUATION EXPONENTS (Corrected Event-Intercept Method)")
     print("=" * 80)
     
     n_track1 = []
@@ -303,47 +305,54 @@ def fit_attenuation_exponents(
     for track_id in [1, 2]:
         mask = tracks == track_id
         if not mask.any():
+            print(f"Track {track_id}: No events")
             continue
         
         targets_t = targets_log[mask]  # (n_events_t, 5)
         distances_t = distances[mask]  # (n_events_t, 5)
         
-        # Set up least squares problem:
-        # We want to find n such that residuals are minimized
-        # Using a simple approach: average the implied n across all samples
+        n_events = len(targets_t)
         
-        # For each event, estimate n from each sensor pair
-        n_estimates = []
-        for i in range(len(targets_t)):
-            for j in range(len(targets_t[i]) - 1):
-                dy = targets_t[i, j+1] - targets_t[i, j]
-                dr = np.log(distances_t[i, j+1] / distances_t[i, j])
-                if abs(dr) > 1e-6:
-                    n_est = dy / dr
-                    if n_est > 0:  # Only keep positive slopes
-                        n_estimates.append(n_est)
+        # Design matrix: x = log(r / r0)
+        x = np.log(distances_t / r0)  # (n_events, 5)
         
-        # Median n (robust to outliers)
-        if n_estimates:
-            n_fit = float(np.median(n_estimates))
-        else:
-            n_fit = 1.0777 if track_id == 1 else 1.3300
+        # Center x within each event
+        x_mean = x.mean(axis=1, keepdims=True)  # (n_events, 1)
+        x_c = x - x_mean  # (n_events, 5) centered
         
-        print(f"Track {track_id}: n_fit = {n_fit:.4f} (from {len(n_estimates)} slope estimates)")
+        # Targets y = log(PGV)
+        y = targets_t  # (n_events, 5)
+        
+        # Center y within each event
+        y_mean = y.mean(axis=1, keepdims=True)  # (n_events, 1)
+        y_c = y - y_mean  # (n_events, 5) centered
+        
+        # Global slope: sum over all events and sensors
+        # Model: y = c - n*x  →  y_c = -n*x_c
+        numerator = np.sum(x_c * y_c)
+        denominator = np.sum(x_c ** 2)
+        
+        beta_global = numerator / denominator if denominator > 1e-10 else 0.0
+        n_global = -beta_global
+        
+        print(f"\nTrack {track_id}:")
+        print(f"  Complete events: {n_events}")
+        print(f"  Total sensors: {n_events * 5}")
+        print(f"  Fitted n: {n_global:.4f}")
         
         if track_id == 1:
-            n_track1.append(n_fit)
+            n_track1.append(n_global)
         else:
-            n_track2.append(n_fit)
+            n_track2.append(n_global)
     
-    n_track1_final = n_track1[0] if n_track1 else 1.0777
-    n_track2_final = n_track2[0] if n_track2 else 1.3300
+    n_t1 = float(n_track1[0]) if n_track1 else 1.0777
+    n_t2 = float(n_track2[0]) if n_track2 else 1.3300
     
-    print(f"\nFitted attenuation exponents:")
-    print(f"  Track 1: {n_track1_final:.4f}")
-    print(f"  Track 2: {n_track2_final:.4f}")
+    print(f"\nFitted exponents:")
+    print(f"  Track 1: {n_t1:.4f}")
+    print(f"  Track 2: {n_t2:.4f}")
     
-    return n_track1_final, n_track2_final
+    return n_t1, n_t2
 
 
 # ==================================================================================
