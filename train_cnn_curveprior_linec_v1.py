@@ -577,11 +577,16 @@ def main():
     parser = argparse.ArgumentParser(description="Train curve-prior + residual model")
     parser.add_argument("--variant", type=str, default="P1", choices=["P1", "P2", "P3", "P4"])
     parser.add_argument("--epochs", type=int, default=0)
+    parser.add_argument("--n_mode", type=str, default="fit_corrected", 
+                        choices=["fit_corrected", "fixed_oracle", "fit_current_old"])
+    parser.add_argument("--lambda_residual", type=float, default=0.0)
     args = parser.parse_args()
     
-    cfg = get_variant_config(args.variant)
+    cfg = get_variant_config(args.variant, n_mode=args.n_mode)
     if args.epochs > 0:
         cfg.train.epochs = args.epochs
+    if args.lambda_residual > 0:
+        cfg.model.lambda_residual = args.lambda_residual
     
     torch.manual_seed(cfg.train.seed)
     np.random.seed(cfg.train.seed)
@@ -593,6 +598,10 @@ def main():
     print(f"Device: {device}")
     print(f"Epochs: {cfg.train.epochs}")
     print(f"LR: {cfg.train.learning_rate}")
+    print(f"n_mode: {cfg.train.n_mode}")
+    print(f"lambda_residual: {cfg.model.lambda_residual}")
+    if cfg.model.use_pgv_weighting:
+        print(f"MP4_weight: {cfg.model.mp4_weight}")
     
     # Load data
     df_sensor, waveforms, event_map = load_linec_data(cfg)
@@ -613,14 +622,31 @@ def main():
     print(f"Val:   {len(val_idx)} events")
     print(f"Test:  {len(test_idx)} events")
     
-    # Fit attenuation exponents on train split
+    # Fit or load attenuation exponents based on n_mode
     train_targets = dataset.targets[train_idx]
     train_distances = dataset.distances[train_idx]
     train_tracks = dataset.tracks[train_idx]
     
-    n_track1, n_track2 = fit_attenuation_exponents(
-        train_targets, train_distances, train_tracks, cfg.features.r0
-    )
+    if cfg.train.n_mode == "fit_corrected":
+        n_track1, n_track2 = fit_attenuation_exponents_corrected(
+            train_targets, train_distances, train_tracks, cfg.features.r0
+        )
+        n_mode_label = "fit_corrected"
+    elif cfg.train.n_mode == "fixed_oracle":
+        n_track1 = cfg.features.n_track1_init
+        n_track2 = cfg.features.n_track2_init
+        print(f"\nUsing fixed oracle n values:")
+        print(f"  Track 1: {n_track1:.4f}")
+        print(f"  Track 2: {n_track2:.4f}")
+        n_mode_label = "fixed_oracle"
+    elif cfg.train.n_mode == "fit_current_old":
+        # Legacy method for diagnostic comparison only
+        n_track1, n_track2 = fit_attenuation_exponents(
+            train_targets, train_distances, train_tracks, cfg.features.r0
+        )
+        n_mode_label = "fit_current_old (BROKEN - DIAGNOSTIC ONLY)"
+    else:
+        raise ValueError(f"Unknown n_mode: {cfg.train.n_mode}")
     
     # Data loaders
     train_set = Subset(dataset, train_idx)
@@ -726,14 +752,17 @@ def main():
     print(f"  R²(log):   {test_metrics['r2_log']:.4f}")
     
     # Save output
-    output_dir = cfg.output.output_root / f"{cfg.output.output_tag}_v{args.variant}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    output_dir = cfg.output.output_root / f"{cfg.output.output_tag}_v{args.variant}_{cfg.train.n_mode}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Save config
     (output_dir / "config_snapshot.json").write_text(json.dumps({
         "variant": args.variant,
+        "n_mode": n_mode_label,
         "n_track1": n_track1,
         "n_track2": n_track2,
+        "lambda_residual": cfg.model.lambda_residual,
+        "mp4_weight": cfg.model.mp4_weight if cfg.model.use_pgv_weighting else 1.0,
         "model": cfg.model.__dict__,
         "train": cfg.train.__dict__,
     }, indent=2, default=str))
