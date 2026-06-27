@@ -121,10 +121,10 @@ class TrainConfig:
     device: str = "cuda"  # cuda or cpu
     
     # Optimization
-    learning_rate: float = 1e-3
+    learning_rate: float = 3e-4  # Reduced from 1e-3 for stability
     learning_rate_decay: float = 0.95
     learning_rate_decay_steps: int = 1000
-    optimizer: str = "adam"  # adam, adamw, sgd
+    optimizer: str = "adamw"  # adam, adamw, sgd — AdamW for better stability
     weight_decay: float = 1e-5
     
     # Loss
@@ -136,11 +136,15 @@ class TrainConfig:
     num_workers: int = 0
     pin_memory: bool = True
     
-    epochs: int = 50
-    patience_early_stopping: int = 10
+    epochs: int = 100  # Increased for rerun with lower LR
+    patience_early_stopping: int = 15  # Patience for lower LR
     patience_reduce_lr: int = 5
     
     gradient_clip: float = 1.0
+    
+    # Prediction clipping for numerical stability
+    pred_log_clamp_min: float = -10.0
+    pred_log_clamp_max: float = 5.0
 
 
 @dataclass

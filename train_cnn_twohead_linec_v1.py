@@ -122,12 +122,20 @@ def load_linec_data(cfg: Config) -> Tuple[pd.DataFrame, np.ndarray, Dict]:
         waveforms = waveforms.astype(np.float32)
     
     # If ch51 build (51 channels), slice to 21-channel local window for line C
-    # Line C center = 1194; window = [1194-10, 1194+10] = 21 channels
-    # ch51 spans [1184, 1204], so slice is [0:21] or middle 21 of 51
+    # Line C center = 1194; window = [1194-10, 1194+10] = 1184-1204 (21 channels)
+    # ch51 spans 1165-1215, so:
+    #   index 0 = channel 1165
+    #   index 19 = channel 1184 (start of window)
+    #   index 39 = channel 1204 (end of window)
+    #   slice [19:40] gives indices 19-39 = channels 1184-1204 ✓
     if waveforms.shape[1] == 51:
-        # ch51: keep center 21 channels (indices 15:36 of 51)
-        waveforms = waveforms[:, 15:36, :]
-        print(f"Sliced from ch51 to ch21 (local line-C window)")
+        # CORRECTED: channels 1184-1204 are at indices 19:40 of the ch51 array
+        waveforms = waveforms[:, 19:40, :]
+        print(f"Sliced from ch51 (1165-1215) to ch21 (1184-1204, line-C window)")
+        print(f"  ch51 build channels: 1165-1215")
+        print(f"  selected slice: 19:40")
+        print(f"  selected channel IDs: 1184-1204")
+        print(f"  center channel: 1194")
     elif waveforms.shape[1] != 21:
         raise ValueError(f"Unexpected waveform shape: {waveforms.shape}. Expected (N, 21, T) or (N, 51, T)")
     
@@ -310,19 +318,38 @@ def make_event_splits(
 # MODEL TRAINING
 # ==================================================================================
 
+def compute_output_weights(batch_size: int, mp4_weight: float, device: str) -> torch.Tensor:
+    """Compute per-output weights for MP4-weighted variants.
+    
+    Output order: [MP4, MP8, MP10, MP1, MP2]
+    MP4 is output index 0.
+    """
+    weights = torch.ones(batch_size, 5, device=device, dtype=torch.float32)
+    weights[:, 0] = mp4_weight  # MP4 (output 0) gets higher weight
+    return weights
+
+
 def train_epoch(
     model: nn.Module,
     train_loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     loss_fn: str,
     device: str,
-    weights: Optional[np.ndarray] = None,
+    mp4_weight: float = 1.0,
     mono_weight: float = 0.0,
+    first_batch_debug: bool = False,
 ) -> float:
-    """Train for one epoch."""
+    """Train for one epoch with optional per-output weighting.
+    
+    Args:
+      mp4_weight: Weight for MP4 output (output 0). Other outputs get weight 1.0
+      mono_weight: Weight for monotonicity penalty
+      first_batch_debug: If True, print weight diagnostic on first batch
+    """
     model.train()
     total_loss = 0.0
     n_batches = 0
+    debug_logged = False
     
     for batch in train_loader:
         wf, meta, targets, tracks, event_ids = batch
@@ -331,16 +358,25 @@ def train_epoch(
         targets = targets.to(device)
         tracks = tracks.to(device)
         
+        # Compute per-output weights (MP4 vs others)
+        batch_weights = compute_output_weights(wf.shape[0], mp4_weight, device)
+        
+        # Debug: print weights on first batch
+        if first_batch_debug and not debug_logged:
+            print(f"[DEBUG] Output weights (batch_size={wf.shape[0]}): {batch_weights[0].cpu().numpy()}")
+            print(f"[DEBUG] MP4 weight = {mp4_weight}, others = 1.0")
+            debug_logged = True
+        
         # Forward
         logits_t1, logits_t2, mask_t1, mask_t2 = model(wf, meta, tracks)
         
-        # Loss
+        # Loss (WITH per-output weights)
         if loss_fn == "mse_log":
-            loss_t1 = mse_loss_log(logits_t1, targets, mask_t1, weights=None)
-            loss_t2 = mse_loss_log(logits_t2, targets, mask_t2, weights=None)
+            loss_t1 = mse_loss_log(logits_t1, targets, mask_t1, weights=batch_weights)
+            loss_t2 = mse_loss_log(logits_t2, targets, mask_t2, weights=batch_weights)
         else:  # huber_log
-            loss_t1 = huber_loss_log(logits_t1, targets, mask_t1, delta=0.5)
-            loss_t2 = huber_loss_log(logits_t2, targets, mask_t2, delta=0.5)
+            loss_t1 = huber_loss_log(logits_t1, targets, mask_t1, delta=0.5, weights=batch_weights)
+            loss_t2 = huber_loss_log(logits_t2, targets, mask_t2, delta=0.5, weights=batch_weights)
         
         loss = loss_t1 + loss_t2
         
@@ -368,12 +404,14 @@ def evaluate(
     data_loader: DataLoader,
     device: str,
     loss_fn: str,
+    pred_clamp_min: float = -10.0,
+    pred_clamp_max: float = 5.0,
 ) -> Tuple[Dict, np.ndarray, np.ndarray, np.ndarray]:
     """Evaluate model on a split.
     
     Returns:
       metrics: dict with RMSE, MAE, R² (combined and per-track)
-      preds_log: (n_samples, 5) log-PGV predictions
+      preds_log: (n_samples, 5) log-PGV predictions (clamped)
       targets_log: (n_samples, 5) log-PGV ground truth
       tracks: (n_samples,) track numbers
     """
@@ -418,9 +456,12 @@ def evaluate(
     targets_log = np.vstack(all_targets)
     tracks_arr = np.hstack(all_tracks)
     
+    # Clamp log predictions for numerical stability in exp
+    preds_log = np.clip(preds_log, pred_clamp_min, pred_clamp_max)
+    
     # Compute metrics
     # Convert from log to linear for RMSE/MAE in PGV space
-    preds_pgv = np.exp(np.clip(preds_log, -30, 30))
+    preds_pgv = np.exp(preds_log)
     targets_pgv = np.exp(targets_log)
     
     # Combined metrics
@@ -565,51 +606,82 @@ def main():
     print("=" * 80)
     
     history = {"train_loss": [], "val_loss": [], "val_rmse": []}
-    best_val_rmse = float("inf")
+    best_val_rmse_log = float("inf")
+    best_epoch = -1
+    best_model_state = None
     patience_counter = 0
     
+    # Debug: print weighting info before training
+    print(f"MP4 weight: {cfg.model.mp4_weight}")
+    print(f"Use PGV weighting: {cfg.model.use_pgv_weighting}")
+    
     for epoch in range(cfg.train.epochs):
+        # Train with debug on first batch of first epoch
+        debug_first = (epoch == 0)
         train_loss = train_epoch(
             model, train_loader, optimizer, cfg.train.loss_fn, device,
-            weights=None,
+            mp4_weight=cfg.model.mp4_weight if cfg.model.use_pgv_weighting else 1.0,
             mono_weight=cfg.model.monotonic_weight if cfg.model.enforce_monotonicity else 0.0,
+            first_batch_debug=debug_first,
         )
         
-        val_metrics, _, _, _ = evaluate(model, val_loader, device, cfg.train.loss_fn)
+        val_metrics, _, _, _ = evaluate(
+            model, val_loader, device, cfg.train.loss_fn,
+            pred_clamp_min=cfg.train.pred_log_clamp_min,
+            pred_clamp_max=cfg.train.pred_log_clamp_max,
+        )
         
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_metrics["loss"])
         history["val_rmse"].append(val_metrics["rmse_pgv"])
         
         if (epoch + 1) % 5 == 0 or epoch == 0:
-            print(f"Epoch {epoch+1:3d}: train_loss={train_loss:.4f}  val_loss={val_metrics['loss']:.4f}  val_rmse={val_metrics['rmse_pgv']:.4f}  val_r2={val_metrics['r2_log']:.4f}")
+            print(f"Epoch {epoch+1:3d}: train_loss={train_loss:.4f}  val_loss={val_metrics['loss']:.4f}  val_rmse={val_metrics['rmse_pgv']:.4f}  val_rmse_log={val_metrics['rmse_log']:.4f}  val_r2={val_metrics['r2_log']:.4f}")
         
-        # Early stopping
-        if val_metrics["rmse_pgv"] < best_val_rmse:
-            best_val_rmse = val_metrics["rmse_pgv"]
+        # Best checkpoint: track by validation RMSE(log) for stability
+        if val_metrics["rmse_log"] < best_val_rmse_log:
+            best_val_rmse_log = val_metrics["rmse_log"]
+            best_epoch = epoch + 1
+            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             patience_counter = 0
+            if epoch > 0:
+                print(f"  ✓ Best epoch: {best_epoch} (val_rmse_log={best_val_rmse_log:.4f})")
         else:
             patience_counter += 1
         
         if patience_counter >= cfg.train.patience_early_stopping:
-            print(f"Early stopping at epoch {epoch+1}")
+            print(f"Early stopping at epoch {epoch+1} (best was epoch {best_epoch})")
             break
         
         scheduler.step()
     
+    # Restore best model before final evaluation
+    print(f"\n[CHECKPOINT] Restoring best model from epoch {best_epoch}")
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+    else:
+        print(f"  WARNING: No best model state found, using final model")
+        best_epoch = epoch + 1
+    
     # Evaluate
     print("\n" + "=" * 80)
-    print("FINAL EVALUATION")
+    print("FINAL EVALUATION (using best checkpoint)")
     print("=" * 80)
     
     train_metrics, train_preds_log, train_targets_log, train_tracks = evaluate(
-        model, train_loader, device, cfg.train.loss_fn
+        model, train_loader, device, cfg.train.loss_fn,
+        pred_clamp_min=cfg.train.pred_log_clamp_min,
+        pred_clamp_max=cfg.train.pred_log_clamp_max,
     )
     val_metrics, val_preds_log, val_targets_log, val_tracks = evaluate(
-        model, val_loader, device, cfg.train.loss_fn
+        model, val_loader, device, cfg.train.loss_fn,
+        pred_clamp_min=cfg.train.pred_log_clamp_min,
+        pred_clamp_max=cfg.train.pred_log_clamp_max,
     )
     test_metrics, test_preds_log, test_targets_log, test_tracks = evaluate(
-        model, test_loader, device, cfg.train.loss_fn
+        model, test_loader, device, cfg.train.loss_fn,
+        pred_clamp_min=cfg.train.pred_log_clamp_min,
+        pred_clamp_max=cfg.train.pred_log_clamp_max,
     )
     
     print("\nTRAIN:")
@@ -649,12 +721,15 @@ def main():
         "train": cfg.train.__dict__,
     }, indent=2, default=str))
     
-    # Save metrics
-    (output_dir / "metrics.json").write_text(json.dumps({
+    # Save metrics with best_epoch
+    metrics_output = {
+        "best_epoch": best_epoch,
+        "best_val_rmse_log": float(best_val_rmse_log),
         "train": {k: float(v) for k, v in train_metrics.items()},
         "val": {k: float(v) for k, v in val_metrics.items()},
         "test": {k: float(v) for k, v in test_metrics.items()},
-    }, indent=2))
+    }
+    (output_dir / "metrics.json").write_text(json.dumps(metrics_output, indent=2))
     
     # Save predictions
     pred_df = pd.DataFrame({
