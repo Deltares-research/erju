@@ -17,9 +17,29 @@ Splits reuse the exact event-level test split from the XGBoost benchmark
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
+
+
+def _get_data_root() -> tuple[str, str]:
+    """Detect platform and return appropriate data root paths.
+    
+    Returns
+    -------
+    (waveform_root, parquet_root)
+    
+    Windows: P:\11210978-erju-ai\{holten_waveform,holten_parquet}
+    Linux/Cluster: /p/11210978-erju-ai/{holten_waveform,holten_parquet}
+    """
+    if os.name == "nt":  # Windows
+        wf_root = r"P:\11210978-erju-ai\holten_waveform"
+        pq_root = r"P:\11210978-erju-ai\holten_parquet"
+    else:  # Linux/Cluster
+        wf_root = "/p/11210978-erju-ai/holten_waveform"
+        pq_root = "/p/11210978-erju-ai/holten_parquet"
+    return wf_root, pq_root
 
 
 @dataclass
@@ -30,8 +50,8 @@ class DataConfig:
     waveform_build_dir: str | None = None         # holten_waveform_v001_*
     parquet_v2_path: str | None = None            # sensor-level dataset.parquet
 
-    waveform_root: str = r"P:\11210978-erju-ai\holten_waveform"
-    parquet_root: str = r"P:\11210978-erju-ai\holten_parquet"
+    waveform_root: str = field(default_factory=lambda: _get_data_root()[0])
+    parquet_root: str = field(default_factory=lambda: _get_data_root()[1])
 
     event_col: str = "event_id"
     sensor_col: str = "sensor_id"
@@ -110,10 +130,22 @@ class TrainConfig:
     lr_scheduler: bool = False               # ReduceLROnPlateau (off by default)
 
 
+def _get_output_root() -> str:
+    """Detect platform and return appropriate output root path.
+    
+    Windows: P:\11210978-erju-ai\holten_models
+    Linux/Cluster: /p/11210978-erju-ai/holten_models
+    """
+    if os.name == "nt":  # Windows
+        return r"P:\11210978-erju-ai\holten_models"
+    else:  # Linux/Cluster
+        return "/p/11210978-erju-ai/holten_models"
+
+
 @dataclass
 class OutputConfig:
     version_name: str = "cnn_v001"
-    output_root_folder: str = r"P:\11210978-erju-ai\holten_models"
+    output_root_folder: str = field(default_factory=lambda: _get_output_root())
     best_model_filename: str = "best_model.pt"
     summary_filename: str = "summary.json"
     config_snapshot_filename: str = "config_snapshot.json"
