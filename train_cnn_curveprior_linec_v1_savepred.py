@@ -2,10 +2,7 @@
 
 SAVEPRED VARIANT — identical to train_cnn_curveprior_linec_v1.py but additionally
 saves model.pth, predictions.parquet (test split), and per_sensor_metrics.csv.
-Do NOT merge this file back into the validated original."""
-# fmt: off
-# noqa — this is a verbatim copy with prediction-saving additions only
-"""
+Do NOT merge this file back into the validated original.
 
 Physics-informed prediction:
   y_pred = c_hat - n_track * log(r/r0) + epsilon_hat
