@@ -1,277 +1,269 @@
 """
-Query-conditioned curve-prior CNN: model, dataset, loss functions.
+Query-conditioned curve-prior CNN: model, dataset, and loss functions.
 
-Model: y_pred = c_hat - n_track*log(r/r0) + epsilon_hat(r)
-  where epsilon_hat is learned as a function of event embedding and distance query.
+Physics-informed prediction:
+  y_pred(r) = c_hat  -  n_track * log(r / r0)  +  epsilon_hat(r)
 
-Architecture:
-  FO waveform -> shared encoder -> event embedding h_i
-  metadata -> metadata embedding m_i
-  [h_i, m_i] -> intensity head -> c_hat_i
-  [h_i, m_i, query_features] -> residual head -> epsilon_hat_ij
+Key differences from the fixed-output CurvePriorCNN2D (P3 model):
+  - Processes one (event, query_distance) pair per sample, not one event + 5 distances
+  - Residual head takes distance as a continuous input → arbitrary-distance generalisation
+  - CurveDataset_Query flattens events × sensors into flat (event, sensor) sample pairs
 """
+from __future__ import annotations
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
+
+# ===========================================================================
+# MODEL
+# ===========================================================================
 
 class CurvePriorCNN2D_Query(nn.Module):
-    """
-    Query-conditioned curve-prior CNN.
-    
-    Inputs:
-      waveform: (B, 21, 7500) - 21 FO channels, 7500 time samples
-      query_distance: (B,) - active track distance in meters
-      track_id: (B,) - track number (0 or 1)
-    
-    Outputs:
-      c_hat: (B,) - predicted event intensity
-      epsilon_hat: (B,) - predicted residual at queried distance (or None if no residual head)
-    """
-    
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-        encoder_cfg = cfg.encoder
-        head_cfg = cfg.head
-        query_cfg = cfg.query_features
-        
-        # Shared 2D encoder
-        self.encoder_layers = nn.ModuleList()
-        
-        in_channels = 1  # (B, 1, 21, 7500) with channel dim added later
-        for i, out_channels in enumerate(encoder_cfg.conv_channels):
-            layer = nn.Sequential(
-                nn.Conv2d(
-                    in_channels, out_channels,
-                    kernel_size=(encoder_cfg.kernel_ch[i], encoder_cfg.kernel_time[i]),
-                    stride=(1, encoder_cfg.stride_time[i]),
-                    padding="same"
-                ),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(inplace=True)
-            )
-            self.encoder_layers.append(layer)
-            in_channels = out_channels
-        
-        # Compute encoder output shape (for downstream heads)
-        # After 4 conv layers with stride_time [2,2,2,2], time reduces: 7500 -> 937
-        self.encoder_out_channels = encoder_cfg.conv_channels[-1]
-        
-        # Intensity head
-        intensity_in = self.encoder_out_channels * 21 * 937  # flattened
-        self.intensity_head = nn.Sequential()
-        prev_dim = intensity_in
-        
-        for hidden_dim in head_cfg.intensity_hidden:
-            self.intensity_head.append(nn.Linear(prev_dim, hidden_dim))
-            self.intensity_head.append(nn.ReLU(inplace=True))
-            prev_dim = hidden_dim
-        
-        self.intensity_head.append(nn.Linear(prev_dim, 1))  # single c_hat output
-        
-        # Residual head (optional)
-        self.residual_head = None
-        if cfg.train.enable_residual_head:
-            # Embed query features
-            query_n_features = query_cfg.n_query_features_minimal
-            self.query_embedding = nn.Sequential(
-                nn.Linear(query_n_features, head_cfg.query_embedding_dim),
-                nn.ReLU(inplace=True)
-            )
-            
-            # Concatenate event embedding + query embedding
-            residual_in = intensity_in + head_cfg.query_embedding_dim
-            
-            self.residual_head = nn.Sequential()
-            prev_dim = residual_in
-            
-            for hidden_dim in head_cfg.residual_hidden:
-                self.residual_head.append(nn.Linear(prev_dim, hidden_dim))
-                self.residual_head.append(nn.ReLU(inplace=True))
-                prev_dim = hidden_dim
-            
-            self.residual_head.append(nn.Linear(prev_dim, 1))  # single epsilon output
-    
-    def forward(self, waveform, query_distance=None, track_id=None):
-        """
-        Args:
-            waveform: (B, 21, 7500)
-            query_distance: (B,) in meters (required for residual head)
-            track_id: (B,) in {0, 1} (required for residual head)
-        
-        Returns:
-            c_hat: (B,)
-            epsilon_hat: (B,) or None
-        """
-        
-        # Add channel dimension for 2D conv
-        x = waveform.unsqueeze(1)  # (B, 1, 21, 7500)
-        
-        # Pass through encoder
-        for layer in self.encoder_layers:
-            x = layer(x)
-        
-        # Flatten for dense layers
-        event_embedding = x.reshape(x.shape[0], -1)  # (B, encoder_out_channels*21*time_steps)
-        
-        # Intensity head
-        c_hat = self.intensity_head(event_embedding).squeeze(-1)  # (B,)
-        
-        # Residual head
-        epsilon_hat = None
-        if self.residual_head is not None and query_distance is not None:
-            # Build query features
-            n_batch = query_distance.shape[0]
-            device = query_distance.device
-            r0 = self.cfg.features.r0_ref
-            
-            log_r_ratio = torch.log(query_distance / r0)  # (B,)
-            r_active_m = query_distance  # (B,)
-            track_id_tensor = torch.tensor(track_id, dtype=torch.float32, device=device)  # (B,)
-            
-            query_features = torch.stack([
-                log_r_ratio,
-                r_active_m,
-                track_id_tensor
-            ], dim=1)  # (B, 3)
-            
-            # Embed query features
-            query_embedding = self.query_embedding(query_features)  # (B, query_embedding_dim)
-            
-            # Concatenate with event embedding
-            combined = torch.cat([event_embedding, query_embedding], dim=1)  # (B, event+query)
-            
-            epsilon_hat = self.residual_head(combined).squeeze(-1)  # (B,)
-        
-        return c_hat, epsilon_hat
+    """Query-conditioned curve-prior CNN for arbitrary-distance PGV prediction.
 
+    Input per forward call (batch of B samples):
+        waveform        (B, 1, C, T)  — 21 FO channels, 7 500 time samples
+        metadata        (B, n_meta)   — train speed, speed-missing flag, train-type code, track norm
+        query_distance  (B,)          — active-track distance in metres
+        track           (B,)  long    — 1 or 2
+
+    Outputs:
+        c_hat        (B,)            event intensity scalar
+        epsilon_hat  (B,) or None    residual at queried distance (None for Q1)
+
+    Prediction:
+        y_pred = c_hat  -  n_track * log(r / r0)  +  epsilon_hat
+    """
+
+    def __init__(
+        self,
+        n_metadata:           int,
+        conv_channels:        List[int],
+        kernel_ch:            List[int],
+        kernel_time:          List[int],
+        stride_time:          List[int],
+        use_batchnorm:        bool,
+        metadata_hidden:      List[int],
+        intensity_hidden:     List[int],
+        query_hidden:         List[int],
+        residual_hidden:      List[int],
+        enable_residual_head: bool,
+        n_query_features:     int = 3,
+    ):
+        super().__init__()
+        self.enable_residual_head = enable_residual_head
+
+        # ── 2D CNN encoder (identical structure to CurvePriorCNN2D) ─────────
+        enc: List[nn.Module] = []
+        in_ch = 1
+        for out_ch, kc, kt, st in zip(
+            conv_channels, kernel_ch, kernel_time, stride_time
+        ):
+            enc.append(
+                nn.Conv2d(
+                    in_ch, out_ch,
+                    kernel_size=(kc, kt),
+                    stride=(1, st),
+                    padding=(kc // 2, kt // 2),   # explicit — no padding="same" with stride>1
+                )
+            )
+            if use_batchnorm:
+                enc.append(nn.BatchNorm2d(out_ch))
+            enc.append(nn.ReLU(inplace=True))
+            in_ch = out_ch
+        self.encoder = nn.Sequential(*enc)
+        self.pool    = nn.AdaptiveAvgPool2d(1)    # (B, embed_dim, 1, 1)
+        embed_dim    = conv_channels[-1]            # 64
+
+        # ── Metadata MLP ─────────────────────────────────────────────────────
+        meta: List[nn.Module] = []
+        in_sz = n_metadata
+        for out_sz in metadata_hidden:
+            meta.extend([nn.Linear(in_sz, out_sz), nn.ReLU(inplace=True)])
+            in_sz = out_sz
+        self.metadata_embed = nn.Sequential(*meta)
+        meta_dim = in_sz   # 16
+
+        event_dim = embed_dim + meta_dim   # 80
+
+        # ── Intensity head: event_embed → c_hat ──────────────────────────────
+        ih: List[nn.Module] = []
+        in_sz = event_dim
+        for out_sz in intensity_hidden:
+            ih.extend([nn.Linear(in_sz, out_sz), nn.ReLU(inplace=True)])
+            in_sz = out_sz
+        ih.append(nn.Linear(in_sz, 1))
+        self.intensity_head = nn.Sequential(*ih)
+
+        # ── Query embedding: [log(r/r0), r/r0, track/2] → z ─────────────────
+        qh: List[nn.Module] = []
+        in_sz = n_query_features
+        for out_sz in query_hidden:
+            qh.extend([nn.Linear(in_sz, out_sz), nn.ReLU(inplace=True)])
+            in_sz = out_sz
+        self.query_embed = nn.Sequential(*qh)
+        query_dim = in_sz   # 16
+
+        # ── Residual head: [event_embed, query_embed] → epsilon_hat ──────────
+        if enable_residual_head:
+            rh: List[nn.Module] = []
+            in_sz = event_dim + query_dim   # 96
+            for out_sz in residual_hidden:
+                rh.extend([nn.Linear(in_sz, out_sz), nn.ReLU(inplace=True)])
+                in_sz = out_sz
+            rh.append(nn.Linear(in_sz, 1))
+            self.residual_head: Optional[nn.Sequential] = nn.Sequential(*rh)
+        else:
+            self.residual_head = None
+
+    def forward(
+        self,
+        waveform:       torch.Tensor,    # (B, 1, C, T)
+        metadata:       torch.Tensor,    # (B, n_meta)
+        query_distance: torch.Tensor,    # (B,)  metres
+        track:          torch.Tensor,    # (B,)  long, values 1 or 2
+        r0: float = 10.0,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # CNN encoder
+        h = self.encoder(waveform)                     # (B, 64, H', T')
+        h = self.pool(h).squeeze(-1).squeeze(-1)       # (B, 64)
+
+        # Metadata
+        m = self.metadata_embed(metadata)              # (B, 16)
+
+        # Combined event embedding
+        ev = torch.cat([h, m], dim=-1)                 # (B, 80)
+
+        # Intensity
+        c_hat = self.intensity_head(ev).squeeze(-1)    # (B,)
+
+        # Residual (optional)
+        eps: Optional[torch.Tensor] = None
+        if self.residual_head is not None:
+            log_r   = torch.log(query_distance / r0)   # (B,)
+            r_norm  = query_distance / r0               # (B,)
+            tr_norm = track.float() / 2.0              # (B,)  0.5 or 1.0
+            q_feat  = torch.stack([log_r, r_norm, tr_norm], dim=-1)  # (B, 3)
+            z       = self.query_embed(q_feat)          # (B, 16)
+            res     = torch.cat([ev, z], dim=-1)        # (B, 96)
+            eps     = self.residual_head(res).squeeze(-1)  # (B,)
+
+        return c_hat, eps
+
+
+# ===========================================================================
+# DATASET
+# ===========================================================================
 
 class CurveDataset_Query(Dataset):
+    """(event, sensor) pair dataset for the query-conditioned curve-prior model.
+
+    The dataset is flat: each sample is one (event, sensor) pair.
+    The same waveform appears once per sensor query per epoch.
+
+    Args:
+        waveforms:            (N, C, T)   already subset to the desired split events
+        metadata:             (N, n_meta)
+        targets_log:          (N, S)      log(PGV_z) per sensor
+        distances:            (N, S)      active-track distance (metres)
+        tracks:               (N,)        int  1 or 2
+        event_ids:            (N,)
+        sensor_names:         list[str]   length S
+        holdout_sensor:       None → all sensors included
+                              str  → exclude this sensor from samples (train/val mode)
+        include_holdout_only: True → include ONLY holdout-sensor samples (held-out test)
     """
-    Event-level dataset for query-conditioned curve-prior model.
-    
-    Each sample represents one event and one sensor (query distance).
-    """
-    
-    def __init__(self, waveforms, pgv_targets, distances, tracks, event_ids, 
-                 sensor_names=None, split="train", holdout_sensor=None):
-        """
-        Args:
-            waveforms: (n_events, 21, 7500)
-            pgv_targets: (n_events, 5) per-sensor PGV values
-            distances: (n_events, 5) per-sensor distances
-            tracks: (n_events,) track IDs
-            event_ids: (n_events,) event IDs
-            sensor_names: list of 5 sensor names
-            split: "train", "val", or "test"
-            holdout_sensor: None or sensor name to exclude
-        """
-        
-        self.waveforms = waveforms  # (n_events, 21, 7500)
-        self.pgv_targets = pgv_targets  # (n_events, 5)
-        self.distances = distances  # (n_events, 5)
-        self.tracks = tracks  # (n_events,)
-        self.event_ids = event_ids  # (n_events,)
-        self.sensor_names = sensor_names or ["MP4", "MP8", "MP10", "MP1", "MP2"]
-        self.split = split
-        self.holdout_sensor = holdout_sensor
-        
-        # Build list of (event_idx, sensor_idx) tuples
-        self.samples = []
-        for event_idx in range(len(waveforms)):
-            for sensor_idx, sensor_name in enumerate(self.sensor_names):
-                # Skip held-out sensor if in training
-                if self.holdout_sensor is not None and sensor_name == self.holdout_sensor:
-                    if self.split == "train":
-                        continue  # don't train on held-out sensor
-                    # But include it for testing held-out generalization
-                
-                self.samples.append((event_idx, sensor_idx))
-    
-    def __len__(self):
+
+    def __init__(
+        self,
+        waveforms:            np.ndarray,
+        metadata:             np.ndarray,
+        targets_log:          np.ndarray,
+        distances:            np.ndarray,
+        tracks:               np.ndarray,
+        event_ids:            np.ndarray,
+        sensor_names:         List[str],
+        holdout_sensor:       Optional[str] = None,
+        include_holdout_only: bool          = False,
+    ):
+        self.waveforms    = waveforms.astype(np.float32)
+        self.metadata     = metadata.astype(np.float32)
+        self.targets_log  = targets_log.astype(np.float32)
+        self.distances    = distances.astype(np.float32)
+        self.tracks       = tracks.astype(np.int64)
+        self.event_ids    = event_ids
+        self.sensor_names = sensor_names
+
+        self.samples: List[Tuple[int, int]] = []
+        for ev_i in range(len(waveforms)):
+            for s_j, sname in enumerate(sensor_names):
+                is_ho = holdout_sensor is not None and sname == holdout_sensor
+                if include_holdout_only:
+                    if is_ho:
+                        self.samples.append((ev_i, s_j))
+                else:
+                    if not is_ho:
+                        self.samples.append((ev_i, s_j))
+
+    def __len__(self) -> int:
         return len(self.samples)
-    
-    def __getitem__(self, idx):
-        event_idx, sensor_idx = self.samples[idx]
-        
-        waveform = torch.from_numpy(self.waveforms[event_idx]).float()  # (21, 7500)
-        pgv_target = float(self.pgv_targets[event_idx, sensor_idx])
-        distance = float(self.distances[event_idx, sensor_idx])
-        track = int(self.tracks[event_idx])
-        event_id = int(self.event_ids[event_idx])
-        sensor_name = self.sensor_names[sensor_idx]
-        
+
+    def __getitem__(self, idx: int) -> Dict:
+        ev_i, s_j = self.samples[idx]
+        wf = torch.from_numpy(np.ascontiguousarray(self.waveforms[ev_i]))
+        wf = wf.unsqueeze(0)                                               # (1, C, T)
         return {
-            "waveform": waveform,
-            "pgv_target": pgv_target,
-            "distance": distance,
-            "track": track,
-            "event_id": event_id,
-            "sensor_name": sensor_name,
-            "sensor_idx": sensor_idx,
+            "waveform":    wf,
+            "metadata":    torch.from_numpy(self.metadata[ev_i]),
+            "target_log":  torch.tensor(self.targets_log[ev_i, s_j], dtype=torch.float32),
+            "distance":    torch.tensor(self.distances[ev_i, s_j],   dtype=torch.float32),
+            "track":       torch.tensor(self.tracks[ev_i],            dtype=torch.long),
+            "event_id":    self.event_ids[ev_i],
+            "sensor_name": self.sensor_names[s_j],
+            "sensor_idx":  s_j,
         }
 
 
-def huber_loss_log(pred_log, target_log, delta=0.5, weights=None):
-    """Huber loss in log space with optional sample weighting."""
+# ===========================================================================
+# LOSS FUNCTIONS
+# ===========================================================================
+
+def huber_loss_log(
+    pred_log:   torch.Tensor,
+    target_log: torch.Tensor,
+    delta:   float = 0.5,
+    weights: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    """Huber loss in log space with optional per-sample weighting."""
     diff = pred_log - target_log
-    abs_diff = torch.abs(diff)
-    
-    huber = torch.where(
-        abs_diff <= delta,
+    loss = torch.where(
+        diff.abs() <= delta,
         0.5 * diff ** 2,
-        delta * (abs_diff - 0.5 * delta)
+        delta * (diff.abs() - 0.5 * delta),
     )
-    
     if weights is not None:
-        huber = huber * weights
-    
-    return torch.mean(huber)
+        loss = loss * weights
+    return loss.mean()
 
 
-def compute_output_weights(batch_data, cfg):
-    """
-    Compute per-sample weights based on sensor (MP4) and optional PGV magnitude.
-    
-    Returns:
-        weights: (B,) tensor
-    """
-    n_batch = len(batch_data["sensor_name"])
-    weights = torch.ones(n_batch)
-    
-    # MP4 weighting
-    mp4_weight = cfg.loss.mp4_weight
-    if mp4_weight != 1.0:
-        is_mp4 = np.array([s == "MP4" for s in batch_data["sensor_name"]])
-        weights[is_mp4] = mp4_weight
-    
-    return weights
+def mse_scalar(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """MSE for scalar outputs (intensity auxiliary loss L_c)."""
+    return ((pred - target) ** 2).mean()
 
 
-def compute_curve_target_intensity(pgv_log_targets, distances, n_track, r0=10.0):
-    """
-    Invert curve-prior to get event-level intensity target.
-    
-    From: log(PGV) = log(c) - n*log(r/r0)
-    Solve for c: c_target = PGV * (r/r0)^n
-    
-    Or in log space: log(c) = log(PGV) + n*log(r/r0)
-    
-    Args:
-        pgv_log_targets: (B,) log PGV values
-        distances: (B,) distances in meters
-        n_track: scalar attenuation exponent
-        r0: reference distance (10 m)
-    
-    Returns:
-        c_target_log: (B,) log-space intensity targets
-    """
-    
-    log_r_ratio = np.log(distances / r0)
-    c_target_log = pgv_log_targets + n_track * log_r_ratio
-    
-    return c_target_log
+def compute_sample_weights(
+    sensor_names: List[str],
+    mp4_weight:   float,
+    device:       Optional[torch.device] = None,
+) -> torch.Tensor:
+    """Per-sample weight tensor.  MP4 → mp4_weight, all others → 1.0."""
+    w = torch.tensor(
+        [mp4_weight if s == "MP4" else 1.0 for s in sensor_names],
+        dtype=torch.float32,
+    )
+    return w if device is None else w.to(device)
+
