@@ -747,10 +747,13 @@ def main():
     print("FINAL EVALUATION (using best checkpoint)")
     print("=" * 80)
     
-    train_metrics, train_preds_log, train_targets_log, train_c_hat, train_c_target, _, _, _, _ = evaluate(
+    # SAVEPRED: unpack all three splits fully for all-splits parquet
+    (train_metrics, train_preds_log, train_targets_log, train_c_hat, train_c_target,
+     train_distances, train_tracks, train_event_ids, train_epsilon) = evaluate(
         model, train_loader, device, cfg, n_track1, n_track2, cfg.features.r0
     )
-    val_metrics, val_preds_log, val_targets_log, val_c_hat, val_c_target, _, _, _, _ = evaluate(
+    (val_metrics, val_preds_log, val_targets_log, val_c_hat, val_c_target,
+     val_distances, val_tracks, val_event_ids, val_epsilon) = evaluate(
         model, val_loader, device, cfg, n_track1, n_track2, cfg.features.r0
     )
     # SAVEPRED: unpack extra arrays for prediction saving
@@ -791,38 +794,56 @@ def main():
     
     # SAVEPRED: save model checkpoint
     torch.save(best_model_state, output_dir / "model.pth")
-    print(f"Saved model.pth")
+    print("Saved model.pth")
 
-    # SAVEPRED: build predictions.parquet (test split, flattened to per-sensor rows)
+    # SAVEPRED: build per-split predictions DataFrames with renamed P3 columns
     sensor_names = cfg.data.line_c_sensors  # ["MP4","MP8","MP10","MP1","MP2"]
     _dist_map = {
         1: {"MP4": 2.5,  "MP8": 4.0,  "MP10": 8.0,  "MP1": 16.0, "MP2": 23.0},
         2: {"MP4": 6.5,  "MP8": 8.0,  "MP10": 12.0, "MP1": 20.0, "MP2": 27.0},
     }
-    _rows = []
-    for ev_i in range(len(test_event_ids)):
-        track = int(test_tracks[ev_i])
-        n_used = n_track1 if track == 1 else n_track2
-        for s_j, sensor in enumerate(sensor_names):
-            dist = _dist_map[track][sensor]
-            _rows.append({
-                "split":      "test",
-                "event_id":   str(test_event_ids[ev_i]),
-                "sensor":     sensor,
-                "track":      track,
-                "distance":   float(dist),
-                "target_log": float(test_targets_log[ev_i, s_j]),
-                "pred_log":   float(test_preds_log[ev_i, s_j]),
-                "target_pgv": float(np.exp(test_targets_log[ev_i, s_j])),
-                "pred_pgv":   float(np.exp(test_preds_log[ev_i, s_j])),
-                "c_hat":      float(test_c_hat[ev_i]),
-                "c_target":   float(test_c_target[ev_i]),
-                "epsilon":    float(test_epsilon[ev_i, s_j]),
-                "n_used":     float(n_used),
-            })
-    pred_df = pd.DataFrame(_rows)
-    pred_df.to_parquet(output_dir / "predictions.parquet", index=False)
-    print(f"Saved predictions.parquet ({len(pred_df)} rows)")
+
+    def _build_df(split_name, ev_ids, preds_l, targets_l, c_h, c_t, eps, tracks_arr, n1, n2):
+        rows = []
+        for ev_i in range(len(ev_ids)):
+            track = int(tracks_arr[ev_i])
+            n_used = n1 if track == 1 else n2
+            for s_j, sensor in enumerate(sensor_names):
+                dist = _dist_map[track][sensor]
+                rows.append({
+                    "split":       split_name,
+                    "event_id":    str(ev_ids[ev_i]),
+                    "sensor":      sensor,
+                    "track":       track,
+                    "distance":    float(dist),
+                    "target_log":  float(targets_l[ev_i, s_j]),
+                    "pred_log_p3": float(preds_l[ev_i, s_j]),
+                    "target_pgv":  float(np.exp(targets_l[ev_i, s_j])),
+                    "pred_pgv_p3": float(np.exp(preds_l[ev_i, s_j])),
+                    "c_hat_p3":    float(c_h[ev_i]),
+                    "c_target":    float(c_t[ev_i]),
+                    "epsilon_p3":  float(eps[ev_i, s_j]),
+                    "n_used":      float(n_used),
+                })
+        return pd.DataFrame(rows)
+
+    train_df = _build_df("train", train_event_ids, train_preds_log, train_targets_log,
+                         train_c_hat, train_c_target, train_epsilon, train_tracks,
+                         n_track1, n_track2)
+    val_df   = _build_df("val",   val_event_ids,   val_preds_log,   val_targets_log,
+                         val_c_hat,   val_c_target,   val_epsilon,   val_tracks,
+                         n_track1, n_track2)
+    test_df  = _build_df("test",  test_event_ids,  test_preds_log,  test_targets_log,
+                         test_c_hat,  test_c_target,  test_epsilon,  test_tracks,
+                         n_track1, n_track2)
+    all_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
+
+    train_df.to_parquet(output_dir / "train_predictions.parquet", index=False)
+    val_df.to_parquet(  output_dir / "val_predictions.parquet",   index=False)
+    test_df.to_parquet( output_dir / "test_predictions.parquet",  index=False)
+    all_df.to_parquet(  output_dir / "all_predictions.parquet",   index=False)
+    n_tr, n_v, n_te, n_a = len(train_df), len(val_df), len(test_df), len(all_df)
+    print(f"Saved *_predictions.parquet  (train={n_tr}, val={n_v}, test={n_te}, all={n_a} rows)")
 
     # SAVEPRED: per-sensor metrics CSV
     _ps_rows = []
@@ -838,7 +859,7 @@ def main():
             "bias_log": float(np.mean(p_s - t_s)),
         })
     pd.DataFrame(_ps_rows).to_csv(output_dir / "per_sensor_metrics.csv", index=False)
-    print(f"Saved per_sensor_metrics.csv")
+    print("Saved per_sensor_metrics.csv")
 
     print(f"\nOutput saved to: {output_dir}")
 
