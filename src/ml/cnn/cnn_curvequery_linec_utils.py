@@ -217,14 +217,15 @@ class CurveDataset_Query(Dataset):
         wf = torch.from_numpy(np.ascontiguousarray(self.waveforms[ev_i]))
         wf = wf.unsqueeze(0)                                               # (1, C, T)
         return {
-            "waveform":    wf,
-            "metadata":    torch.from_numpy(self.metadata[ev_i]),
-            "target_log":  torch.tensor(self.targets_log[ev_i, s_j], dtype=torch.float32),
-            "distance":    torch.tensor(self.distances[ev_i, s_j],   dtype=torch.float32),
-            "track":       torch.tensor(self.tracks[ev_i],            dtype=torch.long),
-            "event_id":    self.event_ids[ev_i],
-            "sensor_name": self.sensor_names[s_j],
-            "sensor_idx":  s_j,
+            "waveform":        wf,
+            "metadata":        torch.from_numpy(self.metadata[ev_i]),
+            "target_log":      torch.tensor(self.targets_log[ev_i, s_j], dtype=torch.float32),
+            "distance":        torch.tensor(self.distances[ev_i, s_j],   dtype=torch.float32),
+            "track":           torch.tensor(self.tracks[ev_i],            dtype=torch.long),
+            "event_id":        self.event_ids[ev_i],
+            "event_array_idx": ev_i,   # position in the subsetted waveform array
+            "sensor_name":     self.sensor_names[s_j],
+            "sensor_idx":      s_j,
         }
 
 

@@ -311,72 +311,193 @@ def fit_meta_scaler(metadata_train: np.ndarray) -> StandardScaler:
 
 
 # ===========================================================================
+# EPOCH DIAGNOSTICS
+# ===========================================================================
+
+@torch.no_grad()
+def collect_val_diagnostics(
+    model:    CurvePriorCNN2D_Query,
+    loader:   DataLoader,
+    device:   torch.device,
+    cfg:      Config,
+    n_track1: float,
+    n_track2: float,
+    r0: float = 10.0,
+) -> Dict:
+    """Collect per-epoch collapse diagnostics on the validation set.
+
+    Returns a dict with:
+      c_hat_mean/std/min/max
+      eps_mean/std/min/max  (or zeros for Q1)
+      pred_log_mean/std/min/max  (raw, before clamp)
+      frac_clip_lo/hi  (fraction hitting clamp limits)
+      n_nan  (NaN count)
+    """
+    model.eval()
+
+    n1 = torch.tensor(n_track1, dtype=torch.float32, device=device)
+    n2 = torch.tensor(n_track2, dtype=torch.float32, device=device)
+
+    ch_l, ep_l, pl_raw_l = [], [], []
+
+    for batch in loader:
+        wf   = batch["waveform"].to(device)
+        meta = batch["metadata"].to(device)
+        dist = batch["distance"].to(device)
+        track = batch["track"].to(device)
+
+        n_vec = torch.where(track == 1, n1, n2).float()
+        c_hat, eps = model(wf, meta, dist, track, r0=r0)
+        log_r  = torch.log(dist / r0)
+        y_pred = c_hat - n_vec * log_r
+        if eps is not None:
+            y_pred = y_pred + eps
+
+        ch_l.append(c_hat.cpu().numpy())
+        ep_l.append(eps.cpu().numpy() if eps is not None
+                    else np.zeros(len(c_hat), dtype=np.float32))
+        pl_raw_l.append(y_pred.cpu().numpy())
+
+    c_hat_arr = np.concatenate(ch_l)
+    eps_arr   = np.concatenate(ep_l)
+    pl_raw    = np.concatenate(pl_raw_l)
+
+    clamp_lo  = cfg.train.pred_log_clamp_min
+    clamp_hi  = cfg.train.pred_log_clamp_max
+
+    return {
+        "c_hat_mean":       float(c_hat_arr.mean()),
+        "c_hat_std":        float(c_hat_arr.std()),
+        "c_hat_min":        float(c_hat_arr.min()),
+        "c_hat_max":        float(c_hat_arr.max()),
+        "eps_mean":         float(eps_arr.mean()),
+        "eps_std":          float(eps_arr.std()),
+        "eps_min":          float(eps_arr.min()),
+        "eps_max":          float(eps_arr.max()),
+        "pred_log_mean_raw": float(pl_raw.mean()),
+        "pred_log_std_raw":  float(pl_raw.std()),
+        "pred_log_min_raw":  float(pl_raw.min()),
+        "pred_log_max_raw":  float(pl_raw.max()),
+        "frac_clip_lo":     float((pl_raw < clamp_lo).mean()),
+        "frac_clip_hi":     float((pl_raw > clamp_hi).mean()),
+        "n_nan":            int(np.isnan(pl_raw).sum()),
+    }
+
+
+# ===========================================================================
+# TRAINING HEADER
+# ===========================================================================
+
+def print_training_header(
+    cfg:          Config,
+    sensor_names: List[str],
+    holdout:      Optional[str],
+    n_track1:     float,
+    n_track2:     float,
+) -> None:
+    """Print explicit training configuration before the training loop."""
+    print()
+    print("Training sensors and weights:")
+    for s in sensor_names:
+        if s == holdout:
+            print(f"  {s}: EXCLUDED (held out)")
+        else:
+            w = cfg.model.mp4_weight if s == "MP4" else 1.0
+            print(f"  {s}: weight {w:.1f}")
+    print(f"Holdout sensor:  {holdout or 'None (all sensors)'}")
+    print(f"n_track1:        {n_track1:.4f}")
+    print(f"n_track2:        {n_track2:.4f}")
+    print(f"lambda_epsilon:  {cfg.model.lambda_residual}")
+    print(f"alpha_intensity: {cfg.model.alpha_intensity}")
+    print(f"learning_rate:   {cfg.train.learning_rate}")
+    print(f"enable_residual: {cfg.model.enable_residual_head}")
+    print()
+    print("NOTE: L_c is computed per unique event in each batch (deduplicated).")
+    print("      This avoids 5x gradient amplification from repeated event entries.")
+    print()
+
+
+# ===========================================================================
 # TRAINING
 # ===========================================================================
 
 def train_epoch(
-    model:      CurvePriorCNN2D_Query,
-    loader:     DataLoader,
-    optimizer:  torch.optim.Optimizer,
-    cfg:        Config,
-    device:     torch.device,
-    n_track1:   float,
-    n_track2:   float,
-    r0:         float = 10.0,
-    first_batch_debug: bool = False,
-) -> float:
+    model:     CurvePriorCNN2D_Query,
+    loader:    DataLoader,
+    optimizer: torch.optim.Optimizer,
+    cfg:       Config,
+    device:    torch.device,
+    n_track1:  float,
+    n_track2:  float,
+    r0:        float = 10.0,
+) -> Tuple[float, float]:
+    """Train one epoch.  Returns (avg_loss, avg_grad_norm_before_clip)."""
     model.train()
-    total_loss = 0.0
-    n_batches  = 0
-    debug_done = False
+    total_loss      = 0.0
+    total_grad_norm = 0.0
+    n_batches       = 0
 
     n1 = torch.tensor(n_track1, dtype=torch.float32, device=device)
     n2 = torch.tensor(n_track2, dtype=torch.float32, device=device)
 
     for batch in loader:
-        wf      = batch["waveform"].to(device)      # (B, 1, C, T)
-        meta    = batch["metadata"].to(device)       # (B, n_meta)
-        tgt_log = batch["target_log"].to(device)    # (B,)
-        dist    = batch["distance"].to(device)       # (B,)
-        track   = batch["track"].to(device)          # (B,)  long
-        snames  = batch["sensor_name"]               # list[str]
+        wf      = batch["waveform"].to(device)       # (B, 1, C, T)
+        meta    = batch["metadata"].to(device)        # (B, n_meta)
+        tgt_log = batch["target_log"].to(device)     # (B,)
+        dist    = batch["distance"].to(device)        # (B,)
+        track   = batch["track"].to(device)           # (B,)  long
+        ev_idx  = batch["event_array_idx"]            # list[int]
+        snames  = batch["sensor_name"]                # list[str]
 
         n_vec = torch.where(track == 1, n1, n2).float()   # (B,)
 
         c_hat, eps = model(wf, meta, dist, track, r0=r0)
 
-        log_r  = torch.log(dist / r0)                     # (B,)
+        log_r  = torch.log(dist / r0)                      # (B,)
         y_pred = c_hat - n_vec * log_r
         if eps is not None:
             y_pred = y_pred + eps
 
-        # Per-sample intensity target  c_target = log_pgv + n * log(r/r0)
-        c_target = (tgt_log + n_vec * log_r).detach()     # (B,)
+        # Per-sample intensity target
+        c_target = (tgt_log + n_vec * log_r).detach()      # (B,)
 
         weights = compute_sample_weights(snames, cfg.model.mp4_weight, device)
 
-        if first_batch_debug and not debug_done:
-            print(f"[DEBUG] Output weights: {weights[:5].cpu().numpy()}")
-            print(f"[DEBUG] MP4 weight = {cfg.model.mp4_weight}")
-            debug_done = True
-
         L_profile = huber_loss_log(y_pred, tgt_log,
                                    delta=cfg.train.huber_delta, weights=weights)
-        L_c       = mse_scalar(c_hat, c_target)
-        loss      = L_profile + cfg.model.alpha_intensity * L_c
 
+        # L_c: compute once per unique event to avoid 5× gradient amplification.
+        # For the same event, c_hat is identical (same embedding); average c_target
+        # across sensors to get a single reliable intensity estimate per event.
+        ev_idx_t = torch.tensor(ev_idx, dtype=torch.long, device=device)
+        unique_evs = torch.unique(ev_idx_t)
+        c_hat_per_ev  = torch.stack([c_hat[ev_idx_t == e].mean() for e in unique_evs])
+        c_tgt_per_ev  = torch.stack([c_target[ev_idx_t == e].mean() for e in unique_evs])
+        L_c = mse_scalar(c_hat_per_ev, c_tgt_per_ev)
+
+        loss = L_profile + cfg.model.alpha_intensity * L_c
         if eps is not None and cfg.model.lambda_residual > 0:
             loss = loss + cfg.model.lambda_residual * (eps ** 2).mean()
 
         optimizer.zero_grad()
         loss.backward()
+
+        # Measure grad norm before clip
+        grad_norm_sq = sum(
+            p.grad.norm().item() ** 2
+            for p in model.parameters() if p.grad is not None
+        )
+        total_grad_norm += grad_norm_sq ** 0.5
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.gradient_clip)
         optimizer.step()
 
-        total_loss += loss.item()
-        n_batches  += 1
+        total_loss  += loss.item()
+        n_batches   += 1
 
-    return total_loss / n_batches if n_batches > 0 else 0.0
+    avg_loss      = total_loss      / n_batches if n_batches > 0 else 0.0
+    avg_grad_norm = total_grad_norm / n_batches if n_batches > 0 else 0.0
+    return avg_loss, avg_grad_norm
 
 
 # ===========================================================================
@@ -605,7 +726,9 @@ def save_plots(
     data_box  = [res[sa == s]  for s in s_order if (sa == s).any()]
     lbls_box  = [s             for s in s_order if (sa == s).any()]
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.boxplot(data_box, labels=lbls_box, showfliers=False)
+    ax.boxplot(data_box, showfliers=False)
+    ax.set_xticks(range(1, len(lbls_box) + 1))
+    ax.set_xticklabels(lbls_box)
     ax.axhline(0, color="r", lw=1)
     ax.set_ylabel("Residual (mm/s)"); ax.set_title("Per-Sensor Residuals")
     ax.grid(True, alpha=0.3)
@@ -696,6 +819,10 @@ def main() -> None:
     parser.add_argument("--variant",        choices=["Q1", "Q2", "Q3", "Q4"], default="Q1")
     parser.add_argument("--holdout_sensor", default=None)
     parser.add_argument("--lambda_epsilon", type=float, default=None)
+    parser.add_argument("--lr",             type=float, default=None,
+                        help="Override learning rate (default: from config)")
+    parser.add_argument("--output_tag",     type=str,   default=None,
+                        help="Override output dir prefix (default: cnn_curvequery_linec_v001)")
     args = parser.parse_args()
 
     cfg     = get_variant_config(args.variant, holdout_sensor=args.holdout_sensor)
@@ -703,6 +830,9 @@ def main() -> None:
 
     if args.lambda_epsilon is not None:
         cfg.model.lambda_residual = args.lambda_epsilon
+    if args.lr is not None:
+        cfg.train.learning_rate = args.lr
+    output_tag = args.output_tag or "cnn_curvequery_linec_v001"
 
     torch.manual_seed(cfg.train.seed)
     np.random.seed(cfg.train.seed)
@@ -717,6 +847,8 @@ def main() -> None:
     print(f"Holdout sensor: {holdout}")
     print(f"Lambda epsilon: {cfg.model.lambda_residual}")
     print(f"MP4 weight:     {cfg.model.mp4_weight}")
+    print(f"Learning rate:  {cfg.train.learning_rate}")
+    print(f"Output tag:     {output_tag}")
 
     # ── Data ────────────────────────────────────────────────────────────────
     df, waveforms, event_map = load_linec_data(cfg)
@@ -804,29 +936,47 @@ def main() -> None:
     print("TRAINING")
     print("=" * 80)
 
-    best_val  = float("inf")
-    best_epoch = 0
-    best_state = None
-    patience   = 0
-    history    = []
+    best_val    = float("inf")
+    best_epoch  = 0
+    best_state  = None
+    patience    = 0
+    history     = []
+    epoch_diags = []
+
+    print_training_header(cfg, sensor_names, holdout, n_track1, n_track2)
 
     for epoch in range(1, cfg.train.epochs + 1):
-        tr_loss = train_epoch(
+        tr_loss, grad_norm = train_epoch(
             model, train_loader, optimizer, cfg, device,
             n_track1, n_track2, cfg.features.r0,
-            first_batch_debug=(epoch == 1),
         )
         val_m, _, _ = evaluate(model, val_loader, device, cfg,
                                n_track1, n_track2, cfg.features.r0)
         val_rmse = val_m["rmse_log"]
         val_r2   = val_m["r2_log"]
+        diag     = collect_val_diagnostics(model, val_loader, device, cfg,
+                                           n_track1, n_track2, cfg.features.r0)
 
         history.append({"epoch": epoch, "train_loss": tr_loss,
                         "val_rmse_log": val_rmse, "val_r2": val_r2})
+        epoch_diags.append({
+            "epoch":        epoch,
+            "train_loss":   tr_loss,
+            "val_rmse_log": val_rmse,
+            "val_r2":       val_r2,
+            "grad_norm":    grad_norm,
+            "lr":           optimizer.param_groups[0]["lr"],
+            **diag,
+        })
 
-        if epoch % 5 == 0 or epoch <= 5:
-            print(f"Epoch {epoch:3d}: train_loss={tr_loss:.4f}"
-                  f"  val_rmse_log={val_rmse:.4f}  val_r2={val_r2:.4f}")
+        # One-liner per epoch (always printed)
+        print(
+            f"Epoch {epoch:3d}: val_rmse={val_rmse:.4f}  "
+            f"c_hat={diag['c_hat_mean']:.3f}\u00b1{diag['c_hat_std']:.3f}  "
+            f"pred_max={diag['pred_log_max_raw']:.2f}  "
+            f"frac_hi={diag['frac_clip_hi']:.3f}  "
+            f"grad={grad_norm:.3f}"
+        )
 
         if val_rmse < best_val:
             best_val   = val_rmse
@@ -834,8 +984,7 @@ def main() -> None:
             patience   = 0
             best_state = {k: v.detach().cpu().clone()
                           for k, v in model.state_dict().items()}
-            if epoch > 5:
-                print(f"  ✓ Best epoch: {epoch} (val_rmse_log={val_rmse:.4f})")
+            print(f"  ✓ Best epoch: {epoch} (val_rmse_log={val_rmse:.4f})")
         else:
             patience += 1
 
@@ -878,7 +1027,7 @@ def main() -> None:
     ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
     holdout_tag = f"holdout_{holdout}" if holdout else "all"
     output_dir  = Path(cfg.output.output_root) / (
-        f"cnn_curvequery_linec_v001_v{args.variant}_{holdout_tag}_{ts}"
+        f"{output_tag}_v{args.variant}_{holdout_tag}_{ts}"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -942,9 +1091,13 @@ def main() -> None:
     np.save(output_dir / "meta_scaler_mean.npy",  meta_scaler.mean_)
     np.save(output_dir / "meta_scaler_scale.npy", meta_scaler.scale_)
     pd.DataFrame(history).to_csv(output_dir / "training_history.csv", index=False)
+    pd.DataFrame(epoch_diags).to_csv(output_dir / "epoch_diagnostics.csv", index=False)
 
-    save_plots(output_dir, test_arr, per_sensor, history,
-               holdout_sensor=holdout, holdout_arrays=held_arr)
+    try:
+        save_plots(output_dir, test_arr, per_sensor, history,
+                   holdout_sensor=holdout, holdout_arrays=held_arr)
+    except Exception as e:
+        print(f"[WARN] Plot saving failed: {e}")
 
     print(f"\nOutput saved to: {output_dir}")
     print(f"Query model {args.variant} ({holdout_tag}) complete")
