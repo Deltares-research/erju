@@ -1,0 +1,8 @@
+model,rmse_log,rmse_pgv,r2_log,notes
+Row-wise CNN v2 line-C,0.595,2.348,0.654,validated baseline
+P1_corrected_n,0.6146,2.483,0.643,"fixed-output, no residual"
+P3_corrected_n,0.5993,2.401,0.66,"fixed-output, best structured CNN"
+Q3_all_lr1e4 (stability),0.6196,2.375,,"query model, chaotic training"
+PXGBR-R1,0.5841,2.415,0.6775,"physics+XGB residual, uniform weights"
+PXGBR-R2,0.5946,2.272,0.6658,"BEST — physics+XGB, MP4/high-PGV weighted"
+PXGBR-R2 monotonic,0.5946,2.272,0.6658,"same, monotonic post-processing applied"
