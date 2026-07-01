@@ -879,6 +879,25 @@ def main() -> None:
         sensor_names=sensor_names,
     )
 
+    # ── c_hat initialization from training data ───────────────────────────────
+    # Compute mean c_target over training events so the intensity head starts
+    # at a physically meaningful value instead of an arbitrary large number.
+    _log_dist_train = np.log(dist_arr[train_idx] / cfg.features.r0)
+    _n_vec_train    = np.where(track_arr[train_idx] == 1, n_track1, n_track2)[:, None]
+    # Exclude holdout sensor column if applicable
+    if holdout_idx is not None:
+        _log_dist_train = np.delete(_log_dist_train, holdout_idx, axis=1)
+        _tgt_log_train  = np.delete(tgt_log[train_idx], holdout_idx, axis=1)
+    else:
+        _tgt_log_train  = tgt_log[train_idx]
+    if holdout_idx is not None:
+        _ld = np.delete(np.log(dist_arr[train_idx] / cfg.features.r0), holdout_idx, axis=1)
+    else:
+        _ld = np.log(dist_arr[train_idx] / cfg.features.r0)
+    _c_target_train = _tgt_log_train + _n_vec_train * _ld
+    c_hat_init = float(_c_target_train.mean())
+    print(f"c_hat_init (train mean c_target): {c_hat_init:.4f}")
+
     # ── Datasets ─────────────────────────────────────────────────────────────
     def _ds(indices, holdout_sensor=None, holdout_only=False):
         return CurveDataset_Query(
@@ -921,6 +940,7 @@ def main() -> None:
         query_hidden=cfg.model.query_hidden,
         residual_hidden=cfg.model.residual_hidden,
         enable_residual_head=cfg.model.enable_residual_head,
+        c_hat_init=c_hat_init,  # init-fix: prevents c_hat explosion at epoch 0
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters())

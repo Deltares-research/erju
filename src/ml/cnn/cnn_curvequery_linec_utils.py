@@ -53,6 +53,7 @@ class CurvePriorCNN2D_Query(nn.Module):
         residual_hidden:      List[int],
         enable_residual_head: bool,
         n_query_features:     int = 3,
+        c_hat_init:           float = 0.0,   # bias init for intensity final layer
     ):
         super().__init__()
         self.enable_residual_head = enable_residual_head
@@ -98,6 +99,10 @@ class CurvePriorCNN2D_Query(nn.Module):
             in_sz = out_sz
         ih.append(nn.Linear(in_sz, 1))
         self.intensity_head = nn.Sequential(*ih)
+        # Zero-init final weights; bias = c_hat_init ensures c_hat ≈ c_hat_init at epoch 0
+        # regardless of encoder output magnitude.  Prevents explosion at initialization.
+        nn.init.zeros_(self.intensity_head[-1].weight)
+        nn.init.constant_(self.intensity_head[-1].bias, c_hat_init)
 
         # ── Query embedding: [log(r/r0), r/r0, track/2] → z ─────────────────
         qh: List[nn.Module] = []
@@ -117,6 +122,9 @@ class CurvePriorCNN2D_Query(nn.Module):
                 in_sz = out_sz
             rh.append(nn.Linear(in_sz, 1))
             self.residual_head: Optional[nn.Sequential] = nn.Sequential(*rh)
+            # Zero-init residual final layer so epsilon_hat ≈ 0 at epoch 0.
+            nn.init.zeros_(self.residual_head[-1].weight)
+            nn.init.zeros_(self.residual_head[-1].bias)
         else:
             self.residual_head = None
 
