@@ -756,15 +756,30 @@ def reconstruct_profile_predictions(
 
 
 def apply_monotonic(df: pd.DataFrame, pred_col: str) -> pd.Series:
-    """Apply cumulative minimum monotonicity (distance increasing → pred decreasing)."""
+    """
+    Apply cumulative minimum monotonicity:
+    distance increasing -> predicted log PGV non-increasing.
+    """
     out = df[pred_col].copy()
+
     for eid, grp in df.groupby("event_id"):
         idxs = grp.sort_values("distance").index
-        vals = out[idxs].values
-        # cumulative minimum ensures monotone non-increasing
+
+        # Make explicit writable copy
+        vals = out.loc[idxs].to_numpy(dtype=float, copy=True)
+
+        # Skip incomplete / all-NaN cases safely
+        if len(vals) == 0 or np.all(np.isnan(vals)):
+            continue
+
         for k in range(1, len(vals)):
-            vals[k] = min(vals[k], vals[k - 1])
-        out[idxs] = vals
+            if np.isnan(vals[k]):
+                vals[k] = vals[k - 1]
+            elif not np.isnan(vals[k - 1]):
+                vals[k] = min(vals[k], vals[k - 1])
+
+        out.loc[idxs] = vals
+
     return out
 
 
