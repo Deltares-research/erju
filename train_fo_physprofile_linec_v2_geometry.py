@@ -475,6 +475,23 @@ def _build_row_features_v2(
 
 # ─── PATCH 4/5: Feature column selection ──────────────────────────────────────
 
+# ALL columns that are geometry-derived. fo_* prefix matching in _get_feat_cols
+# would otherwise pull fo_y_m / fo_to_track_axis_pos into V1_ref (Issue 1 fix).
+_GEOM_ALL_COLS: frozenset = frozenset(
+    list(_GEOM_COLS) + [
+        "fo_y_m", "active_track_y_m",
+        "is_beyond_track", "is_track_side_of_fo",
+        "fo_to_track_axis_pos", "acc_track_to_fo_ratio",
+        "is_between_track_and_fo", "is_on_fo_line",
+        "is_beyond_fo_away_from_track", "acc_to_fo_m",
+        "signed_acc_from_fo", "signed_acc_from_active_track",
+        "log_acc_to_active_track", "log_acc_track_to_fo_ratio",
+        "acc_to_fo_over_track_to_fo", "active_track_to_fo_m",
+        "sensor_x_m", "sensor_y_m", "acc_to_active_track_m",
+    ]
+)
+
+
 def _get_feat_cols(row_df: pd.DataFrame,
                     use_sensor_code: bool = True,
                     use_geometry: bool = True,
@@ -496,6 +513,15 @@ def _get_feat_cols(row_df: pd.DataFrame,
     wf_cols   = [c for c in row_df.columns if c.startswith("wf_")]
     feat_cols = [c for c in row_df.columns if c.startswith("feat_")]
     gi_cols   = [c for c in row_df.columns if c.startswith("gi_")] if use_geometry else []
+
+    # ISSUE 1 FIX: purge geometry-derived columns from every group when
+    # use_geometry=False.  Without this, pq_cols picks up fo_y_m and
+    # fo_to_track_axis_pos (both start with "fo_"), contaminating V1_ref.
+    if not use_geometry:
+        pq_cols   = [c for c in pq_cols   if c not in _GEOM_ALL_COLS]
+        wf_cols   = [c for c in wf_cols   if c not in _GEOM_ALL_COLS]
+        feat_cols = [c for c in feat_cols if c not in _GEOM_ALL_COLS]
+        gi_cols   = []   # never include geometry interactions in no-geometry variants
 
     # PATCH 4: remove sensor_code-derived columns when use_sensor_code=False
     if not use_sensor_code:
@@ -1274,7 +1300,7 @@ def main():
             use_track_number=vcfg["use_track_number"],
         )
         _v1.assert_no_leakage(fc, vname)
-        # PATCH 4/5/12 ablation assertions
+        # Sensor-code and track-number ablation assertions
         if not vcfg["use_sensor_code"]:
             bad = [c for c in fc if "sensor_code" in c or c.startswith("feat_sc_x_")]
             if bad:
@@ -1282,6 +1308,23 @@ def main():
         if not vcfg["use_track_number"]:
             if "track_number" in fc:
                 raise ValueError(f"[{vname}] track_number leaked")
+        # ISSUE 1 assertion: no-geometry variants must contain zero geometry columns
+        if not vcfg["use_geometry"]:
+            bad_geom = [
+                c for c in fc
+                if c in _GEOM_ALL_COLS
+                or c.startswith("gi_")
+                or "fo_to_track_axis" in c
+                or "acc_track_to_fo" in c
+                or "between_track_and_fo" in c
+                or "beyond_fo" in c
+            ]
+            if bad_geom:
+                raise ValueError(
+                    f"[{vname}] geometry leaked into no-geometry baseline: {bad_geom}"
+                )
+            n_geom_in_v1ref = len([c for c in fc if c in _GEOM_ALL_COLS])
+            print(f"  [{vname}] geometry features present: {n_geom_in_v1ref}  ✓")
         fc_by_variant[vname] = fc
         (out_dir / f"feature_columns_{vname}.txt").write_text("\n".join(fc))
 
@@ -1359,14 +1402,19 @@ def main():
     _eval("pred_log_profile",      "Profile-only")
     _eval("pred_log_profile_mono", "Profile-only mono")
 
+    # ISSUE 2 FIX: track per-policy test metrics so ablation CSV is correct
+    policy_metrics: Dict[Tuple[str, str], dict] = {}
+
     for vname in VARIANT_CONFIGS:
         for policy in ["global_best", "mp4_best", "balanced_best"]:
             cf = f"pred_{vname}_{policy}"
             m = _eval(cf, f"{vname}_{policy}")
-            if m and policy == "global_best":
-                vt_metrics[vname] = m
-                gz = compute_geometry_zone_metrics(row_te, cf, vname)
-                geom_zone_all.extend(gz)
+            if m:
+                policy_metrics[(vname, policy)] = m
+                if policy == "global_best":
+                    vt_metrics[vname] = m
+                    gz = compute_geometry_zone_metrics(row_te, cf, vname)
+                    geom_zone_all.extend(gz)
             _eval(f"{cf}_mono", f"{vname}_{policy}_mono")
 
     # Baselines
@@ -1428,16 +1476,22 @@ def main():
     mdf.to_csv(out_dir/"metrics_table.csv", index=False)
     pd.DataFrame(geom_zone_all).to_csv(out_dir/"geometry_zone_metrics.csv", index=False)
 
-    # Ablation table
+    # Ablation table — ISSUE 2 FIX: use policy_metrics for per-policy test values
     abl = []
     for vname, res in variant_results.items():
-        for policy in ["global_best","mp4_best","balanced_best"]:
+        for policy in ["global_best", "mp4_best", "balanced_best"]:
             _, vr, vmr, sch, _ = res[policy]
-            m = vt_metrics.get(vname, {})
-            abl.append({"variant": vname, "policy": policy, "scheme": sch,
-                         "val_rmse_pgv": vr, "val_mp4_rmse": vmr,
-                         "test_rmse_pgv": m.get("rmse_pgv",np.nan),
-                         "test_mp4_rmse": m.get("per_sensor",{}).get("MP4",{}).get("rmse_pgv",np.nan)})
+            m = policy_metrics.get((vname, policy), {})
+            ps = m.get("per_sensor", {})
+            abl.append({
+                "variant":  vname, "policy": policy, "scheme": sch,
+                "val_rmse_pgv":  vr, "val_mp4_rmse": vmr,
+                "test_rmse_pgv": m.get("rmse_pgv", np.nan),
+                "test_rmse_log": m.get("rmse_log", np.nan),
+                "test_mp4_rmse": ps.get("MP4", {}).get("rmse_pgv", np.nan),
+                "test_mp4_pgv_gt4_rmse": m.get("mp4_pgv_gt4", {}).get("rmse_pgv", np.nan),
+                "test_mp4_pgv_gt8_rmse": m.get("mp4_pgv_gt8", {}).get("rmse_pgv", np.nan),
+            })
     pd.DataFrame(abl).to_csv(out_dir/"geometry_ablation_metrics.csv", index=False)
 
     print("\n" + "=" * 70)
