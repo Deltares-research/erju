@@ -77,12 +77,16 @@ N_CLIP       = (0.5, 2.0)
 PCA_N_COMP   = 3                         # fit up to 3, use 2 by default
 
 # Waveform geometry (ch51 slice → 21ch Line-C window)
-WF_FS        = 250.0                     # Hz after resampling
+# WF_FS is a default fallback; actual value is read from build_config.json at load time
+WF_FS_DEFAULT = 250.0                    # Hz fallback if metadata absent
+WF_FS         = WF_FS_DEFAULT            # overwritten by load_waveforms()
 WF_N_CH      = 21                        # channels 1184-1204
 WF_CH_LO     = 1184
 WF_CH_HI     = 1204
 WF_CTR_IDX   = 10                        # channel 1194, index in 0..20
 WF_SLICE     = slice(19, 40)             # ch51 → ch21
+WF_BANDPASS  = (1.0, 100.0)             # expected bandpass; applied if not already done
+WF_ALREADY_BANDPASSED = True            # v003 build applies 1-100 Hz bandpass
 
 # No-leakage guard
 LEAKAGE = frozenset({
@@ -158,22 +162,80 @@ def load_linec_parquet() -> pd.DataFrame:
     return df
 
 
-def load_waveforms() -> Tuple[np.ndarray, Dict[str, int]]:
+def load_waveforms() -> Tuple[np.ndarray, Dict[str, int], float]:
+    """
+    Load waveform array and event index.  Also reads actual sampling frequency
+    from build_config.json and verifies shape / implied duration.
+    Returns (waveforms, event_map, actual_fs).
+    """
+    global WF_FS
+
     wave_dir = find_waveform_v3()
     print(f"[data] Waveform dir: {wave_dir}")
+
+    # Read actual fs from build config
+    cfg_path = wave_dir / "build_config.json"
+    actual_fs = WF_FS_DEFAULT
+    bandpassed = WF_ALREADY_BANDPASSED
+    if cfg_path.exists():
+        try:
+            cfg = json.loads(cfg_path.read_text())
+            # navigate nested: signal.target_fs_hz or signal/target_fs_hz
+            sig = cfg.get("signal", cfg)
+            actual_fs = float(sig.get("target_fs_hz",
+                              sig.get("target_fs",
+                              cfg.get("target_fs_hz", WF_FS_DEFAULT))))
+            bp_min = float(sig.get("bandpass_freqmin", -1))
+            bp_max = float(sig.get("bandpass_freqmax", -1))
+            if bp_min > 0 and bp_max > 0:
+                bandpassed = True
+                print(f"[data] Waveform bandpass confirmed: {bp_min}-{bp_max} Hz")
+        except Exception as exc:
+            print(f"[WARN] Could not read build_config.json: {exc}")
+    else:
+        print(f"[WARN] build_config.json not found, using default fs={WF_FS_DEFAULT} Hz")
+
     wf = np.load(wave_dir / "waveforms.npy").astype(np.float32)
+
     # slice ch51 → ch21 if needed
     if wf.shape[1] == 51:
         wf = wf[:, WF_SLICE, :]
         print(f"[data] Sliced wf ch51 → ch21  shape={wf.shape}")
     elif wf.shape[1] != WF_N_CH:
         raise ValueError(f"Unexpected waveform shape: {wf.shape}")
+
+    T = wf.shape[2]
+    implied_dur = T / actual_fs
+    print(f"[data] Waveform shape={wf.shape}  fs={actual_fs} Hz  "
+          f"T={T} samples  implied_dur={implied_dur:.1f} s")
+    if implied_dur < 1.0 or implied_dur > 120.0:
+        print(f"[WARN] implied duration {implied_dur:.1f}s is outside expected range 1-120 s. "
+              f"Verify fs: if T={T} and expected 7.5 s use fs=1000, if 30 s use fs=250.")
+
+    # Apply bandpass if not already done
+    if not bandpassed:
+        from scipy.signal import iirfilter, zpk2sos, sosfiltfilt
+        print(f"[data] Applying bandpass {WF_BANDPASS[0]}-{WF_BANDPASS[1]} Hz to waveforms...")
+        fe = 0.5 * actual_fs
+        z, p, k = iirfilter(5, [WF_BANDPASS[0]/fe, WF_BANDPASS[1]/fe],
+                             btype="band", ftype="butter", output="zpk")
+        sos = zpk2sos(z, p, k)
+        # Process batch in float64 for numerical stability
+        wf_f = wf.astype(np.float64)
+        for i in range(wf_f.shape[0]):
+            wf_f[i] = sosfiltfilt(sos, wf_f[i], axis=1)
+        wf = wf_f.astype(np.float32)
+        print("[data] Bandpass applied.")
+
+    # Update global WF_FS
+    WF_FS = actual_fs
+
     idx_df = pd.read_parquet(wave_dir / "event_index.parquet")
     ok = idx_df[idx_df["build_status"] == "ok"].copy()
     ok["event_id"] = ok["event_id"].astype(str)
     event_map = dict(zip(ok["event_id"], ok["waveform_row_idx"].astype(int)))
     print(f"[data] Waveform events ok: {len(event_map):,}")
-    return wf, event_map
+    return wf, event_map, actual_fs
 
 
 def get_split_labels(df: pd.DataFrame, p3_dir: Optional[Path]) -> pd.DataFrame:
@@ -213,12 +275,12 @@ def _band_energy(pxx: np.ndarray, freqs: np.ndarray, f_lo: float, f_hi: float) -
     return float(np.sum(pxx[mask]) * df) if np.any(mask) else 0.0
 
 
-def extract_waveform_features_event(wf_block: np.ndarray) -> Dict[str, float]:
+def extract_waveform_features_event(wf_block: np.ndarray,
+                                      fs: float = WF_FS_DEFAULT) -> Dict[str, float]:
     """
     Extract physically meaningful features from one event's waveform block.
-    Input: wf_block shape (21, T) at fs=250 Hz, already bandpass 1-100 Hz.
+    Input: wf_block shape (21, T), bandpass filtered, at given fs.
     """
-    fs  = WF_FS
     T   = wf_block.shape[1]
     ctr = wf_block[WF_CTR_IDX].astype(np.float64)    # centre channel (1194)
     all_flat = wf_block.flatten().astype(np.float64)
@@ -354,7 +416,7 @@ def build_waveform_feature_df(
             continue
         idx   = event_map[eid]
         block = wf_array[idx]           # (21, T)
-        feats = extract_waveform_features_event(block)
+        feats = extract_waveform_features_event(block, fs=WF_FS)
         feats["event_id"] = eid
         rows.append(feats)
     print(f"[wf_feat] Extracted {len(rows):,} event waveform feature rows  (failed={n_fail})")
@@ -859,6 +921,92 @@ def train_local_residual_model(
     return best_model, best_rmse, best_scheme
 
 
+# ─── TASK 6 / 5 — Load saved baseline predictions ────────────────────────────
+
+def load_pxgbr_predictions(row_te: pd.DataFrame) -> Dict[str, Optional[np.ndarray]]:
+    """
+    Load PXGBR-R2 and PXGBR ensemble top-5 test predictions from their saved
+    output directories.  Aligns predictions to row_te order by event_id+sensor.
+    Returns dict {label: array | None}.
+    """
+    result: Dict[str, Optional[np.ndarray]] = {}
+
+    # ── PXGBR-R2 ──────────────────────────────────────────────────────────────
+    pxgbr_dir = find_pxgbr_dir()
+    if pxgbr_dir is not None:
+        pred_path = pxgbr_dir / "predictions_test.parquet"
+        if pred_path.exists():
+            try:
+                pxgbr_df = pd.read_parquet(pred_path)
+                pxgbr_df["event_id"] = pxgbr_df["event_id"].astype(str)
+                pxgbr_df["sensor"]   = pxgbr_df["sensor"].astype(str)
+                # PXGBR-R2 uses column pred_log_R2
+                pred_col = next((c for c in ["pred_log_R2", "pred_log_r2",
+                                              "pred_log_final"]
+                                  if c in pxgbr_df.columns), None)
+                if pred_col:
+                    aligned = row_te[["event_id", "sensor"]].merge(
+                        pxgbr_df[["event_id", "sensor", pred_col]],
+                        on=["event_id", "sensor"], how="left"
+                    )[pred_col].values
+                    result["PXGBR-R2"] = aligned
+                    n_ok = int(np.isfinite(aligned).sum())
+                    print(f"[baseline_pxgbr] Loaded PXGBR-R2 from {pxgbr_dir.name}  "
+                          f"n_ok={n_ok}")
+                else:
+                    print(f"[WARN] PXGBR-R2: pred_log_R2 column not found in "
+                          f"{pred_path.name}")
+                    result["PXGBR-R2"] = None
+            except Exception as exc:
+                print(f"[WARN] Could not load PXGBR-R2 predictions: {exc}")
+                result["PXGBR-R2"] = None
+        else:
+            print(f"[WARN] PXGBR-R2 predictions not found: {pred_path}")
+            result["PXGBR-R2"] = None
+    else:
+        print("[WARN] No pxgbr_linec_v001_* directory found")
+        result["PXGBR-R2"] = None
+
+    # ── PXGBR ensemble top-5 ──────────────────────────────────────────────────
+    ens_dir = find_pxgbr_ens_dir()
+    if ens_dir is not None:
+        ens_path = ens_dir / "ensemble_predictions_test.parquet"
+        if not ens_path.exists():
+            ens_path = ens_dir / "predictions_test.parquet"
+        if ens_path.exists():
+            try:
+                ens_df = pd.read_parquet(ens_path)
+                ens_df["event_id"] = ens_df["event_id"].astype(str)
+                ens_df["sensor"]   = ens_df["sensor"].astype(str)
+                ens_col = next((c for c in ["pred_log_ens_top5", "pred_log_top5",
+                                            "pred_log_ens5", "pred_log_final"]
+                                if c in ens_df.columns), None)
+                if ens_col:
+                    aligned = row_te[["event_id", "sensor"]].merge(
+                        ens_df[["event_id", "sensor", ens_col]],
+                        on=["event_id", "sensor"], how="left"
+                    )[ens_col].values
+                    result["PXGBR_ens_top5"] = aligned
+                    n_ok = int(np.isfinite(aligned).sum())
+                    print(f"[baseline_pxgbr_ens] Loaded PXGBR_ens_top5 from "
+                          f"{ens_dir.name}  n_ok={n_ok}")
+                else:
+                    print(f"[WARN] PXGBR_ens_top5: no matching column in {ens_path.name}; "
+                          f"available: {list(ens_df.columns)}")
+                    result["PXGBR_ens_top5"] = None
+            except Exception as exc:
+                print(f"[WARN] Could not load PXGBR ensemble predictions: {exc}")
+                result["PXGBR_ens_top5"] = None
+        else:
+            print(f"[WARN] PXGBR ensemble predictions not found in {ens_dir}")
+            result["PXGBR_ens_top5"] = None
+    else:
+        print("[WARN] No pxgbr_ensemble_linec_v001_* directory found")
+        result["PXGBR_ens_top5"] = None
+
+    return result
+
+
 # ─── TASK 6 — Metrics ─────────────────────────────────────────────────────────
 
 def compute_metrics(
@@ -940,7 +1088,11 @@ def print_metrics(m: dict) -> None:
 
 def train_baseline_a1(df_linec: pd.DataFrame, split_df: pd.DataFrame) -> dict:
     """Quick A1 direct tabular XGBoost (no physics features)."""
-    df = df_linec.merge(split_df, on="event_id", how="inner")
+    # df_linec may already have split column from main(); avoid double-merge
+    if "split" in df_linec.columns:
+        df = df_linec.copy()
+    else:
+        df = df_linec.merge(split_df, on="event_id", how="inner")
     tr = df[df["split"] == "train"]
     va = df[df["split"] == "val"]
     te = df[df["split"] == "test"]
@@ -1101,16 +1253,53 @@ def plot_high_pgv_profiles(df: pd.DataFrame, pred_col: str, n_events: int,
 
 # ─── Leakage audit ────────────────────────────────────────────────────────────
 
-def write_leakage_audit(feat_cols: List[str], out_path: Path):
-    leakage_found = [c for c in feat_cols if c in LEAKAGE]
+# Full set of leakage token patterns (substring match)
+_LEAKAGE_TOKENS = [
+    "target_pgv_z_mms", "target_pgv", "target_log",
+    "c_target", "c_target_event",
+    "residual_log", "scaled_residual",
+    "max_pgv", "mp4_pgv",
+    "n_event_raw", "n_event_shrunk", "delta_n_target",
+    "pc1_target", "pc2_target", "pc3_target",
+]
+
+
+def _check_leakage_tokens(feat_cols: List[str]) -> List[str]:
+    """Return any feature column whose name contains a leakage token."""
+    found = []
+    for col in feat_cols:
+        col_low = col.lower()
+        for tok in _LEAKAGE_TOKENS:
+            if tok in col_low:
+                found.append(col)
+                break
+    return found
+
+
+def assert_no_leakage(feat_cols: List[str], label: str) -> None:
+    """Hard assertion: raise ValueError if any leakage token appears in features."""
+    bad = _check_leakage_tokens(feat_cols)
+    if bad:
+        msg = (f"LEAKAGE DETECTED in {label} feature matrix!\n"
+               f"Offending columns: {bad}")
+        raise ValueError(msg)
+    print(f"[leakage_ok] {label}: {len(feat_cols)} features, no leakage tokens detected.")
+
+
+def write_leakage_audit(feat_cols: List[str], out_path: Path) -> None:
+    bad = _check_leakage_tokens(feat_cols)
     with open(out_path, "w") as f:
         f.write("FO-PhysProfile v1 — Leakage Audit\n")
         f.write("=" * 40 + "\n\n")
         f.write(f"Total feature columns: {len(feat_cols)}\n")
-        f.write(f"Leakage columns detected: {len(leakage_found)}\n\n")
-        if leakage_found:
+        f.write(f"Leakage columns detected: {len(bad)}\n\n")
+        f.write("Tokens checked:\n")
+        for tok in _LEAKAGE_TOKENS:
+            f.write(f"  {tok}\n")
+        f.write("\n")
+        if bad:
             f.write("LEAKAGE COLUMNS:\n")
-            for c in leakage_found:
+            for c in bad:
                 f.write(f"  {c}\n")
         else:
             f.write("PASS — no leakage columns detected.\n\n")
@@ -1149,7 +1338,7 @@ def main():
     print("=" * 70)
 
     df_linec = load_linec_parquet()
-    wf_array, event_map = load_waveforms()
+    wf_array, event_map, actual_fs = load_waveforms()
     p3_dir   = find_p3_dir()
     split_df = get_split_labels(df_linec, p3_dir)
 
@@ -1250,80 +1439,122 @@ def main():
     X_te_ev  = ev_te[fo_valid].fillna(0.0).values.astype(np.float32)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # STEP 4 — Event-level models (TASK 4)
+    # STEP 4 — Event-level models (TASK 4)  —  profile-aware selection + OOF
     # ══════════════════════════════════════════════════════════════════════════
     print("\n" + "=" * 70)
-    print("STEP 4 — Event-level profile models")
+    print("STEP 4 — Event-level profile models (profile-aware selection)")
     print("=" * 70)
 
-    w_tr_ev   = _high_pgv_weights(ev_tr)
+    from sklearn.model_selection import KFold
 
-    # ── Model C: predict c_target_event ──────────────────────────────────────
+    w_tr_ev = _high_pgv_weights(ev_tr)
+    df_va_rows = df_linec[df_linec["split"] == "val"].copy()
+    df_te_rows = df_linec[df_linec["split"] == "test"].copy()
+    df_tr_rows = df_linec[df_linec["split"] == "train"].copy()
+
+    # Helper: return top-K models from grid sorted by individual val RMSE
+    def _train_top_k(X_tr, y_tr, X_va, y_va, w_tr, label, top_k=5):
+        """Train full grid, return top-K (model, val_pred) sorted by val RMSE."""
+        grid = _event_grid()
+        results = []
+        for params in grid:
+            m = _xgbr_event(params)
+            m.fit(X_tr, y_tr, sample_weight=w_tr,
+                  eval_set=[(X_va, y_va)], verbose=False)
+            vp = m.predict(X_va)
+            rmse = float(np.sqrt(np.mean((vp - y_va) ** 2)))
+            results.append((rmse, m, vp))
+        results.sort(key=lambda x: x[0])
+        print(f"[{label}] top-1 val RMSE={results[0][0]:.5f}  "
+              f"({len(grid)} fits, keeping top {top_k})")
+        return results[:top_k]
+
+    # ── Model C: select by individual target RMSE (amplitude) ────────────────
     print("\n[C] Training c_target_event model...")
-    m_c, rmse_c, va_c = train_event_model(
-        X_tr_ev, ev_tr["c_target_event"].values,
-        X_va_ev, ev_va["c_target_event"].values,
-        weights_tr=w_tr_ev, label="C",
-    )
-    te_c  = m_c.predict(X_te_ev)
-    r2_c  = float(1 - np.sum((va_c - ev_va["c_target_event"].values) ** 2) /
-                  max(np.sum((ev_va["c_target_event"].values
-                               - ev_va["c_target_event"].values.mean()) ** 2), 1e-12))
+    c_cands = _train_top_k(X_tr_ev, ev_tr["c_target_event"].values,
+                            X_va_ev, ev_va["c_target_event"].values,
+                            w_tr_ev, "C", top_k=3)
+    m_c, va_c = c_cands[0][1], c_cands[0][2]
+    te_c = m_c.predict(X_te_ev)
+    r2_c = float(1 - np.sum((va_c - ev_va["c_target_event"].values) ** 2) /
+                 max(np.sum((ev_va["c_target_event"].values
+                              - ev_va["c_target_event"].values.mean()) ** 2), 1e-12))
     print(f"[C] c_hat vs c_target R²={r2_c:.4f}  (target: > 0.30)")
+    pd.DataFrame({"feature": fo_valid,
+                  "importance": m_c.feature_importances_}
+                 ).sort_values("importance", ascending=False).to_csv(
+        out_dir / "feature_importance_c.csv", index=False)
 
-    pd.DataFrame({
-        "feature": fo_valid,
-        "importance": m_c.feature_importances_,
-    }).sort_values("importance", ascending=False).to_csv(
-        out_dir / "feature_importance_c.csv", index=False
-    )
+    # ── Model N: select by validation PROFILE RMSE(PGV) ──────────────────────
+    print("\n[N] Training delta_n_target model (profile-aware selection)...")
+    n_cands = _train_top_k(X_tr_ev, ev_tr["delta_n_target"].values,
+                            X_va_ev, ev_va["delta_n_target"].values,
+                            w_tr_ev, "N", top_k=5)
+    # Zero-pad PC scores for profile RMSE evaluation during N search
+    zero_pc = np.zeros((len(ev_va), 2), dtype=np.float32)
+    best_n_rmse_prof = 1e9
+    best_n_idx = 0
+    for k, (_, mn_cand, va_n_cand) in enumerate(n_cands):
+        rp = _profile_rmse_pgv(va_c, va_n_cand, zero_pc, pca, ev_va, df_va_rows)
+        if rp < best_n_rmse_prof:
+            best_n_rmse_prof = rp
+            best_n_idx = k
+    m_n, va_n = n_cands[best_n_idx][1], n_cands[best_n_idx][2]
+    te_n = m_n.predict(X_te_ev)
+    print(f"[N] Profile-selected idx={best_n_idx}  "
+          f"val profile RMSE(PGV)={best_n_rmse_prof:.4f}")
+    pd.DataFrame({"feature": fo_valid,
+                  "importance": m_n.feature_importances_}
+                 ).sort_values("importance", ascending=False).to_csv(
+        out_dir / "feature_importance_n.csv", index=False)
 
-    # ── Model N: predict delta_n_target ──────────────────────────────────────
-    print("\n[N] Training delta_n_target model...")
-    m_n, rmse_n, va_n = train_event_model(
-        X_tr_ev, ev_tr["delta_n_target"].values,
-        X_va_ev, ev_va["delta_n_target"].values,
-        weights_tr=w_tr_ev, label="N",
-    )
-    te_n  = m_n.predict(X_te_ev)
-
-    pd.DataFrame({
-        "feature": fo_valid,
-        "importance": m_n.feature_importances_,
-    }).sort_values("importance", ascending=False).to_csv(
-        out_dir / "feature_importance_n.csv", index=False
-    )
-
-    # ── Model PC1 ─────────────────────────────────────────────────────────────
-    print("\n[PC1] Training pc1_target model...")
-    m_pc1, rmse_pc1, va_pc1 = train_event_model(
-        X_tr_ev, ev_tr["pc1_target"].values,
-        X_va_ev, ev_va["pc1_target"].values,
-        weights_tr=w_tr_ev, label="PC1",
-    )
+    # ── Model PC1: select by validation PROFILE RMSE(PGV) ────────────────────
+    print("\n[PC1] Training pc1_target model (profile-aware selection)...")
+    pc1_cands = _train_top_k(X_tr_ev, ev_tr["pc1_target"].values,
+                              X_va_ev, ev_va["pc1_target"].values,
+                              w_tr_ev, "PC1", top_k=5)
+    zero_pc2 = np.zeros(len(ev_va), dtype=np.float32)
+    best_pc1_rmse_prof = 1e9
+    best_pc1_idx = 0
+    for k, (_, mpc1_cand, va_pc1_cand) in enumerate(pc1_cands):
+        pc_mat = np.column_stack([va_pc1_cand, zero_pc2])
+        rp = _profile_rmse_pgv(va_c, va_n, pc_mat, pca, ev_va, df_va_rows)
+        if rp < best_pc1_rmse_prof:
+            best_pc1_rmse_prof = rp
+            best_pc1_idx = k
+    m_pc1, va_pc1 = pc1_cands[best_pc1_idx][1], pc1_cands[best_pc1_idx][2]
     te_pc1 = m_pc1.predict(X_te_ev)
+    print(f"[PC1] Profile-selected idx={best_pc1_idx}  "
+          f"val profile RMSE(PGV)={best_pc1_rmse_prof:.4f}")
 
-    # ── Model PC2 ─────────────────────────────────────────────────────────────
-    print("\n[PC2] Training pc2_target model...")
-    m_pc2, rmse_pc2, va_pc2 = train_event_model(
-        X_tr_ev, ev_tr["pc2_target"].values,
-        X_va_ev, ev_va["pc2_target"].values,
-        weights_tr=w_tr_ev, label="PC2",
-    )
+    # ── Model PC2: select by validation PROFILE RMSE(PGV) ────────────────────
+    print("\n[PC2] Training pc2_target model (profile-aware selection)...")
+    pc2_cands = _train_top_k(X_tr_ev, ev_tr["pc2_target"].values,
+                              X_va_ev, ev_va["pc2_target"].values,
+                              w_tr_ev, "PC2", top_k=5)
+    best_pc2_rmse_prof = 1e9
+    best_pc2_idx = 0
+    for k, (_, mpc2_cand, va_pc2_cand) in enumerate(pc2_cands):
+        pc_mat = np.column_stack([va_pc1, va_pc2_cand])
+        rp = _profile_rmse_pgv(va_c, va_n, pc_mat, pca, ev_va, df_va_rows)
+        if rp < best_pc2_rmse_prof:
+            best_pc2_rmse_prof = rp
+            best_pc2_idx = k
+    m_pc2, va_pc2 = pc2_cands[best_pc2_idx][1], pc2_cands[best_pc2_idx][2]
     te_pc2 = m_pc2.predict(X_te_ev)
+    print(f"[PC2] Profile-selected idx={best_pc2_idx}  "
+          f"val profile RMSE(PGV)={best_pc2_rmse_prof:.4f}")
 
-    for m, name in [(m_pc1, "pc1"), (m_pc2, "pc2")]:
-        pd.DataFrame({
-            "feature": fo_valid,
-            "importance": m.feature_importances_,
-        }).sort_values("importance", ascending=False).to_csv(
-            out_dir / f"feature_importance_{name}.csv", index=False
-        )
+    for m_mod, name in [(m_pc1, "pc1"), (m_pc2, "pc2")]:
+        pd.DataFrame({"feature": fo_valid,
+                      "importance": m_mod.feature_importances_}
+                     ).sort_values("importance", ascending=False).to_csv(
+            out_dir / f"feature_importance_{name}.csv", index=False)
 
     # ── PC3 (optional) ────────────────────────────────────────────────────────
     if PCA_N_COMP >= 3 and "pc3_target" in ev_tr.columns and pca_ve[2] > 0.05:
         print("\n[PC3] Training pc3_target model (VE={:.3f})...".format(pca_ve[2]))
-        m_pc3, rmse_pc3, va_pc3 = train_event_model(
+        m_pc3, _, va_pc3 = train_event_model(
             X_tr_ev, ev_tr["pc3_target"].values,
             X_va_ev, ev_va["pc3_target"].values,
             weights_tr=w_tr_ev, label="PC3",
@@ -1336,9 +1567,9 @@ def main():
 
     # ── Build prediction dicts ────────────────────────────────────────────────
     def _pred_dict(df_ev, c_arr, n_arr, pc1_arr, pc2_arr, pc3_arr=None):
-        c_by   = dict(zip(df_ev["event_id"].values, c_arr))
-        dn_by  = dict(zip(df_ev["event_id"].values, n_arr))
-        pc_by  = {}
+        c_by  = dict(zip(df_ev["event_id"].values, c_arr))
+        dn_by = dict(zip(df_ev["event_id"].values, n_arr))
+        pc_by = {}
         for i, eid in enumerate(df_ev["event_id"].values):
             v = np.array([pc1_arr[i], pc2_arr[i]])
             if pc3_arr is not None:
@@ -1351,73 +1582,81 @@ def main():
     c_te, dn_te, pc_te = _pred_dict(ev_te, te_c, te_n, te_pc1, te_pc2,
                                      te_pc3 if m_pc3 else None)
 
-    # Profile RMSE on val with n_comp_use components
-    df_va_rows = df_linec[df_linec["split"] == "val"].copy()
-    df_te_rows = df_linec[df_linec["split"] == "test"].copy()
-
+    # ── Final profile RMSE on val ─────────────────────────────────────────────
     va_profile_rmse_pgv = _profile_rmse_pgv(
         va_c, va_n, np.column_stack([va_pc1, va_pc2]),
         pca, ev_va, df_va_rows,
     )
-    print(f"\n[profile] Val RMSE(PGV) profile-only = {va_profile_rmse_pgv:.4f}")
+    print(f"\n[profile] Val RMSE(PGV) profile-only (final combination) = "
+          f"{va_profile_rmse_pgv:.4f}")
 
-    # ── Reconstruct all splits ────────────────────────────────────────────────
-    for split, df_rows, c_by, dn_by, pc_by in [
-        ("val",  df_va_rows, c_va, dn_va, pc_va),
-        ("test", df_te_rows, c_te, dn_te, pc_te),
-    ]:
-        df_rows = df_rows.copy()
+    # ── Reconstruct val and test splits ───────────────────────────────────────
+    def _attach_hat_cols(df_rows, c_by, dn_by, pc_by):
+        """Add pred_log_profile / c_hat / n_hat / pc_hat columns in-place."""
         pred = reconstruct_profile_predictions(
             df_rows, df_rows["event_id"].unique(),
             c_by, dn_by, pc_by, pca, n_comp_use=n_comp_use,
         )
+        df_rows = df_rows.copy()
         df_rows["pred_log_profile"] = pred
         df_rows["c_hat_profile"]    = df_rows["event_id"].map(c_by).astype(float)
-        df_rows["n_hat_profile"]    = df_rows["event_id"].apply(
-            lambda e: float(np.clip(N_TRACK.get(int(df_rows.loc[
-                df_rows["event_id"] == e, "track_number"].iloc[0]), 1.0)
-                + dn_by.get(e, 0.0), *N_CLIP))
+        # n_hat: n_track + delta_n (clipped)
+        track_by_eid = df_rows.groupby("event_id")["track_number"].first().astype(int)
+        df_rows["n_hat_profile"] = df_rows["event_id"].map(
+            lambda e: float(np.clip(
+                N_TRACK.get(int(track_by_eid.get(e, 1)), 1.0) + dn_by.get(e, 0.0),
+                *N_CLIP))
             if e in dn_by else np.nan
         )
         df_rows["pc1_hat"] = df_rows["event_id"].map(
             {e: v[0] for e, v in pc_by.items()})
         df_rows["pc2_hat"] = df_rows["event_id"].map(
             {e: v[1] if len(v) > 1 else 0.0 for e, v in pc_by.items()})
-        if split == "val":
-            df_va_rows = df_rows
-        else:
-            df_te_rows = df_rows
+        return df_rows
 
-    # ── Reconstruct train split (for local residual training) ─────────────────
-    # Need OOF predictions from event models for train split to avoid leakage.
-    # Simple approximation: use the training-set predictions directly
-    # (n_train events is small enough that the event model generalization is assessed
-    # via val/test; we just need the train residuals to train the local residual model).
-    df_tr_rows = df_linec[df_linec["split"] == "train"].copy()
-    c_tr   = m_c.predict(X_tr_ev)
-    dn_tr  = m_n.predict(X_tr_ev)
-    pc1_tr = m_pc1.predict(X_tr_ev)
-    pc2_tr = m_pc2.predict(X_tr_ev)
-    pc3_tr = m_pc3.predict(X_tr_ev) if m_pc3 else None
-    c_tr_d, dn_tr_d, pc_tr_d = _pred_dict(ev_tr, c_tr, dn_tr, pc1_tr, pc2_tr, pc3_tr)
+    df_va_rows = _attach_hat_cols(df_va_rows, c_va, dn_va, pc_va)
+    df_te_rows = _attach_hat_cols(df_te_rows, c_te, dn_te, pc_te)
 
-    tr_pred = reconstruct_profile_predictions(
-        df_tr_rows, df_tr_rows["event_id"].unique(),
-        c_tr_d, dn_tr_d, pc_tr_d, pca, n_comp_use=n_comp_use,
+    # ── Train split: GroupKFold OOF predictions (no leakage) ──────────────────
+    # Use 5-fold KFold on train events to get honest OOF profile predictions.
+    # These OOF values are used ONLY to compute the residual target for the
+    # local residual model (Stage 2).  Full-train models (m_c, m_n, m_pc*) are
+    # used for val/test prediction and are NOT retrained here.
+    print("\n[OOF] Computing GroupKFold OOF train profile predictions (5 folds)...")
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    n_tr_events = len(ev_tr)
+    oof_c    = np.zeros(n_tr_events, dtype=np.float64)
+    oof_n    = np.zeros(n_tr_events, dtype=np.float64)
+    oof_pc1  = np.zeros(n_tr_events, dtype=np.float64)
+    oof_pc2  = np.zeros(n_tr_events, dtype=np.float64)
+
+    for fold_i, (fold_tr, fold_va) in enumerate(kf.split(X_tr_ev)):
+        Xf_tr = X_tr_ev[fold_tr];  Xf_va = X_tr_ev[fold_va]
+        wf_tr = w_tr_ev[fold_tr]
+
+        def _fit_oof(y_all, label_f):
+            mf = _xgbr_event({
+                "max_depth": 3, "learning_rate": 0.02,
+                "min_child_weight": 5, "reg_lambda": 10,
+                "subsample": 0.8, "colsample_bytree": 0.8,
+            })
+            mf.fit(Xf_tr, y_all[fold_tr], sample_weight=wf_tr,
+                   eval_set=[(Xf_va, y_all[fold_va])], verbose=False)
+            return mf.predict(Xf_va)
+
+        oof_c[fold_va]   = _fit_oof(ev_tr["c_target_event"].values,   f"C-f{fold_i}")
+        oof_n[fold_va]   = _fit_oof(ev_tr["delta_n_target"].values,    f"N-f{fold_i}")
+        oof_pc1[fold_va] = _fit_oof(ev_tr["pc1_target"].values,        f"PC1-f{fold_i}")
+        oof_pc2[fold_va] = _fit_oof(ev_tr["pc2_target"].values,        f"PC2-f{fold_i}")
+        print(f"  fold {fold_i+1}/5  done")
+
+    c_tr_d, dn_tr_d, pc_tr_d = _pred_dict(
+        ev_tr, oof_c, oof_n, oof_pc1, oof_pc2,
+        np.zeros(n_tr_events) if m_pc3 else None,
     )
-    df_tr_rows["pred_log_profile"] = tr_pred
-    df_tr_rows["c_hat_profile"]    = df_tr_rows["event_id"].map(c_tr_d).astype(float)
-    df_tr_rows["pc1_hat"]          = df_tr_rows["event_id"].map(
-        {e: v[0] for e, v in pc_tr_d.items()})
-    df_tr_rows["pc2_hat"]          = df_tr_rows["event_id"].map(
-        {e: v[1] if len(v) > 1 else 0.0 for e, v in pc_tr_d.items()})
-    df_tr_rows["n_hat_profile"]    = df_tr_rows["event_id"].map(
-        {e: float(np.clip(N_TRACK.get(
-            int(df_linec.loc[df_linec["event_id"] == e, "track_number"].iloc[0]), 1.0)
-            + dn_tr_d.get(e, 0.0), *N_CLIP))
-         for e in df_tr_rows["event_id"].unique()
-         if e in dn_tr_d and len(df_linec[df_linec["event_id"] == e]) > 0}
-    )
+    df_tr_rows = _attach_hat_cols(df_tr_rows, c_tr_d, dn_tr_d, pc_tr_d)
+    print(f"[OOF] Train OOF pred_log_profile: "
+          f"valid={df_tr_rows['pred_log_profile'].notna().sum()} / {len(df_tr_rows)}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # STEP 5 — Row-level features + local residual (TASK 5)
@@ -1460,6 +1699,9 @@ def main():
     feat_cols_row = _row_feature_cols(row_tr, pq_fo_cols)
     (out_dir / "feature_columns_row.txt").write_text("\n".join(feat_cols_row))
     write_leakage_audit(feat_cols_row, out_dir / "leakage_audit.txt")
+    # Hard assertion: crash now rather than silently train on leaky data
+    assert_no_leakage(feat_cols_row, "row-level")
+    assert_no_leakage(fo_valid, "event-level")
     print(f"[row_feat] Row-level feature columns: {len(feat_cols_row)}")
 
     # Drop rows with missing profile prediction (events with incomplete sensor set)
@@ -1530,6 +1772,9 @@ def main():
             p3_te_pred = p3_te_aligned
             p3_va_pred = p3_va_aligned
             print(f"[baseline_P3] Loaded P3 predictions  n_test={len(p3_te):,}")
+
+    # Load PXGBR-R2 and PXGBR ensemble top-5 from saved output directories
+    pxgbr_preds = load_pxgbr_predictions(row_te)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STEP 7 — Metrics (TASK 6 continued)
@@ -1614,6 +1859,17 @@ def main():
                                     s_te[msk_p3], e_te[msk_p3], "P3_corrected_n")
             all_metrics.append(m_p3)
             print_metrics(m_p3)
+
+    # Baselines PXGBR-R2 and ensemble top-5
+    for bl_label, bl_pred in pxgbr_preds.items():
+        if bl_pred is None:
+            continue
+        msk = np.isfinite(bl_pred)
+        if msk.sum() > 10:
+            m_bl = compute_metrics(bl_pred[msk], tl_te[msk],
+                                    s_te[msk], e_te[msk], bl_label)
+            all_metrics.append(m_bl)
+            print_metrics(m_bl)
 
     # Summary table
     rows_table = []
