@@ -806,8 +806,9 @@ def plot_residual_box_by_zone_v1_vs_v2(row_df, v1_col, v2_col, out):
             if msk.sum() > 2:
                 data.append(res[msk].values); labs.append(f"{lbl}\n(n={msk.sum()})")
         if data:
-            ax.boxplot(data, labels=labs, patch_artist=True,
-                       medianprops={"color": "red"})
+            ax.boxplot(
+                data, tick_labels=labs, patch_artist=True, medianprops={"color": "red"}
+            )   
         ax.axhline(0, color="k", lw=0.8, ls="--")
         ax.set_ylabel("Residual (log)"); ax.set_title(f"Zone boxplot — {title}")
     _save_fig(out)
