@@ -128,7 +128,7 @@ echo "RUNNING: train_fo_physprofile_linec_v2_geometry.py"
 echo "Start: $(date)"
 echo "=================================================================================="
 
-python train_fo_physprofile_linec_v2_geometry.py
+python train_fo_physprofile_linec_v2_geometry.py --v1_dir /p/11210978-erju-ai/holten_models/outputs/fo_physprofile_linec_v1/fo_physprofile_linec_v001_20260702_115336
 
 EXIT_CODE=$?
 echo ""
