@@ -385,20 +385,36 @@ def blend_ridge(base_val, y_val, base_te):
 
 
 def blend_xgb(base_val, y_val, base_te, val_pgv):
-    """Shallow XGBoost meta-learner."""
+    """Shallow XGBoost meta-learner with 5-fold CV for honest val RMSE estimate."""
+    from sklearn.model_selection import KFold
     Xv = base_val; Xt = base_te
-    best_rpgv=1e9; best_pred_va=None; best_pred_te=None
-    for depth in [2,3]:
-        for lr in [0.05,0.1]:
-            m=xgb.XGBRegressor(max_depth=depth,learning_rate=lr,
-                                n_estimators=500,subsample=0.9,
-                                tree_method="hist",verbosity=0,random_state=42)
-            m.fit(Xv, y_val, eval_set=[(Xv,y_val)], verbose=False)
-            pv=m.predict(Xv)
-            rv=float(np.sqrt(np.mean((np.exp(pv)-val_pgv)**2)))
-            if rv<best_rpgv:
-                best_rpgv=rv; best_pred_va=pv; best_pred_te=m.predict(Xt)
-    return best_pred_va, best_pred_te, best_rpgv
+    best_rpgv=1e9; best_pred_te=None; best_oof=None
+    for depth in [2, 3]:
+        for lr in [0.05, 0.1]:
+            # 5-fold CV to get OOF val predictions (honest estimate)
+            kf = KFold(n_splits=5, shuffle=True, random_state=42)
+            oof = np.zeros(len(y_val), dtype=np.float32)
+            for tr_idx, va_idx in kf.split(Xv):
+                m_cv = xgb.XGBRegressor(
+                    max_depth=depth, learning_rate=lr,
+                    n_estimators=200, subsample=0.9,
+                    tree_method="hist", verbosity=0, random_state=42
+                )
+                m_cv.fit(Xv[tr_idx], y_val[tr_idx], verbose=False)
+                oof[va_idx] = m_cv.predict(Xv[va_idx])
+            rv = float(np.sqrt(np.mean((np.exp(oof) - val_pgv)**2)))
+            if rv < best_rpgv:
+                best_rpgv = rv
+                best_oof  = oof
+                # Retrain on full val for test predictions
+                m_full = xgb.XGBRegressor(
+                    max_depth=depth, learning_rate=lr,
+                    n_estimators=200, subsample=0.9,
+                    tree_method="hist", verbosity=0, random_state=42
+                )
+                m_full.fit(Xv, y_val, verbose=False)
+                best_pred_te = m_full.predict(Xt)
+    return best_oof, best_pred_te, best_rpgv
 
 
 # ===========================================================================
@@ -740,11 +756,10 @@ def main():
     _store_preds("meta_blend", pred_blend_va.astype(np.float32), pred_blend_te.astype(np.float32))
     _store_preds("meta_ridge", pred_ridge_va.astype(np.float32), pred_ridge_te.astype(np.float32))
 
-    # ── Monotonic post-processing ─────────────────────────────────────────────
+    # ── Monotonic post-processing on best meta ──────────────────────────────
     best_pred_te_log = best_meta_te
-    meta_mono_te = apply_mono(te, "_tmp").values  # placeholder
-    # Apply properly
-    tmp_df = te.copy(); tmp_df["_meta"] = best_pred_te_log
+    tmp_df = te.copy()
+    tmp_df["_meta"] = best_pred_te_log
     meta_mono_te = apply_mono(tmp_df, "_meta").values
 
     # ── Test metrics ──────────────────────────────────────────────────────────
