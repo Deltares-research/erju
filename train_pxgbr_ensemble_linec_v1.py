@@ -98,6 +98,7 @@ def load_and_join(p3_dir: Path, parquet_v2: Path) -> pd.DataFrame:
     fo_num_cols = [c for c in fo.columns
                    if pd.api.types.is_numeric_dtype(fo[c])
                    and c not in LEAKAGE_COLS
+                   and c not in ("train_speed_kmh", "train_type_code", "track_number")
                    and not c.startswith("target_")
                    and "pgv" not in c.lower()]
 
