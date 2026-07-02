@@ -671,8 +671,6 @@ def _profile_rmse_pgv(
     """
     Reconstruct profiles for validation events and compute RMSE(PGV).
     """
-    n_comp   = pca.n_components_
-    n_events = len(va_event_df)
     true_pgv = []
     pred_pgv = []
 
@@ -690,7 +688,12 @@ def _profile_rmse_pgv(
         track = int(grp["track_number"].iloc[0]) if "track_number" in grp.columns else 1
         n_tr  = N_TRACK.get(track, 1.0)
         n_hat_val = float(np.clip(n_tr + dn, N_CLIP[0], N_CLIP[1]))
-        pca_shape = pca.inverse_transform(pcs.reshape(1, -1))[0]   # (5,) or (n_sensors,)
+        pcs_full = np.zeros(pca.n_components_, dtype=float)
+        pcs_arr = np.asarray(pcs, dtype=float).ravel()
+        n_use = min(len(pcs_arr), pca.n_components_)
+        pcs_full[:n_use] = pcs_arr[:n_use]
+
+        pca_shape = pca.inverse_transform(pcs_full.reshape(1, -1))[0]
         # Map to sensors in order
         for sensor in SENSOR_ORDER:
             row = grp[grp["sensor"] == sensor]
