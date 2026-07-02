@@ -507,7 +507,7 @@ def main():
     a_results_nop, a_results_phy = [], []
 
     for c in a_grid:
-        feat = c.pop("_name"); use_phys = ("phys" in feat)
+        feat = c.pop("_name"); use_phys = feat.startswith("A_phys_")
         X_tr_ = Xtr_all if use_phys else Xtr_np
         X_va_ = Xva_all if use_phys else Xva_np
         y_tr_ = y_tr_log; y_va_ = y_va_log
