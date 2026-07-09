@@ -244,6 +244,15 @@ def main() -> None:
                                 dtype=np.float64,
                             )[:, 2]
 
+                            time = np.asarray(
+                                sensor_group.variables["time_s"][:],
+                                dtype=np.float64,
+                            )
+
+                            sig = TimeSignalProcessing(time, vel_z_mms)
+                            sig.v_eff_SBR()
+                            vel_z_mms = sig.v_eff / 1000
+
                             try:
                                 target_pgv_z_mms = compute_pgv_z_mms(
                                     velocity_z_mms=vel_z_mms
