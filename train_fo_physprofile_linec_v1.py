@@ -270,7 +270,9 @@ def get_split_labels(df: pd.DataFrame, p3_dir: Optional[Path]) -> pd.DataFrame:
     from sklearn.model_selection import train_test_split
     ev_fam = df.drop_duplicates("event_id").set_index("event_id")["train_type_family"]
     events = sorted(ev_fam.index.tolist())
-    fam = ev_fam.loc[events].values
+    # .to_numpy(dtype=object) avoids pyarrow-backed ChunkedArray fancy-indexing
+    # errors inside sklearn's train_test_split (TypeError on arrow arrays).
+    fam = ev_fam.loc[events].astype(str).to_numpy(dtype=object)
 
     tr_events, tmp_events, tr_fam, tmp_fam = train_test_split(
         events, fam, test_size=0.35, random_state=42, stratify=fam
