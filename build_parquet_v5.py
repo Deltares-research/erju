@@ -1,12 +1,13 @@
-"""Build Parquet v3 dataset from event-level NetCDF files.
+"""Build Parquet v5 dataset from event-level NetCDF files.
 
-v3 vs v2:
+v5 
   - Per-line FO features (5 lines A/B/C/D/E, ±5-channel sub-windows).
   - Signed longitudinal offsets from sensor's line to all other lines (metres).
   - Effective distance to active track (adds 4 m when track_number == 2).
   - Train type family (8 physics groups: GO/ICM/ICR/SNG/SPR/DDZ/Locomotive/Other).
   - Only side=-1 sensors included (MP1,MP2,MP4,MP7,MP8,MP9,MP10,MP12,MP13).
   - Input: patched, complete NetCDF databases (netcdf_20260409_*).
+  - Does the PGV from the V_eff instead
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import pandas as pd
 
 from SignalProcessingTools.time_signal import TimeSignalProcessing
 
-from src.db.parquet.config_parquet_v3 import CONFIG
+from src.db.parquet.config_parquet_v5 import CONFIG
 from src.db.parquet.parquet_v3_utils import (
     SkipRecord,
     assemble_output_row_v3,

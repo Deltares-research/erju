@@ -102,10 +102,13 @@ LEAKAGE = frozenset({
 
 # ─── Path discovery ───────────────────────────────────────────────────────────
 
-def find_parquet_v2() -> Path:
-    hits = sorted(PARQUET_ROOT.glob("parquet_v002_*"))
+def find_parquet_v5() -> Path:
+    # FO_PARQUET_GLOB lets one-off experiments (e.g. no-GO ablation) point at an
+    # alternate parquet build without touching default behaviour (unset = v005).
+    glob_pattern = os.environ.get("FO_PARQUET_GLOB", "parquet_v005_*")
+    hits = sorted(PARQUET_ROOT.glob(glob_pattern))
     if not hits:
-        raise FileNotFoundError("No parquet_v002_* build")
+        raise FileNotFoundError(f"No build matching glob: {glob_pattern}")
     return hits[-1] / "dataset.parquet"
 
 
@@ -134,6 +137,11 @@ def find_pxgbr_ens_dir() -> Optional[Path]:
 
 
 def make_output_dir(base: Path, version: str = "fo_physprofile_linec_v001") -> Path:
+    # FO_OUTPUT_SUFFIX tags one-off experiment outputs (e.g. "noGO") so they are
+    # easy to find and never confused with the default champion run history.
+    suffix = os.environ.get("FO_OUTPUT_SUFFIX", "").strip()
+    if suffix:
+        version = f"{version}_{suffix}"
     ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
     out  = base / "outputs" / "fo_physprofile_linec_v1" / f"{version}_{ts}"
     out.mkdir(parents=True, exist_ok=True)
@@ -143,8 +151,8 @@ def make_output_dir(base: Path, version: str = "fo_physprofile_linec_v001") -> P
 # ─── TASK 1 — Load data ───────────────────────────────────────────────────────
 
 def load_linec_parquet() -> pd.DataFrame:
-    pq = find_parquet_v2()
-    print(f"[data] Parquet v2: {pq}")
+    pq = find_parquet_v5()
+    print(f"[data] Parquet v5: {pq}")
     df = pd.read_parquet(pq)
     if "effective_distance_to_active_track_m" not in df.columns:
         df = apply_corrected_distances(df)
@@ -242,8 +250,14 @@ def get_split_labels(df: pd.DataFrame, p3_dir: Optional[Path]) -> pd.DataFrame:
     """
     Return event-level split assignments from P3 predictions (train/val/test).
     If P3 not available, reproduce the same 65/15/20 stratified split with seed 42.
+
+    FO_FORCE_FRESH_SPLIT=1 bypasses P3 reuse and always derives a fresh split —
+    used for one-off ablations (e.g. no-GO) where the event set no longer
+    matches P3's cached assignment and a re-balanced split is required.
     """
-    if p3_dir is not None:
+    force_fresh = os.environ.get("FO_FORCE_FRESH_SPLIT", "") == "1"
+
+    if not force_fresh and p3_dir is not None:
         p = p3_dir / "all_predictions.parquet"
         if p.exists():
             p3 = pd.read_parquet(p)[["event_id", "split"]].drop_duplicates("event_id")
@@ -251,19 +265,34 @@ def get_split_labels(df: pd.DataFrame, p3_dir: Optional[Path]) -> pd.DataFrame:
             print(f"[split] Loaded from P3: {p3['split'].value_counts().to_dict()}")
             return p3
 
-    # Fallback: re-derive from event list
+    # Fallback (or forced): re-derive a fresh split, stratified by
+    # train_type_family so train/val/test stay class-balanced (65/15/20).
     from sklearn.model_selection import train_test_split
-    events = sorted(df["event_id"].unique())
-    n_total = len(events)
-    tr_events, tmp = train_test_split(events, test_size=0.35, random_state=42)
-    va_events, te_events = train_test_split(tmp, test_size=4/7, random_state=42)
+    ev_fam = df.drop_duplicates("event_id").set_index("event_id")["train_type_family"]
+    events = sorted(ev_fam.index.tolist())
+    fam = ev_fam.loc[events].values
+
+    tr_events, tmp_events, tr_fam, tmp_fam = train_test_split(
+        events, fam, test_size=0.35, random_state=42, stratify=fam
+    )
+    va_events, te_events = train_test_split(
+        tmp_events, test_size=4/7, random_state=42, stratify=tmp_fam
+    )
     rows = (
         [(e, "train") for e in tr_events]
         + [(e, "val")   for e in va_events]
         + [(e, "test")  for e in te_events]
     )
     split_df = pd.DataFrame(rows, columns=["event_id", "split"])
-    print(f"[split] Derived: {split_df['split'].value_counts().to_dict()}")
+    print(f"[split] Derived (stratified by train_type_family): "
+          f"{split_df['split'].value_counts().to_dict()}")
+
+    # Print per-split family balance for verification
+    check = split_df.merge(ev_fam.rename("train_type_family").reset_index(), on="event_id")
+    balance = (check.groupby(["split", "train_type_family"]).size()
+               .unstack(fill_value=0))
+    balance_pct = balance.div(balance.sum(axis=1), axis=0).round(3)
+    print(f"[split] Per-split family proportions:\n{balance_pct}")
     return split_df
 
 

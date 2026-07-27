@@ -135,9 +135,13 @@ VARIANT_CONFIGS: Dict[str, dict] = {
 # ─── Path helpers ──────────────────────────────────────────────────────────────
 
 def make_output_dir(base: Path) -> Path:
+    # FO_OUTPUT_SUFFIX (same switch as train_fo_physprofile_linec_v1.py) tags
+    # one-off experiment outputs (e.g. "noGO") for easy identification.
+    suffix = os.environ.get("FO_OUTPUT_SUFFIX", "").strip()
+    tag = f"_{suffix}" if suffix else ""
     ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = (base / "outputs" / "fo_physprofile_linec_v2_geometry"
-           / f"fo_physprofile_linec_v002_geom_{ts}")
+           / f"fo_physprofile_linec_v002_geom{tag}_{ts}")
     out.mkdir(parents=True, exist_ok=True)
     return out
 
