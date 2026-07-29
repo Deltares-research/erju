@@ -226,7 +226,7 @@ def _add_meta_residual(df: pd.DataFrame,
         # find matching baseline column
         match_idx = None
         for j, tc in enumerate(meta_tcols):
-            tc_hz_str = tc.replace("band_", "").replace("hz", "")
+            tc_hz_str = tc.replace("band_", "").replace("hz", "").lstrip("b")
             if abs(float(tc_hz_str) - hz) < 0.01:
                 match_idx = j
                 break
