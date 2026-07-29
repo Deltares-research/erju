@@ -887,36 +887,80 @@ def plot_training_curves(history: List[dict], out: Path) -> None:
 
 
 def plot_error_by_subgroup(res: dict, out: Path) -> None:
-    """Plot 14: Error distributions by track and major train family."""
+    """Plot error distributions by track and train family.
+
+    Small smoke-test subsets may not contain enough samples for any train
+    family.  In that case the panel is annotated instead of calling
+    ``violinplot`` with an empty dataset.
+    """
     sub_df = res["sub_df"]
-    ev_rmse = res["per_ev_rmse"]
+    ev_rmse = np.asarray(res["per_ev_rmse"], dtype=float)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
+    def _finite_group(values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=float)
+        return values[np.isfinite(values)]
+
     # By track
     ax = axes[0]
-    tracks = sorted(sub_df["track_number"].unique())
-    data_track = [ev_rmse[sub_df["track_number"].values == t] for t in tracks]
-    ax.violinplot(
-        data_track, positions=range(len(tracks)), showmedians=True, widths=0.5
-    )
-    ax.set_xticks(range(len(tracks)))
-    ax.set_xticklabels([f"Track {t}" for t in tracks])
+    track_groups = []
+    for track in sorted(sub_df["track_number"].dropna().unique()):
+        values = _finite_group(ev_rmse[sub_df["track_number"].values == track])
+        if values.size:
+            track_groups.append((track, values))
+
+    if track_groups:
+        labels = [f"Track {track}" for track, _ in track_groups]
+        values = [arr for _, arr in track_groups]
+        ax.violinplot(
+            values, positions=range(len(values)), showmedians=True, widths=0.5
+        )
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels)
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No valid track groups in this subset",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.set_xticks([])
     ax.set_ylabel("Per-event spectral RMSE (dB)")
     ax.set_title("Error by track")
     ax.grid(True, alpha=0.3)
 
-    # By train family
+    # By train family. n>=10 is useful for full evaluation, but smoke tests
+    # often contain no family meeting that threshold.
     ax = axes[1]
-    fams = [
-        f
-        for f in sorted(sub_df["train_family"].unique())
-        if (sub_df["train_family"].values == f).sum() >= 10
-    ]
-    data_fam = [ev_rmse[sub_df["train_family"].values == f] for f in fams]
-    ax.violinplot(data_fam, positions=range(len(fams)), showmedians=True, widths=0.5)
-    ax.set_xticks(range(len(fams)))
-    ax.set_xticklabels(fams, rotation=45, ha="right")
+    family_groups = []
+    families = sorted(sub_df["train_family"].dropna().unique())
+    for family in families:
+        mask = sub_df["train_family"].values == family
+        values = _finite_group(ev_rmse[mask])
+        if values.size >= 10:
+            family_groups.append((family, values))
+
+    if family_groups:
+        labels = [family for family, _ in family_groups]
+        values = [arr for _, arr in family_groups]
+        ax.violinplot(
+            values, positions=range(len(values)), showmedians=True, widths=0.5
+        )
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No train family has n≥10 in this subset\n(expected in a small smoke test)",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.set_xticks([])
     ax.set_ylabel("Per-event spectral RMSE (dB)")
     ax.set_title("Error by train family (n≥10)")
     ax.grid(True, alpha=0.3)
