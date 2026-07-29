@@ -191,7 +191,7 @@ def _add_meta_residual(df: pd.DataFrame,
     """
     # Auto-discover latest meta_spectral_baseline_v001_* if not specified
     if meta_baseline_dir is None:
-        cands = sorted((p["spec"].parent / "outputs").glob(
+        cands = sorted(p["align"].parent.glob(
             "meta_spectral_baseline_v001_*"))
         if not cands:
             raise FileNotFoundError(

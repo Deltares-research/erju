@@ -214,9 +214,9 @@ def train_model(
             optimizer.zero_grad(set_to_none=True)
             with amp_ctx:
                 out = model(wf, meta, n_valid)
-            loss, _, _ = compute_loss(
-                out, tgt, pgv_aux, tr_cfg.loss, tr_cfg.huber_delta,
-                cfg.pgv_aux_weight, is_multitask, is_pgv)
+                loss, _, _ = compute_loss(
+                    out, tgt, pgv_aux, tr_cfg.loss, tr_cfg.huber_delta,
+                    cfg.pgv_aux_weight, is_multitask, is_pgv)
 
             if use_amp and amp_dtype == torch.float16:
                 scaler.scale(loss).backward()
