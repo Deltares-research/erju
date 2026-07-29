@@ -38,7 +38,10 @@ from src.db.parquet.parquet_v1_utils import (  # noqa: F401  (re-exports)
     _safe_float,
 )
 
-import netCDF4 as nc
+try:
+    import netCDF4 as nc
+except ModuleNotFoundError:
+    nc = None  # optional; not needed by pure feature utilities
 
 
 # ---------------------------------------------------------------------------

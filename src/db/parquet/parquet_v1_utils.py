@@ -9,7 +9,10 @@ from typing import Dict, List, Tuple, Any
 import json
 from contextlib import contextmanager
 
-import netCDF4 as nc
+try:
+    import netCDF4 as nc
+except ModuleNotFoundError:
+    nc = None  # optional; not needed by assign_train_type_family
 import numpy as np
 import pandas as pd
 from scipy.signal import iirfilter, zpk2sos, sosfiltfilt, welch

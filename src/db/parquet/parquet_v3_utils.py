@@ -21,7 +21,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Any, Optional, Tuple
 
-import netCDF4 as nc
+try:
+    import netCDF4 as nc
+except ModuleNotFoundError:
+    nc = None  # netCDF4 optional; assign_train_type_family does not need it
 import numpy as np
 
 # ---------------------------------------------------------------------------
