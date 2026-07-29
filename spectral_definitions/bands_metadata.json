@@ -1,0 +1,31 @@
+{
+  "description": "IEC 61260 one-third-octave band definitions for Holten Line-C vibration spectral analysis.",
+  "standard": "NEN-EN-IEC 61260 (ProRail measurement protocol)",
+  "formulation": "base-10 (G=10 system, IEC 61260 Annex E)",
+  "formula_fc": "fc = 1000 * 10^(k / 10)  [Hz]",
+  "formula_fl": "fl = fc * 10^(-1 / 20)  [Hz]",
+  "formula_fu": "fu = fc * 10^(+1 / 20)  [Hz]",
+  "f_ref_hz": 1000.0,
+  "f_min_validated_hz": 1.0,
+  "f_max_validated_hz": 100.0,
+  "n_bands": 21,
+  "n_fully_inside": 19,
+  "boundary_bands": {
+    "extends_below_f_min": [
+      1.0
+    ],
+    "extends_above_f_max": [
+      100.0
+    ]
+  },
+  "band_index_range": {
+    "k_min": -30,
+    "k_max": -10
+  },
+  "notes": [
+    "Use fc_exact_hz / fl_hz / fu_hz for all numerical computations.",
+    "nominal_hz values are labels only \u2014 do not use for edge calculations.",
+    "The 1 Hz band (k=-30) extends below 1 Hz (fl \u2248 0.891 Hz).",
+    "The 100 Hz band (k=-10) extends above 100 Hz (fu \u2248 112.2 Hz)."
+  ]
+}
