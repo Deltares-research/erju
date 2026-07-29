@@ -34,47 +34,63 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from torch.utils.data import DataLoader, Dataset
 
 from src.db.parquet.parquet_v3_utils import assign_train_type_family
 from src.ml.spectral.config_spectral_v001 import (
-    MP8_DIST_TRACK1, MP8_DIST_TRACK2, N_BANDS, N_CHANNELS, N_SAMPLES,
-    PRIMARY_NOMINALS, V_REF, WF_SCALE, _data_root,
-    ALIGN_DIR_NAME, SPEC_DIR_NAME, WF_BUILD_NAME,
+    MP8_DIST_TRACK1,
+    MP8_DIST_TRACK2,
+    N_BANDS,
+    N_CHANNELS,
+    N_SAMPLES,
+    PRIMARY_NOMINALS,
+    V_REF,
+    WF_SCALE,
+    _data_root,
+    ALIGN_DIR_NAME,
+    SPEC_DIR_NAME,
+    WF_BUILD_NAME,
 )
 
-
 # ── Paths ─────────────────────────────────────────────────────────────────────
+
 
 def _paths():
     r = _data_root()
     return {
         "align": r / ALIGN_DIR_NAME,
-        "spec":  r / SPEC_DIR_NAME,
+        "spec": r / SPEC_DIR_NAME,
         "wf_dir": r / "holten_waveform" / WF_BUILD_NAME,
-        "bands": Path(__file__).resolve().parents[3] / "spectral_definitions" / "bands.parquet",
+        "bands": Path(__file__).resolve().parents[3]
+        / "spectral_definitions"
+        / "bands.parquet",
     }
 
 
 # ── DataStats ─────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DataStats:
     """Preprocessing statistics fitted on training data only."""
+
     # Metadata preprocessing objects
     ohe: OneHotEncoder = field(default=None)
     speed_scaler: StandardScaler = field(default=None)
     speed_imputer: SimpleImputer = field(default=None)
     # Target normalization per band
-    target_mean: np.ndarray = field(default=None)   # (19,) or (1,) for pgv
-    target_std:  np.ndarray = field(default=None)
+    target_mean: np.ndarray = field(default=None)  # (19,) or (1,) for pgv
+    target_std: np.ndarray = field(default=None)
     # Metadata residual baseline (optional, for S3)
     meta_baseline_pred: Optional[np.ndarray] = field(default=None)  # (N_events, 19)
     # PGV stats for auxiliary task (optional)
     pgv_mean: Optional[float] = field(default=None)
-    pgv_std:  Optional[float] = field(default=None)
+    pgv_std: Optional[float] = field(default=None)
     # List of event_ids in the combined event table (preserves order)
     event_ids: Optional[np.ndarray] = field(default=None)
     # Feature names
@@ -92,10 +108,12 @@ class DataStats:
 
 # ── Raw data loading ─────────────────────────────────────────────────────────
 
-def load_raw_data(use_meta_residual: bool = False,
-                  meta_baseline_dir: Optional[Path] = None,
-                  target_type: str = "spectral",
-                  ) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+
+def load_raw_data(
+    use_meta_residual: bool = False,
+    meta_baseline_dir: Optional[Path] = None,
+    target_type: str = "spectral",
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """Load aligned events, spectral targets, and waveform array.
 
     Returns
@@ -113,8 +131,7 @@ def load_raw_data(use_meta_residual: bool = False,
     # ── Authoritative event metadata ──────────────────────────────────────────
     aligned = pd.read_parquet(
         p["align"] / "aligned_events.parquet",
-        columns=["event_id", "train_type", "train_speed_kmh",
-                 "track_number", "split"],
+        columns=["event_id", "train_type", "train_speed_kmh", "track_number", "split"],
     )
     aligned["event_id"] = aligned["event_id"].astype(str)
     aligned["track_number"] = aligned["track_number"].fillna(0).astype(int)
@@ -127,38 +144,50 @@ def load_raw_data(use_meta_residual: bool = False,
     )
     ei["event_id"] = ei["event_id"].astype(str)
     ei["n_valid_250hz"] = (
-        ei["n_samples_original"] * 250.0 / 1000.0
-    ).round().astype(int).clip(1, N_SAMPLES)
+        (ei["n_samples_original"] * 250.0 / 1000.0)
+        .round()
+        .astype(int)
+        .clip(1, N_SAMPLES)
+    )
     ei["valid_fraction"] = ei["n_valid_250hz"].astype(float) / N_SAMPLES
 
     # ── Merge events ──────────────────────────────────────────────────────────
-    df = aligned.merge(ei[["event_id", "waveform_row_idx",
-                             "n_valid_250hz", "valid_fraction"]],
-                        on="event_id", how="inner")
+    df = aligned.merge(
+        ei[["event_id", "waveform_row_idx", "n_valid_250hz", "valid_fraction"]],
+        on="event_id",
+        how="inner",
+    )
 
     # ── MP8 log-distance from active track ────────────────────────────────────
-    df["mp8_dist_m"] = df["track_number"].map({1: MP8_DIST_TRACK1,
-                                                 2: MP8_DIST_TRACK2}).fillna(MP8_DIST_TRACK1)
+    df["mp8_dist_m"] = (
+        df["track_number"]
+        .map({1: MP8_DIST_TRACK1, 2: MP8_DIST_TRACK2})
+        .fillna(MP8_DIST_TRACK1)
+    )
     df["log_mp8_distance"] = np.log(df["mp8_dist_m"].clip(lower=0.1))
 
     # ── Spectral targets ──────────────────────────────────────────────────────
     spec = pd.read_parquet(
         p["spec"] / "spectral_targets.parquet",
-        columns=["event_id", "sensor_id", "band_nominal_hz",
-                 "velocity_band_level_db", "fully_inside_valid_range",
-                 "raw_pgv_z_mms"],
+        columns=[
+            "event_id",
+            "sensor_id",
+            "band_nominal_hz",
+            "velocity_band_level_db",
+            "fully_inside_valid_range",
+            "raw_pgv_z_mms",
+        ],
     )
     spec["event_id"] = spec["event_id"].astype(str)
-    mp8 = spec[
-        (spec["sensor_id"] == "MP8") & spec["fully_inside_valid_range"]
-    ].copy()
+    mp8 = spec[(spec["sensor_id"] == "MP8") & spec["fully_inside_valid_range"]].copy()
     mp8 = mp8[mp8["band_nominal_hz"].isin(PRIMARY_NOMINALS)]
 
     # Pivot spectral targets to wide (one row per event)
     band_col = {hz: f"b{hz:.4g}hz" for hz in PRIMARY_NOMINALS}
     mp8["col"] = mp8["band_nominal_hz"].map(band_col)
-    wide = mp8.pivot(index="event_id", columns="col",
-                     values="velocity_band_level_db").reset_index()
+    wide = mp8.pivot(
+        index="event_id", columns="col", values="velocity_band_level_db"
+    ).reset_index()
     band_cols = [band_col[hz] for hz in PRIMARY_NOMINALS]
 
     # Extract PGV (same for all bands per event)
@@ -181,65 +210,89 @@ def load_raw_data(use_meta_residual: bool = False,
     return df, band_cols, wf
 
 
-def _add_meta_residual(df: pd.DataFrame,
-                       band_cols: list,
-                       meta_baseline_dir: Optional[Path],
-                       p: dict) -> None:
-    """Compute and add metadata-baseline-residual columns to df (in-place).
+def _add_meta_residual(
+    df: pd.DataFrame, band_cols: list, meta_baseline_dir: Optional[Path], p: dict
+) -> None:
+    """Fit or load a metadata-only baseline and add residual targets.
 
-    Adds columns: resid_{col} for each band col.
+    By default the baseline is refit in the current environment using only the
+    training split.  This removes the scikit-learn cross-version pickle warning
+    observed in S3 while preserving the intended leakage-safe formulation.
+    Supplying ``meta_baseline_dir`` retains compatibility with an explicitly
+    requested frozen baseline bundle.
     """
-    # Auto-discover latest meta_spectral_baseline_v001_* if not specified
-    if meta_baseline_dir is None:
-        cands = sorted(p["align"].parent.glob(
-            "meta_spectral_baseline_v001_*"))
-        if not cands:
-            raise FileNotFoundError(
-                "No meta_spectral_baseline_v001_* found. "
-                "Run train_meta_spectral_v001.py first."
+    if meta_baseline_dir is not None:
+        model_path = Path(meta_baseline_dir) / "model.pkl"
+        with open(model_path, "rb") as f:
+            bundle = pickle.load(f)
+        meta_model = bundle["model"]
+        meta_prep = bundle["preprocessor"]
+        meta_cats = bundle["cat_cols"]
+        meta_nums = bundle["num_cols"]
+        meta_tcols = bundle["target_cols"]
+        feat = df[meta_cats + meta_nums].copy()
+        for c in meta_cats:
+            feat[c] = feat[c].astype(str).fillna("Unknown")
+        X_all = meta_prep.transform(feat).astype(np.float64)
+        raw_pred = meta_model.predict(X_all)
+        meta_pred = np.empty((len(df), len(band_cols)), dtype=np.float64)
+        for i, hz in enumerate(PRIMARY_NOMINALS):
+            match_idx = None
+            for j, tc in enumerate(meta_tcols):
+                tc_hz_str = tc.replace("band_", "").replace("hz", "").lstrip("b")
+                if abs(float(tc_hz_str) - hz) < 0.01:
+                    match_idx = j
+                    break
+            meta_pred[:, i] = raw_pred[:, i if match_idx is None else match_idx]
+        baseline_source = str(meta_baseline_dir)
+    else:
+        cat_cols = ["train_family", "track_number"]
+        num_cols = ["train_speed_kmh"]
+        preprocessor = ColumnTransformer(
+            transformers=[
+                (
+                    "cat",
+                    OneHotEncoder(handle_unknown="ignore", sparse_output=False),
+                    cat_cols,
+                ),
+                (
+                    "num",
+                    Pipeline(
+                        [
+                            ("imputer", SimpleImputer(strategy="median")),
+                            ("scaler", StandardScaler()),
+                        ]
+                    ),
+                    num_cols,
+                ),
+            ],
+            remainder="drop",
+        )
+        model = Ridge(alpha=0.01)
+        train_mask = df["split"].eq("train").values
+        if train_mask.sum() < 10:
+            raise ValueError(
+                "Too few training events to fit metadata residual baseline"
             )
-        meta_baseline_dir = cands[-1]
+        features = df[cat_cols + num_cols].copy()
+        features["train_family"] = (
+            features["train_family"].fillna("Unknown").astype(str)
+        )
+        features["track_number"] = features["track_number"].fillna(-1).astype(str)
+        y = df[band_cols].to_numpy(dtype=np.float64)
+        X_train = preprocessor.fit_transform(features.loc[train_mask])
+        model.fit(X_train, y[train_mask])
+        meta_pred = model.predict(preprocessor.transform(features))
+        baseline_source = "refit_current_environment_train_split_only"
 
-    model_path = meta_baseline_dir / "model.pkl"
-    with open(model_path, "rb") as f:
-        bundle = pickle.load(f)
-
-    meta_model  = bundle["model"]
-    meta_prep   = bundle["preprocessor"]
-    meta_cats   = bundle["cat_cols"]
-    meta_nums   = bundle["num_cols"]
-    meta_tcols  = bundle["target_cols"]   # ordered band columns from baseline
-
-    # Build feature matrix for all events
-    feat = df[meta_cats + meta_nums].copy()
-    for c in meta_cats:
-        feat[c] = feat[c].astype(str).fillna("Unknown")
-    X_all = meta_prep.transform(feat).astype(np.float64)
-    meta_pred = meta_model.predict(X_all)   # (N_events, 19) dB predictions
-
-    # meta_tcols may use different column name format; align to band_cols
-    # meta_tcols format: "b{hz:.4g}hz" matches band_cols (same format here)
-    # But the baseline used "band_{hz:.4g}hz" format — need to re-map
-    # Check which format is used
-    for i, hz in enumerate(PRIMARY_NOMINALS):
-        resid_col = f"resid_b{hz:.4g}hz"
-        # find matching baseline column
-        match_idx = None
-        for j, tc in enumerate(meta_tcols):
-            tc_hz_str = tc.replace("band_", "").replace("hz", "").lstrip("b")
-            if abs(float(tc_hz_str) - hz) < 0.01:
-                match_idx = j
-                break
-        if match_idx is not None:
-            df[resid_col] = df[band_cols[i]].values - meta_pred[:, match_idx]
-        else:
-            # fallback: assume same order
-            df[resid_col] = df[band_cols[i]].values - meta_pred[:, i]
-
-    df["_meta_baseline_dir"] = str(meta_baseline_dir)
+    for i, col in enumerate(band_cols):
+        df[f"resid_{col}"] = df[col].to_numpy(dtype=np.float64) - meta_pred[:, i]
+        df[f"meta_pred_{col}"] = meta_pred[:, i]
+    df["_meta_baseline_dir"] = baseline_source
 
 
 # ── Preprocessing ─────────────────────────────────────────────────────────────
+
 
 def fit_preprocessing(
     df: pd.DataFrame,
@@ -269,14 +322,14 @@ def fit_preprocessing(
     )
     stats.ohe.fit(tr[["train_family", "track_number_str"]])
 
-    ohe_names = list(stats.ohe.get_feature_names_out(
-        ["train_family", "track_number_str"]))
+    ohe_names = list(
+        stats.ohe.get_feature_names_out(["train_family", "track_number_str"])
+    )
 
     # ── Speed scaler ─────────────────────────────────────────────────────────
     stats.speed_imputer = SimpleImputer(strategy="median")
-    stats.speed_scaler  = StandardScaler()
-    speed_tr = stats.speed_imputer.fit_transform(
-        tr[["train_speed_kmh"]].values)
+    stats.speed_scaler = StandardScaler()
+    speed_tr = stats.speed_imputer.fit_transform(tr[["train_speed_kmh"]].values)
     stats.speed_scaler.fit(speed_tr)
 
     stats.meta_feature_names = ohe_names + [
@@ -293,18 +346,18 @@ def fit_preprocessing(
         else:
             y_tr = tr[band_cols].values.astype(np.float64)
         stats.target_mean = y_tr.mean(axis=0).astype(np.float32)
-        stats.target_std  = y_tr.std(axis=0).clip(min=1e-6).astype(np.float32)
+        stats.target_std = y_tr.std(axis=0).clip(min=1e-6).astype(np.float32)
     else:  # pgv
         pgv_tr = tr["raw_pgv_z_mms"].clip(lower=1e-6).values
         log_pgv_tr = np.log(pgv_tr).astype(np.float64)
         stats.target_mean = np.array([log_pgv_tr.mean()], dtype=np.float32)
-        stats.target_std  = np.array([max(log_pgv_tr.std(), 1e-6)], dtype=np.float32)
+        stats.target_std = np.array([max(log_pgv_tr.std(), 1e-6)], dtype=np.float32)
 
     # ── PGV stats for auxiliary task ──────────────────────────────────────────
     pgv_tr_vals = tr["raw_pgv_z_mms"].clip(lower=1e-6).values
     log_pgv_tr = np.log(pgv_tr_vals)
     stats.pgv_mean = float(log_pgv_tr.mean())
-    stats.pgv_std  = float(max(log_pgv_tr.std(), 1e-6))
+    stats.pgv_std = float(max(log_pgv_tr.std(), 1e-6))
 
     stats.event_ids = df["event_id"].values
 
@@ -336,10 +389,17 @@ def apply_preprocessing(
     ).astype(np.float32)
 
     speed_imp = stats.speed_imputer.transform(df2[["train_speed_kmh"]].values)
-    speed_sc  = stats.speed_scaler.transform(speed_imp).astype(np.float32)
+    speed_sc = stats.speed_scaler.transform(speed_imp).astype(np.float32)
 
-    log_dist   = df2["log_mp8_distance"].fillna(np.log(MP8_DIST_TRACK1)).values.reshape(-1, 1).astype(np.float32)
-    valid_frac = df2["valid_fraction"].fillna(1.0).values.reshape(-1, 1).astype(np.float32)
+    log_dist = (
+        df2["log_mp8_distance"]
+        .fillna(np.log(MP8_DIST_TRACK1))
+        .values.reshape(-1, 1)
+        .astype(np.float32)
+    )
+    valid_frac = (
+        df2["valid_fraction"].fillna(1.0).values.reshape(-1, 1).astype(np.float32)
+    )
 
     meta_arr = np.hstack([cat_mat, speed_sc, log_dist, valid_frac])  # (N, 11)
 
@@ -353,12 +413,14 @@ def apply_preprocessing(
         y_arr = (y_raw - stats.target_mean) / stats.target_std
     else:  # pgv
         pgv_vals = df2["raw_pgv_z_mms"].clip(lower=1e-6).values
-        log_pgv  = np.log(pgv_vals).astype(np.float32).reshape(-1, 1)
+        log_pgv = np.log(pgv_vals).astype(np.float32).reshape(-1, 1)
         y_arr = (log_pgv - stats.target_mean) / stats.target_std
 
     # ── PGV auxiliary target (always available) ───────────────────────────────
     pgv_vals = df2["raw_pgv_z_mms"].clip(lower=1e-6).values
-    log_pgv_aux = ((np.log(pgv_vals) - stats.pgv_mean) / stats.pgv_std).astype(np.float32)
+    log_pgv_aux = ((np.log(pgv_vals) - stats.pgv_mean) / stats.pgv_std).astype(
+        np.float32
+    )
 
     n_valid = df2["n_valid_250hz"].values.astype(np.int32)
 
@@ -367,26 +429,27 @@ def apply_preprocessing(
 
 # ── Dataset ───────────────────────────────────────────────────────────────────
 
+
 class SpectralEventDataset(Dataset):
     """One sample = one event. Waveform is shared (mmap'd) and never copied."""
 
     def __init__(
         self,
-        waveforms: np.ndarray,        # (N_total, 51, 7500) mmap float32
-        row_indices: np.ndarray,      # (N_subset,) waveform_row_idx
-        meta: np.ndarray,             # (N_subset, 11) float32
-        targets: np.ndarray,          # (N_subset, 19) or (N_subset, 1) float32
-        pgv_aux: np.ndarray,          # (N_subset,) float32 standardized log-PGV
-        n_valid: np.ndarray,          # (N_subset,) int32
-        ev_indices: np.ndarray,       # (N_subset,) int — index into events_df
+        waveforms: np.ndarray,  # (N_total, 51, 7500) mmap float32
+        row_indices: np.ndarray,  # (N_subset,) waveform_row_idx
+        meta: np.ndarray,  # (N_subset, 11) float32
+        targets: np.ndarray,  # (N_subset, 19) or (N_subset, 1) float32
+        pgv_aux: np.ndarray,  # (N_subset,) float32 standardized log-PGV
+        n_valid: np.ndarray,  # (N_subset,) int32
+        ev_indices: np.ndarray,  # (N_subset,) int — index into events_df
     ) -> None:
-        self.waveforms   = waveforms
+        self.waveforms = waveforms
         self.row_indices = row_indices.astype(np.int64)
-        self.meta        = meta.astype(np.float32)
-        self.targets     = targets.astype(np.float32)
-        self.pgv_aux     = pgv_aux.astype(np.float32)
-        self.n_valid     = n_valid.astype(np.int32)
-        self.ev_indices  = ev_indices.astype(np.int64)
+        self.meta = meta.astype(np.float32)
+        self.targets = targets.astype(np.float32)
+        self.pgv_aux = pgv_aux.astype(np.float32)
+        self.n_valid = n_valid.astype(np.int32)
+        self.ev_indices = ev_indices.astype(np.int64)
 
     @property
     def n_meta_features(self) -> int:
@@ -396,24 +459,34 @@ class SpectralEventDataset(Dataset):
         return len(self.row_indices)
 
     def __getitem__(self, i: int):
-        # (1, 51, 7500) — add channel dim for Conv2D
-        block = self.waveforms[self.row_indices[i]]    # (51, 7500) float32
-        wf_t  = torch.from_numpy(np.ascontiguousarray(block)).unsqueeze(0)
-        meta_t   = torch.from_numpy(self.meta[i])
-        tgt_t    = torch.from_numpy(self.targets[i])
-        pgv_t    = torch.tensor(self.pgv_aux[i], dtype=torch.float32)
-        nv_t     = torch.tensor(int(self.n_valid[i]), dtype=torch.int32)
+        # (1, 51, 7500) — add channel dim for Conv2D.
+        # np.load(..., mmap_mode="r") returns a read-only view.  Explicitly copy
+        # so torch never receives a non-writable NumPy array.
+        block = self.waveforms[self.row_indices[i]]  # (51, 7500) float32
+        block_writable = np.array(block, dtype=np.float32, copy=True, order="C")
+        wf_t = torch.from_numpy(block_writable).unsqueeze(0)
+        meta_t = torch.from_numpy(self.meta[i])
+        tgt_t = torch.from_numpy(self.targets[i])
+        pgv_t = torch.tensor(self.pgv_aux[i], dtype=torch.float32)
+        nv_t = torch.tensor(int(self.n_valid[i]), dtype=torch.int32)
         ev_idx_t = torch.tensor(int(self.ev_indices[i]), dtype=torch.int64)
         return wf_t, meta_t, nv_t, tgt_t, pgv_t, ev_idx_t
 
 
 # ── Build function ────────────────────────────────────────────────────────────
 
+
 def build_datasets(
     cfg,  # SpectralExperimentConfig
     smoke_n: Optional[int] = None,
-) -> Tuple["SpectralEventDataset", "SpectralEventDataset",
-           "SpectralEventDataset", DataStats, pd.DataFrame, list]:
+) -> Tuple[
+    "SpectralEventDataset",
+    "SpectralEventDataset",
+    "SpectralEventDataset",
+    DataStats,
+    pd.DataFrame,
+    list,
+]:
     """Load data, fit preprocessing on train, return all three splits.
 
     Parameters
@@ -431,29 +504,33 @@ def build_datasets(
     )
 
     # ── Masks ─────────────────────────────────────────────────────────────────
-    tr_mask  = events_df["split"] == "train"
-    va_mask  = events_df["split"] == "val"
-    te_mask  = events_df["split"] == "test"
+    tr_mask = events_df["split"] == "train"
+    va_mask = events_df["split"] == "val"
+    te_mask = events_df["split"] == "test"
 
     # Smoke-test override: use only first smoke_n training events
     if smoke_n is not None:
         tr_idx = events_df.index[tr_mask].tolist()[:smoke_n]
         tr_mask = events_df.index.isin(tr_idx)
-        va_mask = tr_mask.copy()   # same events for val in smoke mode
+        va_mask = tr_mask.copy()  # same events for val in smoke mode
         te_mask = tr_mask.copy()
 
     # ── Fit preprocessing on training events ──────────────────────────────────
     stats = fit_preprocessing(
-        events_df, tr_mask, band_cols,
+        events_df,
+        tr_mask,
+        band_cols,
         target_type=cfg.target_type,
         use_meta_residual=cfg.use_meta_residual,
     )
 
     def _make_ds(mask: pd.Series) -> "SpectralEventDataset":
-        sub = events_df[mask].reset_index(drop=False)   # keep original index
-        orig_idx = sub["index"].values                   # original row in events_df
+        sub = events_df[mask].reset_index(drop=False)  # keep original index
+        orig_idx = sub["index"].values  # original row in events_df
         meta, tgt, pgv_aux, nv = apply_preprocessing(
-            sub, stats, band_cols,
+            sub,
+            stats,
+            band_cols,
             target_type=cfg.target_type,
             use_meta_residual=cfg.use_meta_residual,
         )
@@ -469,16 +546,21 @@ def build_datasets(
         )
 
     train_ds = _make_ds(tr_mask)
-    val_ds   = _make_ds(va_mask)
-    test_ds  = _make_ds(te_mask)
+    val_ds = _make_ds(va_mask)
+    test_ds = _make_ds(te_mask)
 
     return train_ds, val_ds, test_ds, stats, events_df, band_cols
 
 
-def make_loader(ds: SpectralEventDataset, batch_size: int,
-                shuffle: bool, num_workers: int = 4) -> DataLoader:
+def make_loader(
+    ds: SpectralEventDataset, batch_size: int, shuffle: bool, num_workers: int = 4
+) -> DataLoader:
     return DataLoader(
-        ds, batch_size=batch_size, shuffle=shuffle,
-        num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0),
+        ds,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=(num_workers > 0),
         drop_last=False,
     )

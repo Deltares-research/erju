@@ -14,10 +14,12 @@ Usage
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -30,19 +32,20 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 
 from src.ml.spectral.config_spectral_v001 import (
-    META_BASELINE_RMSE_PER_BAND, PRIMARY_NOMINALS, V_REF,
+    META_BASELINE_RMSE_PER_BAND,
+    PRIMARY_NOMINALS,
+    V_REF,
 )
 from src.ml.spectral.dataset_spectral import DataStats
 
 
 def amp_ctx_for_eval(device: torch.device):
-    """Return a no-op or bfloat16 autocast context for evaluation."""
-    use_amp = (device.type == "cuda" and torch.cuda.is_bf16_supported())
-    return torch.amp.autocast(device_type=device.type,
-                               dtype=torch.bfloat16, enabled=use_amp)
+    """Evaluation is intentionally float32 to avoid bfloat16 validation spikes."""
+    return nullcontext()
 
 
 # ── Inverse transforms ────────────────────────────────────────────────────────
+
 
 def invert_spectral(pred_std: np.ndarray, stats: DataStats) -> np.ndarray:
     """Undo standardization → dB values."""
@@ -66,15 +69,33 @@ def total_rms_from_db(band_db: np.ndarray) -> np.ndarray:
 
 # ── Metric helpers ────────────────────────────────────────────────────────────
 
-def _rmse(y, p): return float(np.sqrt(mean_squared_error(y, p)))
-def _mae(y, p):  return float(mean_absolute_error(y, p))
-def _r2(y, p):   return float(r2_score(y, p))
-def _bias(y, p): return float(np.mean(p - y))
-def _res_std(y, p): return float(np.std(p - y))
+
+def _rmse(y, p):
+    return float(np.sqrt(mean_squared_error(y, p)))
+
+
+def _mae(y, p):
+    return float(mean_absolute_error(y, p))
+
+
+def _r2(y, p):
+    return float(r2_score(y, p))
+
+
+def _bias(y, p):
+    return float(np.mean(p - y))
+
+
+def _res_std(y, p):
+    return float(np.std(p - y))
+
+
 def _pearson(a, b):
     if np.std(a) < 1e-12 or np.std(b) < 1e-12:
         return float("nan")
     return float(pearsonr(a, b)[0])
+
+
 def _spearman(a, b):
     if np.std(a) < 1e-12 or np.std(b) < 1e-12:
         return float("nan")
@@ -83,13 +104,14 @@ def _spearman(a, b):
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 
+
 @torch.no_grad()
 def run_inference(
-    model:   nn.Module,
-    loader:  DataLoader,
-    device:  torch.device,
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
     is_multitask: bool,
-    is_pgv:  bool,
+    is_pgv: bool,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Collect standardized predictions and targets.
 
@@ -102,13 +124,22 @@ def run_inference(
     ev_indices   : (N,) int
     """
     model.eval()
-    ctx = amp_ctx_for_eval(device)
     all_preds, all_tgts, all_pgv_aux, all_pgv_pred, all_ev_idx = [], [], [], [], []
 
     for wf, meta, n_valid, tgt, pgv_aux, ev_idx in loader:
-        wf, meta, n_valid = wf.to(device), meta.to(device), n_valid.to(device)
-        with ctx:
+        wf = wf.to(device, non_blocking=True).float()
+        meta = meta.to(device, non_blocking=True).float()
+        n_valid = n_valid.to(device, non_blocking=True)
+        with amp_ctx_for_eval(device):
             out = model(wf, meta, n_valid)
+
+        tensors = out if isinstance(out, (tuple, list)) else (out,)
+        for tensor in tensors:
+            if not torch.isfinite(tensor).all():
+                ids = ev_idx.cpu().tolist()
+                raise FloatingPointError(
+                    f"Non-finite inference output for event indices {ids}"
+                )
 
         if is_multitask:
             spec_p, pgv_p = out
@@ -125,25 +156,26 @@ def run_inference(
         all_pgv_aux.append(pgv_aux.float().cpu().numpy())
         all_ev_idx.append(ev_idx.cpu().numpy())
 
-    preds_std   = np.concatenate(all_preds,    axis=0)
-    targets_std = np.concatenate(all_tgts,     axis=0)
-    pgv_aux_std = np.concatenate(all_pgv_aux,  axis=0)
-    pgv_pred_std= np.concatenate(all_pgv_pred, axis=0)
-    ev_indices  = np.concatenate(all_ev_idx,   axis=0)
+    preds_std = np.concatenate(all_preds, axis=0)
+    targets_std = np.concatenate(all_tgts, axis=0)
+    pgv_aux_std = np.concatenate(all_pgv_aux, axis=0)
+    pgv_pred_std = np.concatenate(all_pgv_pred, axis=0)
+    ev_indices = np.concatenate(all_ev_idx, axis=0)
 
     return preds_std, targets_std, pgv_aux_std, pgv_pred_std, ev_indices
 
 
 # ── Full evaluation ───────────────────────────────────────────────────────────
 
+
 def evaluate_split(
-    model:      nn.Module,
-    loader:     DataLoader,
-    stats:      DataStats,
-    events_df:  pd.DataFrame,
+    model: nn.Module,
+    loader: DataLoader,
+    stats: DataStats,
+    events_df: pd.DataFrame,
     cfg,
-    device:     torch.device,
-    band_cols:  List[str],
+    device: torch.device,
+    band_cols: List[str],
     split_name: str = "val",
 ) -> dict:
     """Run full evaluation on one split. Returns a results dict."""
@@ -151,30 +183,33 @@ def evaluate_split(
     is_pgv = (cfg.target_type == "pgv") and not is_mt
 
     preds_std, tgts_std, pgv_aux_std, pgv_pred_std, ev_idx = run_inference(
-        model, loader, device, is_mt, is_pgv)
+        model, loader, device, is_mt, is_pgv
+    )
 
     # ── Invert standardization ────────────────────────────────────────────────
     if is_pgv:
-        pred_pgv_mms  = invert_pgv(preds_std[:, 0], stats)
-        true_pgv_mms  = invert_pgv(tgts_std[:, 0], stats)
-        pred_spec_db  = np.full((len(preds_std), len(PRIMARY_NOMINALS)), np.nan)
-        true_spec_db  = np.full((len(preds_std), len(PRIMARY_NOMINALS)), np.nan)
+        pred_pgv_mms = invert_pgv(preds_std[:, 0], stats)
+        true_pgv_mms = invert_pgv(tgts_std[:, 0], stats)
+        pred_spec_db = np.full((len(preds_std), len(PRIMARY_NOMINALS)), np.nan)
+        true_spec_db = np.full((len(preds_std), len(PRIMARY_NOMINALS)), np.nan)
     else:
-        pred_spec_db  = invert_spectral(preds_std, stats)  # (N, 19) dB
+        pred_spec_db = invert_spectral(preds_std, stats)  # (N, 19) dB
         # For S3 residual: add back metadata baseline prediction
         if cfg.use_meta_residual:
             ev_ids = events_df.iloc[ev_idx]["event_id"].values
             # Retrieve per-event baseline predictions from events_df columns
             resid_cols = [f"resid_{c}" for c in band_cols]
-            base_cols  = band_cols  # original dB cols
-            actual_db  = events_df.iloc[ev_idx][band_cols].values.astype(np.float32)
-            meta_pred_db = actual_db - events_df.iloc[ev_idx][resid_cols].values.astype(np.float32)
+            base_cols = band_cols  # original dB cols
+            actual_db = events_df.iloc[ev_idx][band_cols].values.astype(np.float32)
+            meta_pred_db = actual_db - events_df.iloc[ev_idx][resid_cols].values.astype(
+                np.float32
+            )
             pred_spec_db = pred_spec_db + meta_pred_db
 
-        true_spec_db  = events_df.iloc[ev_idx][band_cols].values.astype(np.float32)
+        true_spec_db = events_df.iloc[ev_idx][band_cols].values.astype(np.float32)
         # PGV from auxiliary
         pgv_mean = stats.pgv_mean or 0.0
-        pgv_std_ = stats.pgv_std  or 1.0
+        pgv_std_ = stats.pgv_std or 1.0
         true_pgv_mms = np.exp(pgv_aux_std * pgv_std_ + pgv_mean)
         if is_mt:
             pred_pgv_mms = np.exp(pgv_pred_std * pgv_std_ + pgv_mean)
@@ -195,20 +230,26 @@ def evaluate_split(
                 continue
             meta_rmse_i = META_BASELINE_RMSE_PER_BAND[i]
             rmse_i = _rmse(yt[m], yp[m])
-            per_band.append({
-                "band_hz":       hz,
-                "rmse_db":       rmse_i,
-                "mae_db":        _mae(yt[m], yp[m]),
-                "r2":            _r2(yt[m], yp[m]),
-                "bias_db":       _bias(yt[m], yp[m]),
-                "resid_std_db":  _res_std(yt[m], yp[m]),
-                "meta_rmse_db":  meta_rmse_i,
-                "delta_rmse_db": meta_rmse_i - rmse_i,  # positive = improvement
-            })
+            per_band.append(
+                {
+                    "band_hz": hz,
+                    "rmse_db": rmse_i,
+                    "mae_db": _mae(yt[m], yp[m]),
+                    "r2": _r2(yt[m], yp[m]),
+                    "bias_db": _bias(yt[m], yp[m]),
+                    "resid_std_db": _res_std(yt[m], yp[m]),
+                    "meta_rmse_db": meta_rmse_i,
+                    "delta_rmse_db": meta_rmse_i - rmse_i,  # positive = improvement
+                }
+            )
 
-    macro_rmse = float(np.mean([b["rmse_db"] for b in per_band])) if per_band else float("nan")
-    macro_mae  = float(np.mean([b["mae_db"]  for b in per_band])) if per_band else float("nan")
-    macro_r2   = float(np.mean([b["r2"]      for b in per_band])) if per_band else float("nan")
+    macro_rmse = (
+        float(np.mean([b["rmse_db"] for b in per_band])) if per_band else float("nan")
+    )
+    macro_mae = (
+        float(np.mean([b["mae_db"] for b in per_band])) if per_band else float("nan")
+    )
+    macro_r2 = float(np.mean([b["r2"] for b in per_band])) if per_band else float("nan")
 
     # ── Total RMS metrics ─────────────────────────────────────────────────────
     if not is_pgv:
@@ -219,34 +260,36 @@ def evaluate_split(
         true_total = true_pgv_mms
 
     tot_metrics = {
-        "rmse_mms":      _rmse(true_total, pred_total),
-        "mae_mms":       _mae(true_total, pred_total),
-        "r2":            _r2(true_total, pred_total),
-        "pearson_r":     _pearson(true_total, pred_total),
-        "spearman_r":    _spearman(true_total, pred_total),
-        "calib_slope":   float(np.polyfit(true_total, pred_total, 1)[0]),
-        "true_std_mms":  float(np.std(true_total)),
-        "pred_std_mms":  float(np.std(pred_total)),
+        "rmse_mms": _rmse(true_total, pred_total),
+        "mae_mms": _mae(true_total, pred_total),
+        "r2": _r2(true_total, pred_total),
+        "pearson_r": _pearson(true_total, pred_total),
+        "spearman_r": _spearman(true_total, pred_total),
+        "calib_slope": float(np.polyfit(true_total, pred_total, 1)[0]),
+        "true_std_mms": float(np.std(true_total)),
+        "pred_std_mms": float(np.std(pred_total)),
         "pred_compressed": bool(np.std(pred_total) < 0.7 * np.std(true_total)),
     }
 
     # ── PGV direct metrics ───────────────────────────────────────────────────
     pgv_metrics: dict = {}
     if is_pgv or is_mt:
-        valid = np.isfinite(pred_pgv_mms) & np.isfinite(true_pgv_mms) & (true_pgv_mms > 0)
+        valid = (
+            np.isfinite(pred_pgv_mms) & np.isfinite(true_pgv_mms) & (true_pgv_mms > 0)
+        )
         tp = true_pgv_mms[valid]
         pp = pred_pgv_mms[valid]
         log_rmse = _rmse(np.log(tp), np.log(pp)) if valid.sum() > 5 else float("nan")
         pgv_metrics = {
-            "rmse_mms":    _rmse(tp, pp),
-            "mae_mms":     _mae(tp, pp),
-            "r2":          _r2(tp, pp),
-            "pearson_r":   _pearson(tp, pp),
-            "spearman_r":  _spearman(tp, pp),
-            "log_rmse":    log_rmse,
+            "rmse_mms": _rmse(tp, pp),
+            "mae_mms": _mae(tp, pp),
+            "r2": _r2(tp, pp),
+            "pearson_r": _pearson(tp, pp),
+            "spearman_r": _spearman(tp, pp),
+            "log_rmse": log_rmse,
             "calib_slope": float(np.polyfit(tp, pp, 1)[0]),
-            "true_std":    float(np.std(tp)),
-            "pred_std":    float(np.std(pp)),
+            "true_std": float(np.std(tp)),
+            "pred_std": float(np.std(pp)),
         }
 
     # ── Per-event spectral RMSE ───────────────────────────────────────────────
@@ -262,22 +305,31 @@ def evaluate_split(
         for j, hz in enumerate(PRIMARY_NOMINALS):
             if is_pgv:
                 break
-            pred_rows.append({
-                "event_id":            ev["event_id"],
-                "split":               split_name,
-                "model_name":          cfg.name,
-                "seed":                cfg.seed,
-                "track_number":        int(ev["track_number"]),
-                "train_type":          ev.get("train_type", ""),
-                "train_family":        ev.get("train_family", ""),
-                "band_nominal_hz":     hz,
-                "measured_level_db":   float(true_spec_db[i, j]),
-                "predicted_level_db":  float(pred_spec_db[i, j]),
-                "residual_db":         float(true_spec_db[i, j] - pred_spec_db[i, j]),
-                "absolute_error_db":   float(abs(true_spec_db[i, j] - pred_spec_db[i, j])),
-                "measured_velocity_mms":   float(db_to_rms_mms(true_spec_db[i:i+1, j:j+1]).item()),
-                "predicted_velocity_mms":  float(db_to_rms_mms(pred_spec_db[i:i+1, j:j+1]).item()),
-            })
+            pred_rows.append(
+                {
+                    "event_id": ev["event_id"],
+                    "split": split_name,
+                    "model_name": cfg.name,
+                    "seed": cfg.seed,
+                    "track_number": int(ev["track_number"]),
+                    "train_type": ev.get("train_type", ""),
+                    "train_family": ev.get("train_family", ""),
+                    "train_speed_kmh": float(ev.get("train_speed_kmh", np.nan)),
+                    "band_nominal_hz": hz,
+                    "measured_level_db": float(true_spec_db[i, j]),
+                    "predicted_level_db": float(pred_spec_db[i, j]),
+                    "residual_db": float(true_spec_db[i, j] - pred_spec_db[i, j]),
+                    "absolute_error_db": float(
+                        abs(true_spec_db[i, j] - pred_spec_db[i, j])
+                    ),
+                    "measured_velocity_mms": float(
+                        db_to_rms_mms(true_spec_db[i : i + 1, j : j + 1]).item()
+                    ),
+                    "predicted_velocity_mms": float(
+                        db_to_rms_mms(pred_spec_db[i : i + 1, j : j + 1]).item()
+                    ),
+                }
+            )
 
     preds_df = pd.DataFrame(pred_rows)
 
@@ -285,39 +337,49 @@ def evaluate_split(
     ev_metric_rows = []
     for i in range(len(sub_df)):
         ev = sub_df.iloc[i]
-        ev_metric_rows.append({
-            "event_id":                ev["event_id"],
-            "model_name":              cfg.name,
-            "seed":                    cfg.seed,
-            "split":                   split_name,
-            "measured_total_rms_mms":  float(true_total[i]),
-            "predicted_total_rms_mms": float(pred_total[i]),
-            "event_spectral_rmse_db":  float(per_ev_rmse[i]),
-            "event_spectral_mae_db":   float(np.mean(np.abs(
-                (pred_spec_db[i] - true_spec_db[i]) if not is_pgv else 0.0))),
-            "measured_raw_pgv_mms":    float(true_pgv_mms[i]),
-            "predicted_raw_pgv_mms":   float(pred_pgv_mms[i]) if (is_pgv or is_mt) else float("nan"),
-            "track_number":            int(ev["track_number"]),
-            "train_family":            ev.get("train_family", ""),
-        })
+        ev_metric_rows.append(
+            {
+                "event_id": ev["event_id"],
+                "model_name": cfg.name,
+                "seed": cfg.seed,
+                "split": split_name,
+                "measured_total_rms_mms": float(true_total[i]),
+                "predicted_total_rms_mms": float(pred_total[i]),
+                "event_spectral_rmse_db": float(per_ev_rmse[i]),
+                "event_spectral_mae_db": float(
+                    np.mean(
+                        np.abs(
+                            (pred_spec_db[i] - true_spec_db[i]) if not is_pgv else 0.0
+                        )
+                    )
+                ),
+                "measured_raw_pgv_mms": float(true_pgv_mms[i]),
+                "predicted_raw_pgv_mms": (
+                    float(pred_pgv_mms[i]) if (is_pgv or is_mt) else float("nan")
+                ),
+                "track_number": int(ev["track_number"]),
+                "train_family": ev.get("train_family", ""),
+                "train_speed_kmh": float(ev.get("train_speed_kmh", np.nan)),
+            }
+        )
     ev_metrics_df = pd.DataFrame(ev_metric_rows)
 
     return {
-        "per_band":       per_band,
-        "macro":          {"rmse_db": macro_rmse, "mae_db": macro_mae, "r2": macro_r2},
-        "total_rms":      tot_metrics,
-        "pgv_metrics":    pgv_metrics,
+        "per_band": per_band,
+        "macro": {"rmse_db": macro_rmse, "mae_db": macro_mae, "r2": macro_r2},
+        "total_rms": tot_metrics,
+        "pgv_metrics": pgv_metrics,
         "predictions_df": preds_df,
-        "ev_metrics_df":  ev_metrics_df,
-        "pred_spec_db":   pred_spec_db,
-        "true_spec_db":   true_spec_db,
-        "pred_total":     pred_total,
-        "true_total":     true_total,
-        "pred_pgv_mms":   pred_pgv_mms,
-        "true_pgv_mms":   true_pgv_mms,
-        "sub_df":         sub_df,
-        "per_ev_rmse":    per_ev_rmse,
-        "split":          split_name,
+        "ev_metrics_df": ev_metrics_df,
+        "pred_spec_db": pred_spec_db,
+        "true_spec_db": true_spec_db,
+        "pred_total": pred_total,
+        "true_total": true_total,
+        "pred_pgv_mms": pred_pgv_mms,
+        "true_pgv_mms": true_pgv_mms,
+        "sub_df": sub_df,
+        "per_ev_rmse": per_ev_rmse,
+        "split": split_name,
     }
 
 
@@ -334,21 +396,26 @@ def _fig_save(fig, path: Path, dpi: int = 120) -> None:
 
 # ── 14 Required plots ─────────────────────────────────────────────────────────
 
+
 def plot_per_band_metrics(res: dict, out: Path) -> None:
     """Plot 1: Per-band RMSE, MAE, R² vs frequency."""
     per_band = res["per_band"]
     if not per_band:
         return
-    rmse_v = [b["rmse_db"]    for b in per_band]
-    mae_v  = [b["mae_db"]     for b in per_band]
-    r2_v   = [b["r2"]         for b in per_band]
+    rmse_v = [b["rmse_db"] for b in per_band]
+    mae_v = [b["mae_db"] for b in per_band]
+    r2_v = [b["r2"] for b in per_band]
     meta_v = [b["meta_rmse_db"] for b in per_band]
 
     fig, axes = plt.subplots(3, 1, figsize=(11, 9), sharex=True)
     x = _XPOS
 
-    axes[0].bar(x, meta_v, color="lightgray", alpha=0.7, label="Metadata RMSE (dB)", zorder=1)
-    axes[0].bar(x, rmse_v, color="steelblue", alpha=0.9, label="Model RMSE (dB)", zorder=2)
+    axes[0].bar(
+        x, meta_v, color="lightgray", alpha=0.7, label="Metadata RMSE (dB)", zorder=1
+    )
+    axes[0].bar(
+        x, rmse_v, color="steelblue", alpha=0.9, label="Model RMSE (dB)", zorder=2
+    )
     axes[0].set_ylabel("dB")
     axes[0].set_title("Per-band RMSE vs frequency")
     axes[0].legend(fontsize=8)
@@ -388,8 +455,10 @@ def plot_improvement_over_baseline(res: dict, out: Path) -> None:
     ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
     ax.set_xlabel("Band nominal frequency (Hz)")
     ax.set_ylabel("ΔRMSE (dB)  [positive = improvement]")
-    ax.set_title("Per-band improvement over metadata baseline\n"
-                 "(blue = model better, red = model worse)")
+    ax.set_title(
+        "Per-band improvement over metadata baseline\n"
+        "(blue = model better, red = model worse)"
+    )
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     _fig_save(fig, out / "02_improvement_over_baseline.png")
@@ -405,11 +474,16 @@ def plot_residual_violins(res: dict, out: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(14, 5))
     positions = _XPOS
-    parts = ax.violinplot([residuals[:, i] for i in range(len(PRIMARY_NOMINALS))],
-                          positions=positions, showmedians=True, showextrema=True,
-                          widths=0.7)
+    parts = ax.violinplot(
+        [residuals[:, i] for i in range(len(PRIMARY_NOMINALS))],
+        positions=positions,
+        showmedians=True,
+        showextrema=True,
+        widths=0.7,
+    )
     for pc in parts["bodies"]:
-        pc.set_facecolor("steelblue"); pc.set_alpha(0.6)
+        pc.set_facecolor("steelblue")
+        pc.set_alpha(0.6)
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
     ax.set_xticks(positions)
     ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
@@ -430,11 +504,16 @@ def plot_absolute_error_violins(res: dict, out: Path) -> None:
     abs_err = np.abs(true_db - pred_db)
 
     fig, ax = plt.subplots(figsize=(14, 5))
-    parts = ax.violinplot([abs_err[:, i] for i in range(len(PRIMARY_NOMINALS))],
-                          positions=_XPOS, showmedians=True, showextrema=True,
-                          widths=0.7)
+    parts = ax.violinplot(
+        [abs_err[:, i] for i in range(len(PRIMARY_NOMINALS))],
+        positions=_XPOS,
+        showmedians=True,
+        showextrema=True,
+        widths=0.7,
+    )
     for pc in parts["bodies"]:
-        pc.set_facecolor("darkorange"); pc.set_alpha(0.6)
+        pc.set_facecolor("darkorange")
+        pc.set_alpha(0.6)
     ax.set_xticks(_XPOS)
     ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
     ax.set_xlabel("Band nominal frequency (Hz)")
@@ -450,10 +529,18 @@ def plot_event_rmse_distribution(res: dict, out: Path) -> None:
     per_ev_rmse = res["per_ev_rmse"]
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.hist(per_ev_rmse, bins=40, color="steelblue", edgecolor="white", alpha=0.85)
-    ax.axvline(np.median(per_ev_rmse), color="red", linestyle="--",
-               label=f"Median={np.median(per_ev_rmse):.2f} dB")
-    ax.axvline(np.percentile(per_ev_rmse, 90), color="orange", linestyle=":",
-               label=f"p90={np.percentile(per_ev_rmse, 90):.2f} dB")
+    ax.axvline(
+        np.median(per_ev_rmse),
+        color="red",
+        linestyle="--",
+        label=f"Median={np.median(per_ev_rmse):.2f} dB",
+    )
+    ax.axvline(
+        np.percentile(per_ev_rmse, 90),
+        color="orange",
+        linestyle=":",
+        label=f"p90={np.percentile(per_ev_rmse, 90):.2f} dB",
+    )
     ax.set_xlabel("Per-event spectral RMSE (dB)")
     ax.set_ylabel("Count")
     ax.set_title("Distribution of per-event spectral RMSE across 19 bands")
@@ -469,12 +556,15 @@ def plot_total_rms_scatter(res: dict, out: Path) -> None:
     tr = res["total_rms"]
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(t, p, alpha=0.4, s=14, color="steelblue", edgecolors="none")
-    lo = min(t.min(), p.min()) * 0.9; hi = max(t.max(), p.max()) * 1.1
+    lo = min(t.min(), p.min()) * 0.9
+    hi = max(t.max(), p.max()) * 1.1
     ax.plot([lo, hi], [lo, hi], "k--", linewidth=0.8, label="1:1")
     ax.set_xlabel("Measured total RMS (mm/s)")
     ax.set_ylabel("Predicted total RMS (mm/s)")
-    ax.set_title(f"Total RMS  r={tr['pearson_r']:.3f}  "
-                 f"R²={tr['r2']:.3f}  RMSE={tr['rmse_mms']:.4f} mm/s")
+    ax.set_title(
+        f"Total RMS  r={tr['pearson_r']:.3f}  "
+        f"R²={tr['r2']:.3f}  RMSE={tr['rmse_mms']:.4f} mm/s"
+    )
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -506,9 +596,11 @@ def plot_all_events_hexbin(res: dict, out: Path) -> None:
     tv, pv = t[mask], p[mask]
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    lo = min(tv.min(), pv.min()) - 2; hi = max(tv.max(), pv.max()) + 2
-    hb = ax.hexbin(tv, pv, gridsize=60, cmap="Blues",
-                   extent=[lo, hi, lo, hi], bins="log")
+    lo = min(tv.min(), pv.min()) - 2
+    hi = max(tv.max(), pv.max()) + 2
+    hb = ax.hexbin(
+        tv, pv, gridsize=60, cmap="Blues", extent=[lo, hi, lo, hi], bins="log"
+    )
     plt.colorbar(hb, ax=ax, label="log10(count)")
     ax.plot([lo, hi], [lo, hi], "r--", linewidth=0.8, label="1:1")
     ax.set_xlabel("Measured level (dB re 1 nm/s)")
@@ -525,7 +617,7 @@ def plot_residual_heatmap(res: dict, out: Path) -> None:
     p = res["pred_spec_db"]
     if t is None or np.all(np.isnan(t)):
         return
-    residuals = t - p   # (N, 19)
+    residuals = t - p  # (N, 19)
     N = residuals.shape[0]
 
     # Sort events by total-RMS amplitude for readability
@@ -535,8 +627,14 @@ def plot_residual_heatmap(res: dict, out: Path) -> None:
     vmax = float(np.nanpercentile(np.abs(resid_sorted), 95))
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    im = ax.imshow(resid_sorted.T, aspect="auto", cmap="RdBu_r",
-                   vmin=-vmax, vmax=vmax, interpolation="nearest")
+    im = ax.imshow(
+        resid_sorted.T,
+        aspect="auto",
+        cmap="RdBu_r",
+        vmin=-vmax,
+        vmax=vmax,
+        interpolation="nearest",
+    )
     plt.colorbar(im, ax=ax, label="Residual (dB)  [true − predicted]")
     ax.set_yticks(range(len(PRIMARY_NOMINALS)))
     ax.set_yticklabels(_HZ_LABELS, fontsize=7)
@@ -556,15 +654,35 @@ def plot_mean_median_spectra(res: dict, out: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(11, 5))
     x = _XPOS
-    ax.plot(x, np.nanmean(t, axis=0),   "o-",  color="black",     lw=1.5, label="Measured mean")
-    ax.plot(x, np.nanmedian(t, axis=0), "s-",  color="gray",      lw=1.2, ls="--", label="Measured median")
-    ax.plot(x, np.nanmean(p, axis=0),   "o-",  color="steelblue", lw=1.5, label="Predicted mean")
-    ax.plot(x, np.nanmedian(p, axis=0), "s-",  color="cornflowerblue", lw=1.2, ls="--", label="Predicted median")
-    ax.set_xticks(x); ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
+    ax.plot(
+        x, np.nanmean(t, axis=0), "o-", color="black", lw=1.5, label="Measured mean"
+    )
+    ax.plot(
+        x, np.nanmedian(t, axis=0), "s--", color="gray", lw=1.2, label="Measured median"
+    )
+    ax.plot(
+        x,
+        np.nanmean(p, axis=0),
+        "o-",
+        color="steelblue",
+        lw=1.5,
+        label="Predicted mean",
+    )
+    ax.plot(
+        x,
+        np.nanmedian(p, axis=0),
+        "s--",
+        color="cornflowerblue",
+        lw=1.2,
+        label="Predicted median",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
     ax.set_xlabel("Band nominal frequency (Hz)")
     ax.set_ylabel("Velocity band level (dB re 1 nm/s)")
     ax.set_title("Mean and median spectra: measured vs predicted")
-    ax.legend(fontsize=8); ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
     _fig_save(fig, out / "10_mean_median_spectra.png")
 
@@ -577,26 +695,28 @@ def plot_spectral_quantile_bands(res: dict, out: Path) -> None:
         return
 
     q10t, q25t = np.nanpercentile(t, 10, axis=0), np.nanpercentile(t, 25, axis=0)
-    q50t        = np.nanmedian(t, axis=0)
+    q50t = np.nanmedian(t, axis=0)
     q75t, q90t = np.nanpercentile(t, 75, axis=0), np.nanpercentile(t, 90, axis=0)
 
     q10p, q25p = np.nanpercentile(p, 10, axis=0), np.nanpercentile(p, 25, axis=0)
-    q50p        = np.nanmedian(p, axis=0)
+    q50p = np.nanmedian(p, axis=0)
     q75p, q90p = np.nanpercentile(p, 75, axis=0), np.nanpercentile(p, 90, axis=0)
 
     fig, ax = plt.subplots(figsize=(11, 5))
     x = _XPOS
-    ax.fill_between(x, q10t, q90t, alpha=0.12, color="black",     label="Meas. p10–p90")
-    ax.fill_between(x, q25t, q75t, alpha=0.20, color="black",     label="Meas. p25–p75")
+    ax.fill_between(x, q10t, q90t, alpha=0.12, color="black", label="Meas. p10–p90")
+    ax.fill_between(x, q25t, q75t, alpha=0.20, color="black", label="Meas. p25–p75")
     ax.fill_between(x, q10p, q90p, alpha=0.12, color="steelblue", label="Pred. p10–p90")
     ax.fill_between(x, q25p, q75p, alpha=0.20, color="steelblue", label="Pred. p25–p75")
-    ax.plot(x, q50t, "o-", color="black",     lw=1.5, label="Meas. median")
+    ax.plot(x, q50t, "o-", color="black", lw=1.5, label="Meas. median")
     ax.plot(x, q50p, "o-", color="steelblue", lw=1.5, label="Pred. median")
-    ax.set_xticks(x); ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
+    ax.set_xticks(x)
+    ax.set_xticklabels(_HZ_LABELS, rotation=45, ha="right")
     ax.set_xlabel("Band nominal frequency (Hz)")
     ax.set_ylabel("dB re 1 nm/s")
     ax.set_title("Spectral quantile bands: measured vs predicted")
-    ax.legend(fontsize=7, ncol=3); ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=7, ncol=3)
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
     _fig_save(fig, out / "11_spectral_quantile_bands.png")
 
@@ -615,19 +735,37 @@ def plot_representative_events(res: dict, out: Path) -> None:
     for ax, (lo, hi, label) in zip(axes, pcts):
         th_lo = np.percentile(tot, lo)
         th_hi = np.percentile(tot, hi)
-        idx   = np.where((tot >= th_lo) & (tot <= th_hi))[0]
+        idx = np.where((tot >= th_lo) & (tot <= th_hi))[0]
         if len(idx) == 0:
             continue
         # Plot up to 15 events
         chosen = idx[:15]
         for i in chosen:
-            ax.plot(_XPOS, t[i], color="gray",      alpha=0.4, linewidth=0.7)
-            ax.plot(_XPOS, p[i], color="steelblue", alpha=0.4, linewidth=0.7, linestyle="--")
-        ax.plot(_XPOS, np.nanmean(t[chosen], axis=0), "o-", color="black",     lw=1.5, label="Mean meas.")
-        ax.plot(_XPOS, np.nanmean(p[chosen], axis=0), "o-", color="steelblue", lw=1.5, label="Mean pred.")
+            ax.plot(_XPOS, t[i], color="gray", alpha=0.4, linewidth=0.7)
+            ax.plot(
+                _XPOS, p[i], color="steelblue", alpha=0.4, linewidth=0.7, linestyle="--"
+            )
+        ax.plot(
+            _XPOS,
+            np.nanmean(t[chosen], axis=0),
+            "o-",
+            color="black",
+            lw=1.5,
+            label="Mean meas.",
+        )
+        ax.plot(
+            _XPOS,
+            np.nanmean(p[chosen], axis=0),
+            "o-",
+            color="steelblue",
+            lw=1.5,
+            label="Mean pred.",
+        )
         ax.set_title(f"{label} vibration (n={len(chosen)})")
-        ax.set_xticks(_XPOS[::3]); ax.set_xticklabels(_HZ_LABELS[::3], rotation=45, ha="right")
-        ax.set_xlabel("Band (Hz)"); ax.grid(True, alpha=0.3)
+        ax.set_xticks(_XPOS[::3])
+        ax.set_xticklabels(_HZ_LABELS[::3], rotation=45, ha="right")
+        ax.set_xlabel("Band (Hz)")
+        ax.grid(True, alpha=0.3)
         if ax is axes[0]:
             ax.set_ylabel("dB re 1 nm/s")
             ax.legend(fontsize=7)
@@ -637,26 +775,112 @@ def plot_representative_events(res: dict, out: Path) -> None:
     _fig_save(fig, out / "12_representative_events.png")
 
 
+def plot_random_test_events(
+    res: dict,
+    out: Path,
+    n_events: int = 10,
+    seed: int = 20260729,
+) -> None:
+    """Plot measured versus predicted spectra for random individual test events.
+
+    The selected event IDs are saved so later models can use exactly the same
+    examples.  No averaging is performed.
+    """
+    if res.get("split") != "test":
+        return
+    t = res.get("true_spec_db")
+    p = res.get("pred_spec_db")
+    if t is None or np.all(np.isnan(t)):
+        return
+    n = len(t)
+    if n == 0:
+        return
+    k = min(int(n_events), n)
+    rng = np.random.default_rng(seed)
+    chosen = np.sort(rng.choice(n, size=k, replace=False))
+    sub = res["sub_df"].iloc[chosen].reset_index(drop=True)
+
+    rows = []
+    fig, axes = plt.subplots(2, 5, figsize=(20, 8), sharex=True, sharey=True)
+    axes = np.asarray(axes).reshape(-1)
+    for ax_i, ax in enumerate(axes):
+        if ax_i >= k:
+            ax.axis("off")
+            continue
+        i = int(chosen[ax_i])
+        true_i = t[i]
+        pred_i = p[i]
+        ev = sub.iloc[ax_i]
+        rmse_i = float(np.sqrt(np.mean((pred_i - true_i) ** 2)))
+        true_tot = float(res["true_total"][i])
+        pred_tot = float(res["pred_total"][i])
+        ev_id = str(ev.get("event_id", i))
+        short_id = ev_id if len(ev_id) <= 18 else f"{ev_id[:8]}…{ev_id[-7:]}"
+        family = str(ev.get("train_family", ""))
+        track = int(ev.get("track_number", -1))
+        speed = float(ev.get("train_speed_kmh", np.nan))
+
+        ax.plot(_XPOS, true_i, "o-", color="black", lw=1.4, ms=3.5, label="Measured")
+        ax.plot(
+            _XPOS, pred_i, "s--", color="steelblue", lw=1.3, ms=3.2, label="Predicted"
+        )
+        ax.set_title(
+            f"{short_id}\n{family}, T{track}, {speed:.0f} km/h\n"
+            f"RMS {true_tot:.3f}→{pred_tot:.3f} mm/s | RMSE {rmse_i:.2f} dB",
+            fontsize=8,
+        )
+        ax.set_xticks(_XPOS[::3])
+        ax.set_xticklabels(_HZ_LABELS[::3], rotation=45, ha="right", fontsize=7)
+        ax.grid(True, alpha=0.25)
+        rows.append(
+            {
+                "plot_order": ax_i + 1,
+                "event_id": ev_id,
+                "train_family": family,
+                "track_number": track,
+                "train_speed_kmh": speed,
+                "measured_total_rms_mms": true_tot,
+                "predicted_total_rms_mms": pred_tot,
+                "event_spectral_rmse_db": rmse_i,
+                "random_seed": seed,
+            }
+        )
+
+    axes[0].legend(fontsize=8)
+    fig.supxlabel("One-third-octave band nominal frequency (Hz)")
+    fig.supylabel("Velocity band level (dB re 1 nm/s)")
+    fig.suptitle(
+        "Ten random test events: measured versus predicted spectra", fontsize=14
+    )
+    plt.tight_layout(rect=(0.02, 0.02, 1, 0.95))
+    _fig_save(fig, out / "15_random_10_test_events.png", dpi=140)
+    pd.DataFrame(rows).to_csv(out.parent / "random_10_test_events.csv", index=False)
+
+
 def plot_training_curves(history: List[dict], out: Path) -> None:
     """Plot 13: Training and validation loss curves."""
     if not history:
         return
-    epochs   = [h["epoch"]       for h in history]
-    tr_loss  = [h["train_loss"]  for h in history]
-    val_loss = [h["val_loss"]    for h in history]
+    epochs = [h["epoch"] for h in history]
+    tr_loss = [h["train_loss"] for h in history]
+    val_loss = [h["val_loss"] for h in history]
     val_rmse = [h["val_macro_rmse_std"] for h in history]
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    axes[0].plot(epochs, tr_loss,  label="Train loss", color="steelblue")
-    axes[0].plot(epochs, val_loss, label="Val loss",   color="tomato")
-    axes[0].set_xlabel("Epoch"); axes[0].set_ylabel("Loss")
+    axes[0].plot(epochs, tr_loss, label="Train loss", color="steelblue")
+    axes[0].plot(epochs, val_loss, label="Val loss", color="tomato")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
     axes[0].set_title("Training and validation loss")
-    axes[0].legend(); axes[0].grid(True, alpha=0.3)
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
 
     axes[1].plot(epochs, val_rmse, label="Val macro-RMSE (std)", color="tomato")
-    axes[1].set_xlabel("Epoch"); axes[1].set_ylabel("RMSE (standardized)")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("RMSE (standardized)")
     axes[1].set_title("Validation macro-RMSE (standardized targets)")
-    axes[1].legend(); axes[1].grid(True, alpha=0.3)
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
     _fig_save(fig, out / "13_training_curves.png")
@@ -664,7 +888,7 @@ def plot_training_curves(history: List[dict], out: Path) -> None:
 
 def plot_error_by_subgroup(res: dict, out: Path) -> None:
     """Plot 14: Error distributions by track and major train family."""
-    sub_df  = res["sub_df"]
+    sub_df = res["sub_df"]
     ev_rmse = res["per_ev_rmse"]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -673,8 +897,9 @@ def plot_error_by_subgroup(res: dict, out: Path) -> None:
     ax = axes[0]
     tracks = sorted(sub_df["track_number"].unique())
     data_track = [ev_rmse[sub_df["track_number"].values == t] for t in tracks]
-    ax.violinplot(data_track, positions=range(len(tracks)),
-                  showmedians=True, widths=0.5)
+    ax.violinplot(
+        data_track, positions=range(len(tracks)), showmedians=True, widths=0.5
+    )
     ax.set_xticks(range(len(tracks)))
     ax.set_xticklabels([f"Track {t}" for t in tracks])
     ax.set_ylabel("Per-event spectral RMSE (dB)")
@@ -683,11 +908,13 @@ def plot_error_by_subgroup(res: dict, out: Path) -> None:
 
     # By train family
     ax = axes[1]
-    fams = [f for f in sorted(sub_df["train_family"].unique())
-            if (sub_df["train_family"].values == f).sum() >= 10]
+    fams = [
+        f
+        for f in sorted(sub_df["train_family"].unique())
+        if (sub_df["train_family"].values == f).sum() >= 10
+    ]
     data_fam = [ev_rmse[sub_df["train_family"].values == f] for f in fams]
-    ax.violinplot(data_fam, positions=range(len(fams)),
-                  showmedians=True, widths=0.5)
+    ax.violinplot(data_fam, positions=range(len(fams)), showmedians=True, widths=0.5)
     ax.set_xticks(range(len(fams)))
     ax.set_xticklabels(fams, rotation=45, ha="right")
     ax.set_ylabel("Per-event spectral RMSE (dB)")
@@ -700,12 +927,13 @@ def plot_error_by_subgroup(res: dict, out: Path) -> None:
 
 # ── Master output saver ───────────────────────────────────────────────────────
 
+
 def save_eval_outputs(
-    res:       dict,
-    out_dir:   Path,
+    res: dict,
+    out_dir: Path,
     model_name: str,
     split_name: str,
-    history:   Optional[List[dict]] = None,
+    history: Optional[List[dict]] = None,
 ) -> None:
     """Save all metrics, predictions, and plots to out_dir."""
     plots_dir = out_dir / "plots"
@@ -713,9 +941,9 @@ def save_eval_outputs(
 
     # ── Metrics JSON ──────────────────────────────────────────────────────────
     metrics = {
-        "model":   model_name,
-        "split":   split_name,
-        "macro":   res["macro"],
+        "model": model_name,
+        "split": split_name,
+        "macro": res["macro"],
         "total_rms": res["total_rms"],
         "per_band": res["per_band"],
         "pgv_metrics": res.get("pgv_metrics", {}),
@@ -727,17 +955,20 @@ def save_eval_outputs(
     # ── Per-band CSV ──────────────────────────────────────────────────────────
     if res["per_band"]:
         pd.DataFrame(res["per_band"]).to_csv(
-            out_dir / f"metrics_per_band_{split_name}.csv", index=False)
+            out_dir / f"metrics_per_band_{split_name}.csv", index=False
+        )
 
     # ── Long-format predictions ───────────────────────────────────────────────
     if not res["predictions_df"].empty:
         res["predictions_df"].to_parquet(
-            out_dir / f"predictions_{split_name}.parquet", index=False)
+            out_dir / f"predictions_{split_name}.parquet", index=False
+        )
 
     # ── Event-level metrics ───────────────────────────────────────────────────
     if not res["ev_metrics_df"].empty:
         res["ev_metrics_df"].to_parquet(
-            out_dir / f"event_metrics_{split_name}.parquet", index=False)
+            out_dir / f"event_metrics_{split_name}.parquet", index=False
+        )
 
     # ── Plots ─────────────────────────────────────────────────────────────────
     plot_per_band_metrics(res, plots_dir)
@@ -752,34 +983,45 @@ def save_eval_outputs(
     plot_mean_median_spectra(res, plots_dir)
     plot_spectral_quantile_bands(res, plots_dir)
     plot_representative_events(res, plots_dir)
+    plot_random_test_events(res, plots_dir)
     if history:
         plot_training_curves(history, plots_dir)
     plot_error_by_subgroup(res, plots_dir)
 
-    print(f"  Saved metrics + 14 plots → {plots_dir}")
+    print(f"  Saved metrics + up to 15 plots → {plots_dir}")
 
 
 def print_summary(res: dict, cfg_name: str, split_name: str) -> None:
     """Print a compact evaluation summary to stdout."""
-    m   = res["macro"]
-    tr  = res["total_rms"]
+    m = res["macro"]
+    tr = res["total_rms"]
     print(f"\n  {'─'*60}")
     print(f"  {cfg_name} | {split_name.upper()}")
-    print(f"  Macro RMSE = {m['rmse_db']:.3f} dB  "
-          f"MAE = {m['mae_db']:.3f} dB  R² = {m['r2']:.3f}")
-    print(f"  Total RMS  RMSE={tr['rmse_mms']:.4f} mm/s  "
-          f"r={tr['pearson_r']:.3f}  R²={tr['r2']:.3f}  "
-          f"compressed={tr['pred_compressed']}")
+    print(
+        f"  Macro RMSE = {m['rmse_db']:.3f} dB  "
+        f"MAE = {m['mae_db']:.3f} dB  R² = {m['r2']:.3f}"
+    )
+    print(
+        f"  Total RMS  RMSE={tr['rmse_mms']:.4f} mm/s  "
+        f"r={tr['pearson_r']:.3f}  R²={tr['r2']:.3f}  "
+        f"compressed={tr['pred_compressed']}"
+    )
     if res.get("pgv_metrics"):
         pg = res["pgv_metrics"]
-        print(f"  PGV direct  RMSE={pg['rmse_mms']:.4f} mm/s  "
-              f"r={pg['pearson_r']:.3f}  R²={pg['r2']:.3f}")
+        print(
+            f"  PGV direct  RMSE={pg['rmse_mms']:.4f} mm/s  "
+            f"r={pg['pearson_r']:.3f}  R²={pg['r2']:.3f}"
+        )
     per_band = res["per_band"]
     if per_band:
-        best  = max(per_band, key=lambda b: b["delta_rmse_db"])
+        best = max(per_band, key=lambda b: b["delta_rmse_db"])
         worst = min(per_band, key=lambda b: b["delta_rmse_db"])
-        print(f"  Best  band: {best['band_hz']:5.4g} Hz  "
-              f"ΔRMSE=+{best['delta_rmse_db']:.2f} dB")
-        print(f"  Worst band: {worst['band_hz']:5.4g} Hz  "
-              f"ΔRMSE={worst['delta_rmse_db']:.2f} dB")
+        print(
+            f"  Best  band: {best['band_hz']:5.4g} Hz  "
+            f"ΔRMSE=+{best['delta_rmse_db']:.2f} dB"
+        )
+        print(
+            f"  Worst band: {worst['band_hz']:5.4g} Hz  "
+            f"ΔRMSE={worst['delta_rmse_db']:.2f} dB"
+        )
     print(f"  {'─'*60}")
