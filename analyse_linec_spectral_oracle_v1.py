@@ -37,7 +37,9 @@ Inputs (read-only, authoritative sources -- see NETCDF/spectral audits):
 Outputs (never overwritten -- new timestamped subfolder every run):
     P:/11210978-erju-ai/holten_models/outputs/linec_spectral_oracle_v1/<run_id>/
         results.json, propagation_curves.csv,
-        event_source_spectrum_C_train_{O0,O1}.parquet, plots/*.png, run_manifest.json
+        event_source_spectrum_C_train_{O0,O1}.parquet,
+        mode_b_predictions_{O0,O1}.parquet (event/sensor/band leave-one-out predictions),
+        plots/*.png, run_manifest.json
 
 Run:
     python analyse_linec_spectral_oracle_v1.py --smoke   # fast code/smoke check
@@ -358,6 +360,47 @@ def run_full_eval(L, R, TRACK, SPLIT, fit, model, band_nominal) -> dict:
     return out
 
 
+# ── Mode-B event-level export (read-only re-derivation; same math as evaluate_mode_b) ────────
+
+def build_mode_b_predictions_df(L, R, TRACK, SPLIT, events, fit, model, band_nominal) -> pd.DataFrame:
+    """Long-format event/sensor/band Mode-B predictions, all splits, for offline inspection."""
+    corr = compute_corr(R, TRACK, fit, model)
+    n_events, n_sensors, n_bands = L.shape
+    frames = []
+    for k, held in enumerate(SENSORS):
+        mask = np.ones(n_sensors, dtype=bool)
+        mask[k] = False
+        C_loo = np.mean(L[:, mask, :] - corr[:, mask, :], axis=1)
+        pred_db = C_loo + corr[:, k, :]
+        true_db = L[:, k, :]
+        frames.append(pd.DataFrame({
+            "event_id": np.repeat(events, n_bands),
+            "split": np.repeat(SPLIT, n_bands),
+            "held_sensor": held,
+            "track_number": np.repeat(TRACK, n_bands),
+            "distance_m": np.repeat(R[:, k], n_bands),
+            "band_nominal_hz": np.tile(band_nominal, n_events),
+            "target_db": true_db.reshape(-1),
+            "predicted_db": pred_db.reshape(-1),
+        }))
+    return pd.concat(frames, ignore_index=True)
+
+
+def mode_b_total_rms_per_sensor(L, R, TRACK, SPLIT, fit, model, split_name) -> dict:
+    """Per-sensor (true_tot, pred_tot) mm/s arrays for Mode-B on one split, for scatter plotting only."""
+    sel = SPLIT == split_name
+    L_s, R_s, TRACK_s = L[sel], R[sel], TRACK[sel]
+    corr = compute_corr(R_s, TRACK_s, fit, model)
+    out = {}
+    for k, held in enumerate(SENSORS):
+        mask = np.ones(len(SENSORS), dtype=bool)
+        mask[k] = False
+        C_loo = np.mean(L_s[:, mask, :] - corr[:, mask, :], axis=1)
+        pred_db = C_loo + corr[:, k, :]
+        out[held] = (total_rms_from_db(L_s[:, k, :]), total_rms_from_db(pred_db))
+    return out
+
+
 # ── Bootstrap stability ───────────────────────────────────────────────────────
 
 def bootstrap_stability(L, R, TRACK, SPLIT, model, n_boot, als_iters, smooth_lambda_rel, n_bands, seed=0):
@@ -457,12 +500,26 @@ def plot_propagation_curves(band_nominal, fit_o0, fit_o1, out_dir: Path) -> None
     _save_fig(fig, out_dir / "propagation_curves.png")
 
 
-def plot_total_rms_scatter(eval_o0, eval_o1, out_dir: Path, split_name="test") -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
-    for ax, ev, name in zip(axes, (eval_o0, eval_o1), ("O0", "O1")):
-        tr = ev["modeB"][split_name]["overall"]["total_rms"]
-        ax.set_title(f"{name} mode-B {split_name}  R2={tr['r2']:.3f}  RMSE={tr['rmse_mms']:.4f} mm/s")
+def plot_total_rms_scatter(rms_o0: dict, rms_o1: dict, out_dir: Path, split_name="test") -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(SENSORS)))
+    for ax, rms_data, name in zip(axes, (rms_o0, rms_o1), ("O0", "O1")):
+        all_true, all_pred = [], []
+        for j, s in enumerate(SENSORS):
+            true_tot, pred_tot = rms_data[s]
+            ax.scatter(true_tot, pred_tot, s=14, alpha=0.6, color=colors[j], label=s, edgecolors="none")
+            all_true.append(true_tot); all_pred.append(pred_tot)
+        all_true = np.concatenate(all_true); all_pred = np.concatenate(all_pred)
+        lo = float(min(all_true.min(), all_pred.min()))
+        hi = float(max(all_true.max(), all_pred.max()))
+        pad = 0.05 * (hi - lo) if hi > lo else 1.0
+        lims = (lo - pad, hi + pad)
+        ax.plot(lims, lims, "k--", lw=1, label="1:1")
+        ax.set_xlim(lims); ax.set_ylim(lims); ax.set_aspect("equal", adjustable="box")
+        r2 = _r2(all_true, all_pred); rmse = _rmse(all_true, all_pred)
+        ax.set_title(f"{name} mode-B {split_name}  R2={r2:.3f}  RMSE={rmse:.4f} mm/s")
         ax.set_xlabel("measured total RMS (mm/s)"); ax.set_ylabel("predicted total RMS (mm/s)")
+        ax.legend(fontsize=7, loc="upper left", framealpha=0.7)
     fig.tight_layout()
     _save_fig(fig, out_dir / "total_rms_summary.png")
 
@@ -621,8 +678,15 @@ def main():
         df_C.insert(0, "event_id", train_events)
         df_C.to_parquet(run_dir / f"event_source_spectrum_C_train_{model_name}.parquet", index=False)
 
+    for model_name, fit in (("O0", fit_o0), ("O1", fit_o1)):
+        df_modeb = build_mode_b_predictions_df(L, R, TRACK, SPLIT, events, fit, model_name, band_nominal)
+        df_modeb.to_parquet(run_dir / f"mode_b_predictions_{model_name}.parquet", index=False)
+
+    rms_o0 = mode_b_total_rms_per_sensor(L, R, TRACK, SPLIT, fit_o0, "O0", "test")
+    rms_o1 = mode_b_total_rms_per_sensor(L, R, TRACK, SPLIT, fit_o1, "O1", "test")
+
     plot_propagation_curves(band_nominal, fit_o0, fit_o1, plots_dir)
-    plot_total_rms_scatter(eval_o0, eval_o1, plots_dir)
+    plot_total_rms_scatter(rms_o0, rms_o1, plots_dir)
     plot_bootstrap_stability(band_nominal, boot_o1, plots_dir)
 
     manifest = {
