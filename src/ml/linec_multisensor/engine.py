@@ -112,12 +112,13 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             loss.backward()
 
             grad_norm_sq = 0.0
-            for p in model.parameters():
+            for pname, p in model.named_parameters():
                 if p.grad is not None:
                     if not bool(torch.isfinite(p.grad).all()):
-                        save_diagnostic_and_abort(out_dir, "train_grad", epoch, batch_idx,
-                                                   {"pred": pred, "tgt": tgt},
-                                                   message="non-finite gradient detected")
+                        save_diagnostic_and_abort(
+                            out_dir, "train_grad", epoch, batch_idx,
+                            {"pred": pred, "tgt": tgt, "r": r, "meta": meta, f"grad[{pname}]": p.grad},
+                            message=f"non-finite gradient detected in parameter '{pname}'")
                     grad_norm_sq += float(p.grad.detach().float().pow(2).sum())
             if not np.isfinite(grad_norm_sq):
                 save_diagnostic_and_abort(out_dir, "train_grad_norm", epoch, batch_idx, {},
