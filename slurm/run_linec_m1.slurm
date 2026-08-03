@@ -47,7 +47,7 @@ echo ""
 echo "=== Running model=M1 seed=$SEED ==="
 echo "Start: $(date)"
 
-python run_linec_multisensor_v1.py \
+python -u run_linec_multisensor_v1.py \
     --model M1 \
     --seed "$SEED" \
     --num-workers 4 \

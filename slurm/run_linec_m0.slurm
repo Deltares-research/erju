@@ -43,12 +43,11 @@ python --version
 
 mkdir -p /p/11210978-erju-ai/holten_models/outputs/linec_multisensor_v1/M0
 
-
 echo ""
 echo "=== Running model=M0 seed=$SEED ==="
 echo "Start: $(date)"
 
-python run_linec_multisensor_v1.py \
+python -u run_linec_multisensor_v1.py \
     --model M0 \
     --seed "$SEED" \
     --num-workers 4 \

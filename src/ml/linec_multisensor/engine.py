@@ -90,6 +90,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         model.train()
         train_loss_sum, n_batches = 0.0, 0
         comp_sums: Dict[str, float] = {}
+        grad_norm_sum, grad_norm_max = 0.0, 0.0
 
         for batch_idx, (wf, meta, nv, tgt, r, track, _) in enumerate(train_loader):
             wf, meta, nv, tgt, r, track = (t.to(device) for t in (wf, meta, nv, tgt, r, track))
@@ -123,6 +124,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             if not np.isfinite(grad_norm_sq):
                 save_diagnostic_and_abort(out_dir, "train_grad_norm", epoch, batch_idx, {},
                                            message=f"gradient norm is non-finite ({grad_norm_sq})")
+            grad_norm = grad_norm_sq ** 0.5
+            grad_norm_sum += grad_norm
+            grad_norm_max = max(grad_norm_max, grad_norm)
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), hp["grad_clip"])
             opt.step()
@@ -138,11 +142,13 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         elapsed = time.time() - t0
 
         row = {"epoch": epoch, "train_loss": train_loss, "val_macro_rmse_db": val_rmse_db,
-               "lr": opt.param_groups[0]["lr"], "elapsed_s": round(elapsed, 2)}
+               "lr": opt.param_groups[0]["lr"], "elapsed_s": round(elapsed, 2),
+               "grad_norm_mean": grad_norm_sum / max(n_batches, 1), "grad_norm_max": grad_norm_max}
         row.update({f"train_{k}": v / max(n_batches, 1) for k, v in comp_sums.items()})
         history.append(row)
         print(f"  epoch {epoch:4d}  train_loss={train_loss:.4f}  val_macro_rmse={val_rmse_db:.4f} dB  "
-              f"lr={row['lr']:.2e}  ({elapsed:.1f}s)")
+              f"lr={row['lr']:.2e}  grad_norm(mean/max)={row['grad_norm_mean']:.3f}/{row['grad_norm_max']:.3f}  "
+              f"({elapsed:.1f}s)")
 
         improved = val_rmse_db < best_val - 1e-4
         if improved:
