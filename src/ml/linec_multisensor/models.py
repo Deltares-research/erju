@@ -1,8 +1,8 @@
 """models.py
 ============
-M0 (metadata baseline), M1 (direct waveform model) and M2 (O0 source-
-propagation model), all producing a uniform (B, 5, 19) dB output so the same
-loss/evaluation code applies to all three.
+M0 (metadata baseline), M1 (direct waveform model), M2 (O0 source-
+propagation model) and M3 (FO-signal-only ablation), all producing a uniform
+(B, 5, 19) dB output so the same loss/evaluation code applies to all four.
 
 Reuses (read-only import, not modified):
     src.ml.spectral.models_spectral.{ResNet2DEncoder, MetadataBranch,
@@ -132,6 +132,43 @@ class M2Model(nn.Module):
         return c_hat.unsqueeze(1) + corr               # (B, 5, 19)
 
 
+class WaveformOnlyEncoder(nn.Module):
+    """FO-signal-only trunk: same S6 no-BatchNorm ResNet2D encoder + raw-amp
+    features as WaveformMetaEncoder, but no metadata branch at all."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        arch = S6_ARCH
+        self.encoder = ResNet2DEncoder(arch)
+        self.raw_amp = RawAmplitudeFeatures(arch.raw_amp_local_half_width, arch.raw_amp_include_crest)
+        self.padding_zero_tol = float(arch.padding_zero_tol)
+        self.out_dim = self.encoder.embed_dim + self.raw_amp.out_dim
+
+    def forward(self, wf: torch.Tensor, n_valid: torch.Tensor) -> torch.Tensor:
+        enc = self.encoder(wf, n_valid)
+        raw_mask = _infer_raw_valid_mask(wf, n_valid, self.padding_zero_tol)
+        amp = self.raw_amp(wf, raw_mask).to(dtype=enc.dtype)
+        return torch.cat([enc, amp], dim=1)
+
+
+class M3Model(nn.Module):
+    """FO-signal-only ablation: S6 encoder + raw-amp features -> (B, 5, 19).
+    No metadata, no distance/track correction -- prediction from the FO
+    waveform alone."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.trunk = WaveformOnlyEncoder()
+        self.head = FusionHead(self.trunk.out_dim, S6_ARCH.head_hidden, N_SENSORS * N_BANDS,
+                                S6_ARCH.head_dropout, S6_ARCH.activation)
+
+    def forward(self, wf: torch.Tensor, meta: torch.Tensor, n_valid: torch.Tensor,
+                r: torch.Tensor, track: torch.Tensor) -> torch.Tensor:
+        del meta, r, track  # unused: FO-signal-only model, kept for uniform interface
+        z = self.trunk(wf, n_valid)
+        return self.head(z).view(-1, N_SENSORS, N_BANDS)
+
+
 def build_model(name: str, n_meta: int, n_o0: torch.Tensor = None) -> nn.Module:
     if name == "M0":
         return M0Model(n_meta)
@@ -141,6 +178,8 @@ def build_model(name: str, n_meta: int, n_o0: torch.Tensor = None) -> nn.Module:
         if n_o0 is None:
             raise ValueError("M2 requires n_o0 (frozen O0 propagation exponents)")
         return M2Model(n_meta, torch.as_tensor(n_o0, dtype=torch.float32))
+    if name == "M3":
+        return M3Model()
     raise ValueError(f"Unknown model name: {name}")
 
 

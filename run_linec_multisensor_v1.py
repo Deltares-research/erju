@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """run_linec_multisensor_v1.py
 ==============================
-Train + evaluate ONE of {M0, M1, M2} for one seed on the 5-sensor Line-C
+Train + evaluate ONE of {M0, M1, M2, M3} for one seed on the 5-sensor Line-C
 spectral target (MP4/MP8/MP10/MP1/MP2, 19 bands), using the validated
 51-channel waveform product and the fixed 1,697-event split.
 
+M3 is a FO-signal-only ablation: same S6 encoder + raw-amp trunk as M1, but
+no metadata branch and no distance/track correction -- prediction from the
+FO waveform alone.
+
 Clean rerun (2026-08-03): FP32 only everywhere (no autocast/bfloat16). ALL
-models (M0, M1, M2) REQUIRE CUDA and abort immediately (no silent CPU
+models (M0, M1, M2, M3) REQUIRE CUDA and abort immediately (no silent CPU
 fallback) if it is not available. Every run logs hostname, SLURM job id,
 CUDA_VISIBLE_DEVICES, torch.cuda.is_available(), GPU name, model/seed/
 parameter count. A run that never produces a finite validation checkpoint is
@@ -51,7 +55,7 @@ from src.ml.linec_multisensor.models import build_model, count_parameters
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--model", required=True, choices=["M0", "M1", "M2"])
+    p.add_argument("--model", required=True, choices=["M0", "M1", "M2", "M3"])
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output-root", type=Path, default=None)
     p.add_argument("--smoke", action="store_true",
