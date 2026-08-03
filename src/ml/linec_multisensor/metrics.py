@@ -274,6 +274,76 @@ def plot_random_events(true_db: np.ndarray, pred_db: np.ndarray, events: np.ndar
     _save_fig(fig, out_dir / f"random_{k}_{split_name}_events.png")
 
 
+def plot_spectral_quantile_bands(true_db: np.ndarray, pred_db: np.ndarray, band_nominal: np.ndarray,
+                                  out_dir: Path, split_name: str) -> None:
+    """Per-sensor spectral quantile bands (p10/p25/p50/p75/p90): measured vs predicted uncertainty."""
+    hz_labels = [f"{hz:.4g}" for hz in band_nominal]
+    xpos = np.arange(len(band_nominal))
+    fig, axes = plt.subplots(1, len(SENSORS), figsize=(4.0 * len(SENSORS), 4.5), sharey=True)
+    for j, (ax, s) in enumerate(zip(axes, SENSORS)):
+        t, p = true_db[:, j, :], pred_db[:, j, :]
+        q10t, q25t = np.percentile(t, 10, axis=0), np.percentile(t, 25, axis=0)
+        q50t = np.median(t, axis=0)
+        q75t, q90t = np.percentile(t, 75, axis=0), np.percentile(t, 90, axis=0)
+        q10p, q25p = np.percentile(p, 10, axis=0), np.percentile(p, 25, axis=0)
+        q50p = np.median(p, axis=0)
+        q75p, q90p = np.percentile(p, 75, axis=0), np.percentile(p, 90, axis=0)
+
+        ax.fill_between(xpos, q10t, q90t, alpha=0.12, color="black", label="Meas. p10\u2013p90")
+        ax.fill_between(xpos, q25t, q75t, alpha=0.20, color="black", label="Meas. p25\u2013p75")
+        ax.fill_between(xpos, q10p, q90p, alpha=0.12, color="steelblue", label="Pred. p10\u2013p90")
+        ax.fill_between(xpos, q25p, q75p, alpha=0.20, color="steelblue", label="Pred. p25\u2013p75")
+        ax.plot(xpos, q50t, "o-", color="black", lw=1.4, label="Meas. median")
+        ax.plot(xpos, q50p, "o-", color="steelblue", lw=1.4, label="Pred. median")
+        ax.set_xticks(xpos); ax.set_xticklabels(hz_labels, rotation=45, ha="right", fontsize=7)
+        ax.set_title(s); ax.grid(True, alpha=0.3)
+        if j == 0:
+            ax.set_ylabel("dB re 1 nm/s")
+            ax.legend(fontsize=6, ncol=2)
+    fig.supxlabel("Band nominal frequency (Hz)")
+    fig.suptitle(f"Spectral quantile bands: measured vs predicted ({split_name})")
+    fig.tight_layout()
+    _save_fig(fig, out_dir / f"spectral_quantile_bands_{split_name}.png")
+
+
+def plot_representative_events(true_db: np.ndarray, pred_db: np.ndarray, band_nominal: np.ndarray,
+                                out_dir: Path, split_name: str) -> None:
+    """Per-sensor spectra for low/medium/high-vibration event groups (up to 15 events each)."""
+    true_tot = _per_sensor_total_rms(true_db)  # (N,5)
+    ev_mean_tot = true_tot.mean(axis=1)  # (N,) event-level amplitude used for binning, shared across sensors
+    hz_labels = [f"{hz:.4g}" for hz in band_nominal]
+    xpos = np.arange(len(band_nominal))
+    tiers = [(0, 25, "Low"), (37, 63, "Medium"), (75, 100, "High")]
+
+    fig, axes = plt.subplots(len(SENSORS), len(tiers), figsize=(4.0 * len(tiers), 3.0 * len(SENSORS)),
+                              sharex=True, sharey="row")
+    for row, s in enumerate(SENSORS):
+        for col, (lo, hi, label) in enumerate(tiers):
+            ax = axes[row, col]
+            th_lo, th_hi = np.percentile(ev_mean_tot, lo), np.percentile(ev_mean_tot, hi)
+            idx = np.where((ev_mean_tot >= th_lo) & (ev_mean_tot <= th_hi))[0]
+            chosen = idx[:15]
+            for i in chosen:
+                ax.plot(xpos, true_db[i, row, :], color="gray", alpha=0.4, linewidth=0.7)
+                ax.plot(xpos, pred_db[i, row, :], color="steelblue", alpha=0.4, linewidth=0.7, linestyle="--")
+            if len(chosen):
+                ax.plot(xpos, np.nanmean(true_db[chosen, row, :], axis=0), "o-", color="black", lw=1.5,
+                        label="Mean meas.")
+                ax.plot(xpos, np.nanmean(pred_db[chosen, row, :], axis=0), "o-", color="steelblue", lw=1.5,
+                        label="Mean pred.")
+            if row == 0:
+                ax.set_title(f"{label} vibration (n={len(chosen)})")
+            if col == 0:
+                ax.set_ylabel(f"{s}\ndB re 1 nm/s")
+            if row == len(SENSORS) - 1:
+                ax.set_xticks(xpos[::3]); ax.set_xticklabels(hz_labels[::3], rotation=45, ha="right", fontsize=7)
+            ax.grid(True, alpha=0.3)
+    axes[0, 0].legend(fontsize=6)
+    fig.suptitle(f"Representative event spectra by vibration level: measured (gray) vs predicted (blue) [{split_name}]")
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    _save_fig(fig, out_dir / f"representative_events_{split_name}.png")
+
+
 def to_jsonable(obj):
     if isinstance(obj, dict):
         return {str(k): to_jsonable(v) for k, v in obj.items()}
