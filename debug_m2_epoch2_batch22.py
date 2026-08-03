@@ -70,6 +70,14 @@ def _stats(t: torch.Tensor) -> dict:
     }
 
 
+def _retain(t: torch.Tensor, interm: dict, name: str) -> None:
+    """retain_grad() only if the tensor is actually part of the graph;
+    records it either way so _stats() can still report its forward value."""
+    if t.requires_grad:
+        t.retain_grad()
+    interm[name] = t
+
+
 def manual_forward(model, wf, meta, nv, r, track):
     """Re-derive M2Model.forward() by calling the model's own submodules
     (trunk, head, n_o0 buffer) so every intermediate can retain_grad().
@@ -82,7 +90,7 @@ def manual_forward(model, wf, meta, nv, r, track):
     encoder = model.trunk.encoder  # ResNet2DEncoder
     raw_mask = _infer_raw_valid_mask(wf, nv, encoder.padding_zero_tol)
     z_conv = encoder.encoder(wf)  # (B, C, H, T) pre-pool conv stack output
-    z_conv.retain_grad(); interm["z_conv"] = z_conv
+    _retain(z_conv, interm, "z_conv")
 
     # MaskedStatisticsPool internals, replicated read-only for instrumentation
     x = z_conv if z_conv.dim() == 4 else z_conv.unsqueeze(2)
@@ -93,44 +101,43 @@ def manual_forward(model, wf, meta, nv, r, track):
     summed = (x * mask).sum(dim=(2, 3))
     mean = summed / count
     second = (x.square() * mask).sum(dim=(2, 3)) / count
-    mean.retain_grad(); second.retain_grad()
-    interm["pool_mean"] = mean; interm["pool_second"] = second
+    _retain(mean, interm, "pool_mean"); _retain(second, interm, "pool_second")
 
     var = (second - mean.square()).clamp_min(0.0)
-    var.retain_grad(); interm["pool_var"] = var
+    _retain(var, interm, "pool_var")
     std = var.sqrt()
-    std.retain_grad(); interm["pool_std"] = std
+    _retain(std, interm, "pool_std")
 
     neg_inf = torch.finfo(x.dtype).min
     maxv = x.masked_fill(~time_mask[:, None, None, :], neg_inf).amax(dim=(2, 3))
     maxv = torch.where(torch.isfinite(maxv), maxv, torch.zeros_like(maxv))
     enc = torch.cat([mean, std, maxv], dim=1)
-    enc.retain_grad(); interm["encoder_out"] = enc
+    _retain(enc, interm, "encoder_out")
 
     meta_emb = model.trunk.meta_net(meta)
     amp = model.trunk.raw_amp(wf, raw_mask).to(dtype=enc.dtype)
-    amp.retain_grad(); interm["raw_amp_out"] = amp
+    _retain(amp, interm, "raw_amp_out")
     trunk_out = torch.cat([enc, meta_emb, amp], dim=1)
 
     # -- M2 head + physics decode, unrolled from M2Model.forward --
     out = model.head(trunk_out).float()
-    out.retain_grad(); interm["head_out"] = out
-    t_hat = out[:, 0]; t_hat.retain_grad(); interm["t_hat"] = t_hat
-    shape_logits = out[:, 1:]; shape_logits.retain_grad(); interm["shape_logits"] = shape_logits
+    _retain(out, interm, "head_out")
+    t_hat = out[:, 0]; _retain(t_hat, interm, "t_hat")
+    shape_logits = out[:, 1:]; _retain(shape_logits, interm, "shape_logits")
 
     import math
     ln10_10 = math.log(10.0) / 10.0
     log_probs = F.log_softmax(shape_logits * ln10_10, dim=1)
     s_hat = log_probs / ln10_10
-    s_hat.retain_grad(); interm["s_hat"] = s_hat
+    _retain(s_hat, interm, "s_hat")
     c_hat = t_hat.unsqueeze(1) + s_hat
-    c_hat.retain_grad(); interm["c_hat"] = c_hat
+    _retain(c_hat, interm, "c_hat")
 
     n_idx = (track - 1).clamp(0, 1)
     n_sel = model.n_o0[n_idx]
     corr = -20.0 * n_sel.unsqueeze(1) * torch.log10(r.unsqueeze(-1) / model.r0)
     pred = c_hat.unsqueeze(1) + corr
-    pred.retain_grad(); interm["pred"] = pred
+    _retain(pred, interm, "pred")
 
     return pred, interm
 
@@ -143,6 +150,7 @@ def run_backward_case(model, batch, stats, out_dir: Path, case_name: str, loss_f
     """
     wf, meta, nv, tgt, r, track = batch
     model.zero_grad(set_to_none=True)
+    print(f"     [DIAG] pre-forward torch.is_grad_enabled()={torch.is_grad_enabled()}")
 
     anomaly_error = None
     interm = {}
@@ -238,6 +246,9 @@ def main() -> None:
         raise SystemExit(f"[FATAL] train_loader had fewer than {TARGET_BATCH_IDX + 1} batches this epoch.")
 
     print(f"Reached epoch={TARGET_EPOCH} batch_idx={TARGET_BATCH_IDX}. Instrumenting (no optimizer step will follow).")
+    conv1_w = model.trunk.encoder.encoder[0].conv1.weight
+    print(f"[DIAG] torch.is_grad_enabled()={torch.is_grad_enabled()}  model.training={model.training}  "
+          f"conv1.weight.requires_grad={conv1_w.requires_grad}")
     wf, meta, nv, tgt, r, track = target_batch
 
     # 1. Save model + optimizer state immediately before the forward pass.
