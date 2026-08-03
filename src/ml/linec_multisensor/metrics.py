@@ -24,6 +24,19 @@ from src.ml.spectral.eval_spectral import _mae, _pearson, _r2, _rmse, _spearman,
 
 from src.ml.linec_multisensor.data import SENSORS
 
+# Colorblind-friendly palette: Okabe-Ito accents (safe under all common CVD
+# types) for measured/predicted contrast, viridis for the 5 discrete sensors.
+MEASURED_COLOR = "black"
+MEASURED_COLOR_LIGHT = "#7f7f7f"
+PREDICTED_COLOR = "#E69F00"        # orange
+PREDICTED_COLOR_LIGHT = "#F2C46D"
+ACCENT_COLOR = "#0072B2"           # blue
+FIT_COLOR = "#D55E00"              # vermillion
+
+
+def _sensor_colors(n: int) -> np.ndarray:
+    return plt.cm.viridis(np.linspace(0.05, 0.90, n))
+
 
 @torch.no_grad()
 def run_inference(model: nn.Module, loader: DataLoader, device: torch.device):
@@ -157,7 +170,7 @@ def plot_measured_vs_predicted(true_db: np.ndarray, pred_db: np.ndarray, out_dir
     true_tot = _per_sensor_total_rms(true_db)
     pred_tot = _per_sensor_total_rms(pred_db)
     fig, ax = plt.subplots(figsize=(5.5, 5.5))
-    colors = plt.cm.tab10(np.linspace(0, 1, len(SENSORS)))
+    colors = _sensor_colors(len(SENSORS))
     for j, s in enumerate(SENSORS):
         ax.scatter(true_tot[:, j], pred_tot[:, j], s=12, alpha=0.6, color=colors[j], label=s, edgecolors="none")
     lo = float(min(true_tot.min(), pred_tot.min())); hi = float(max(true_tot.max(), pred_tot.max()))
@@ -176,7 +189,7 @@ def plot_measured_vs_predicted(true_db: np.ndarray, pred_db: np.ndarray, out_dir
 
 def plot_per_band_rmse(band_nominal: np.ndarray, per_band_rmse: List[float], out_dir: Path, split_name: str) -> None:
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.bar([f"{hz:g}" for hz in band_nominal], per_band_rmse, color="steelblue")
+    ax.bar([f"{hz:g}" for hz in band_nominal], per_band_rmse, color=ACCENT_COLOR)
     ax.set_xlabel("nominal band (Hz)"); ax.set_ylabel("RMSE (dB)")
     ax.set_title(f"Per-band macro RMSE ({split_name})")
     plt.setp(ax.get_xticklabels(), rotation=60, ha="right", fontsize=7)
@@ -189,9 +202,9 @@ def plot_training_history(history: List[Dict], out_dir: Path) -> None:
         return
     epochs = [h["epoch"] for h in history]
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    axes[0].plot(epochs, [h["train_loss"] for h in history], label="train_loss")
+    axes[0].plot(epochs, [h["train_loss"] for h in history], color=ACCENT_COLOR, label="train_loss")
     axes[0].set_xlabel("epoch"); axes[0].set_ylabel("composite loss"); axes[0].legend()
-    axes[1].plot(epochs, [h["val_macro_rmse_db"] for h in history], color="darkorange")
+    axes[1].plot(epochs, [h["val_macro_rmse_db"] for h in history], color=PREDICTED_COLOR)
     axes[1].set_xlabel("epoch"); axes[1].set_ylabel("val macro RMSE (dB)")
     fig.tight_layout()
     _save_fig(fig, out_dir / "training_history.png")
@@ -201,9 +214,9 @@ def plot_amplitude_compression(true_db: np.ndarray, pred_db: np.ndarray, out_dir
     true_tot = _per_sensor_total_rms(true_db).reshape(-1)
     pred_tot = _per_sensor_total_rms(pred_db).reshape(-1)
     slope, intercept = np.polyfit(true_tot, pred_tot, 1)
-    fig, ax = plt.subplots(figsize=(5.5, 5)); ax.scatter(true_tot, pred_tot, s=10, alpha=0.4)
+    fig, ax = plt.subplots(figsize=(5.5, 5)); ax.scatter(true_tot, pred_tot, s=10, alpha=0.4, color=ACCENT_COLOR)
     xs = np.linspace(true_tot.min(), true_tot.max(), 100)
-    ax.plot(xs, slope * xs + intercept, "r-", label=f"fit slope={slope:.3f}")
+    ax.plot(xs, slope * xs + intercept, color=FIT_COLOR, linestyle="-", label=f"fit slope={slope:.3f}")
     ax.plot(xs, xs, "k--", lw=1, label="1:1")
     ax.set_xlabel("measured total RMS (mm/s)"); ax.set_ylabel("predicted total RMS (mm/s)")
     ax.set_title(f"Amplitude compression ({split_name})"); ax.legend(fontsize=8)
@@ -219,10 +232,10 @@ def plot_mean_median_spectra(true_db: np.ndarray, pred_db: np.ndarray, band_nomi
     fig, axes = plt.subplots(1, len(SENSORS), figsize=(4.0 * len(SENSORS), 4.5), sharey=True)
     for j, (ax, s) in enumerate(zip(axes, SENSORS)):
         t, p = true_db[:, j, :], pred_db[:, j, :]
-        ax.plot(xpos, np.nanmean(t, axis=0), "o-", color="black", lw=1.5, label="Measured mean")
-        ax.plot(xpos, np.nanmedian(t, axis=0), "s--", color="gray", lw=1.2, label="Measured median")
-        ax.plot(xpos, np.nanmean(p, axis=0), "o-", color="steelblue", lw=1.5, label="Predicted mean")
-        ax.plot(xpos, np.nanmedian(p, axis=0), "s--", color="cornflowerblue", lw=1.2, label="Predicted median")
+        ax.plot(xpos, np.nanmean(t, axis=0), "o-", color=MEASURED_COLOR, lw=1.5, label="Measured mean")
+        ax.plot(xpos, np.nanmedian(t, axis=0), "s--", color=MEASURED_COLOR_LIGHT, lw=1.2, label="Measured median")
+        ax.plot(xpos, np.nanmean(p, axis=0), "o-", color=PREDICTED_COLOR, lw=1.5, label="Predicted mean")
+        ax.plot(xpos, np.nanmedian(p, axis=0), "s--", color=PREDICTED_COLOR_LIGHT, lw=1.2, label="Predicted median")
         ax.set_xticks(xpos); ax.set_xticklabels(hz_labels, rotation=45, ha="right", fontsize=7)
         ax.set_title(s); ax.grid(True, alpha=0.3)
         if j == 0:
@@ -246,7 +259,7 @@ def plot_random_events(true_db: np.ndarray, pred_db: np.ndarray, events: np.ndar
     chosen = np.sort(rng.choice(n, size=k, replace=False))
     hz_labels = [f"{hz:.4g}" for hz in band_nominal]
     xpos = np.arange(len(band_nominal))
-    colors = plt.cm.tab10(np.linspace(0, 1, len(SENSORS)))
+    colors = _sensor_colors(len(SENSORS))
 
     ncols = 5
     nrows = int(np.ceil(k / ncols))
@@ -289,12 +302,12 @@ def plot_spectral_quantile_bands(true_db: np.ndarray, pred_db: np.ndarray, band_
         q50p = np.median(p, axis=0)
         q75p, q90p = np.percentile(p, 75, axis=0), np.percentile(p, 90, axis=0)
 
-        ax.fill_between(xpos, q10t, q90t, alpha=0.12, color="black", label="Meas. p10\u2013p90")
-        ax.fill_between(xpos, q25t, q75t, alpha=0.20, color="black", label="Meas. p25\u2013p75")
-        ax.fill_between(xpos, q10p, q90p, alpha=0.12, color="steelblue", label="Pred. p10\u2013p90")
-        ax.fill_between(xpos, q25p, q75p, alpha=0.20, color="steelblue", label="Pred. p25\u2013p75")
-        ax.plot(xpos, q50t, "o-", color="black", lw=1.4, label="Meas. median")
-        ax.plot(xpos, q50p, "o-", color="steelblue", lw=1.4, label="Pred. median")
+        ax.fill_between(xpos, q10t, q90t, alpha=0.12, color=MEASURED_COLOR, label="Meas. p10\u2013p90")
+        ax.fill_between(xpos, q25t, q75t, alpha=0.20, color=MEASURED_COLOR, label="Meas. p25\u2013p75")
+        ax.fill_between(xpos, q10p, q90p, alpha=0.12, color=PREDICTED_COLOR, label="Pred. p10\u2013p90")
+        ax.fill_between(xpos, q25p, q75p, alpha=0.20, color=PREDICTED_COLOR, label="Pred. p25\u2013p75")
+        ax.plot(xpos, q50t, "o-", color=MEASURED_COLOR, lw=1.4, label="Meas. median")
+        ax.plot(xpos, q50p, "o-", color=PREDICTED_COLOR, lw=1.4, label="Pred. median")
         ax.set_xticks(xpos); ax.set_xticklabels(hz_labels, rotation=45, ha="right", fontsize=7)
         ax.set_title(s); ax.grid(True, alpha=0.3)
         if j == 0:
@@ -324,12 +337,12 @@ def plot_representative_events(true_db: np.ndarray, pred_db: np.ndarray, band_no
             idx = np.where((ev_mean_tot >= th_lo) & (ev_mean_tot <= th_hi))[0]
             chosen = idx[:15]
             for i in chosen:
-                ax.plot(xpos, true_db[i, row, :], color="gray", alpha=0.4, linewidth=0.7)
-                ax.plot(xpos, pred_db[i, row, :], color="steelblue", alpha=0.4, linewidth=0.7, linestyle="--")
+                ax.plot(xpos, true_db[i, row, :], color=MEASURED_COLOR_LIGHT, alpha=0.4, linewidth=0.7)
+                ax.plot(xpos, pred_db[i, row, :], color=PREDICTED_COLOR, alpha=0.4, linewidth=0.7, linestyle="--")
             if len(chosen):
-                ax.plot(xpos, np.nanmean(true_db[chosen, row, :], axis=0), "o-", color="black", lw=1.5,
+                ax.plot(xpos, np.nanmean(true_db[chosen, row, :], axis=0), "o-", color=MEASURED_COLOR, lw=1.5,
                         label="Mean meas.")
-                ax.plot(xpos, np.nanmean(pred_db[chosen, row, :], axis=0), "o-", color="steelblue", lw=1.5,
+                ax.plot(xpos, np.nanmean(pred_db[chosen, row, :], axis=0), "o-", color=PREDICTED_COLOR, lw=1.5,
                         label="Mean pred.")
             if row == 0:
                 ax.set_title(f"{label} vibration (n={len(chosen)})")
@@ -339,7 +352,7 @@ def plot_representative_events(true_db: np.ndarray, pred_db: np.ndarray, band_no
                 ax.set_xticks(xpos[::3]); ax.set_xticklabels(hz_labels[::3], rotation=45, ha="right", fontsize=7)
             ax.grid(True, alpha=0.3)
     axes[0, 0].legend(fontsize=6)
-    fig.suptitle(f"Representative event spectra by vibration level: measured (gray) vs predicted (blue) [{split_name}]")
+    fig.suptitle(f"Representative event spectra by vibration level: measured (gray) vs predicted (orange) [{split_name}]")
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
     _save_fig(fig, out_dir / f"representative_events_{split_name}.png")
 
