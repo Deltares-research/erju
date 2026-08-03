@@ -41,6 +41,10 @@ from src.ml.spectral.config_spectral_v001 import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# sqrt's backward (0.5/sqrt(x)) diverges as x->0; clamping the forward value
+# alone does not protect the gradient, so an epsilon is added before sqrt.
+SAFE_SQRT_EPS = 1e-6
+
 
 def _act(name: str) -> nn.Module:
     return {"relu": nn.ReLU(), "gelu": nn.GELU(), "silu": nn.SiLU()}.get(
@@ -169,7 +173,8 @@ class MaskedStatisticsPool(nn.Module):
         summed = (x * mask).sum(dim=(2, 3))
         mean = summed / count
         second = (x.square() * mask).sum(dim=(2, 3)) / count
-        std = (second - mean.square()).clamp_min(0.0).sqrt()
+        var = (second - mean.square()).clamp_min(0.0)
+        std = torch.sqrt(var + SAFE_SQRT_EPS)
 
         neg_inf = torch.finfo(x.dtype).min
         maxv = x.masked_fill(~time_mask[:, None, None, :], neg_inf).amax(dim=(2, 3))
@@ -202,7 +207,8 @@ class RawAmplitudeFeatures(nn.Module):
         xf = x.float()
         mf = mask.float()
         count = (mf.sum(dim=(1, 2)) * x.shape[1]).clamp_min(1.0)
-        rms = ((xf.square() * mf).sum(dim=(1, 2)) / count).clamp_min(0.0).sqrt()
+        mean_sq = ((xf.square() * mf).sum(dim=(1, 2)) / count).clamp_min(0.0)
+        rms = torch.sqrt(mean_sq + SAFE_SQRT_EPS)
         peak = xf.abs().masked_fill(~mask, 0.0).amax(dim=(1, 2))
         feats = [torch.log1p(rms), torch.log1p(peak)]
         if include_crest:
