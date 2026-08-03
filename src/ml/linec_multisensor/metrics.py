@@ -211,6 +211,69 @@ def plot_amplitude_compression(true_db: np.ndarray, pred_db: np.ndarray, out_dir
     _save_fig(fig, out_dir / f"amplitude_compression_{split_name}.png")
 
 
+def plot_mean_median_spectra(true_db: np.ndarray, pred_db: np.ndarray, band_nominal: np.ndarray,
+                              out_dir: Path, split_name: str) -> None:
+    """Per-sensor mean/median measured-vs-predicted spectra (one panel per sensor)."""
+    hz_labels = [f"{hz:.4g}" for hz in band_nominal]
+    xpos = np.arange(len(band_nominal))
+    fig, axes = plt.subplots(1, len(SENSORS), figsize=(4.0 * len(SENSORS), 4.5), sharey=True)
+    for j, (ax, s) in enumerate(zip(axes, SENSORS)):
+        t, p = true_db[:, j, :], pred_db[:, j, :]
+        ax.plot(xpos, np.nanmean(t, axis=0), "o-", color="black", lw=1.5, label="Measured mean")
+        ax.plot(xpos, np.nanmedian(t, axis=0), "s--", color="gray", lw=1.2, label="Measured median")
+        ax.plot(xpos, np.nanmean(p, axis=0), "o-", color="steelblue", lw=1.5, label="Predicted mean")
+        ax.plot(xpos, np.nanmedian(p, axis=0), "s--", color="cornflowerblue", lw=1.2, label="Predicted median")
+        ax.set_xticks(xpos); ax.set_xticklabels(hz_labels, rotation=45, ha="right", fontsize=7)
+        ax.set_title(s); ax.grid(True, alpha=0.3)
+        if j == 0:
+            ax.set_ylabel("Velocity band level (dB re 1 nm/s)")
+            ax.legend(fontsize=7)
+    fig.supxlabel("Band nominal frequency (Hz)")
+    fig.suptitle(f"Mean and median spectra: measured vs predicted ({split_name})")
+    fig.tight_layout()
+    _save_fig(fig, out_dir / f"mean_median_spectra_{split_name}.png")
+
+
+def plot_random_events(true_db: np.ndarray, pred_db: np.ndarray, events: np.ndarray,
+                        band_nominal: np.ndarray, out_dir: Path, split_name: str,
+                        n_events: int = 10, seed: int = 20260803) -> None:
+    """Grid of randomly chosen individual events: measured (solid) vs predicted (dashed), all 5 sensors overlaid."""
+    n = true_db.shape[0]
+    if n == 0:
+        return
+    k = min(n_events, n)
+    rng = np.random.default_rng(seed)
+    chosen = np.sort(rng.choice(n, size=k, replace=False))
+    hz_labels = [f"{hz:.4g}" for hz in band_nominal]
+    xpos = np.arange(len(band_nominal))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(SENSORS)))
+
+    ncols = 5
+    nrows = int(np.ceil(k / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.0 * ncols, 3.5 * nrows), sharex=True, sharey=True)
+    axes = np.asarray(axes).reshape(-1)
+    for ax_i, ax in enumerate(axes):
+        if ax_i >= k:
+            ax.axis("off")
+            continue
+        i = int(chosen[ax_i])
+        rmse_i = float(_rmse(true_db[i].reshape(-1), pred_db[i].reshape(-1)))
+        for j, s in enumerate(SENSORS):
+            ax.plot(xpos, true_db[i, j], "o-", color=colors[j], lw=1.1, ms=2.5,
+                    label=f"{s} meas." if ax_i == 0 else None)
+            ax.plot(xpos, pred_db[i, j], "s--", color=colors[j], lw=1.0, ms=2.2, alpha=0.7,
+                    label=f"{s} pred." if ax_i == 0 else None)
+        ax.set_title(f"{events[i]}\nRMSE={rmse_i:.2f} dB", fontsize=8)
+        ax.set_xticks(xpos[::3]); ax.set_xticklabels(hz_labels[::3], rotation=45, ha="right", fontsize=7)
+        ax.grid(True, alpha=0.25)
+    axes[0].legend(fontsize=6, ncol=1, loc="upper left")
+    fig.supxlabel("Band nominal frequency (Hz)")
+    fig.supylabel("Velocity band level (dB re 1 nm/s)")
+    fig.suptitle(f"{k} random {split_name} events: measured (solid) vs predicted (dashed)", fontsize=13)
+    fig.tight_layout(rect=(0.02, 0.02, 1, 0.95))
+    _save_fig(fig, out_dir / f"random_{k}_{split_name}_events.png")
+
+
 def to_jsonable(obj):
     if isinstance(obj, dict):
         return {str(k): to_jsonable(v) for k, v in obj.items()}

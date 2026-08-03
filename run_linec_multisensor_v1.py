@@ -42,8 +42,8 @@ from src.ml.linec_multisensor.data import SENSORS, build_datasets, make_loader
 from src.ml.linec_multisensor.engine import load_best_checkpoint, train_model
 from src.ml.linec_multisensor.metrics import (
     bootstrap_macro_rmse_ci, compute_full_metrics, plot_amplitude_compression,
-    plot_measured_vs_predicted, plot_per_band_rmse, plot_training_history,
-    run_inference, to_jsonable,
+    plot_mean_median_spectra, plot_measured_vs_predicted, plot_per_band_rmse,
+    plot_random_events, plot_training_history, run_inference, to_jsonable,
 )
 from src.ml.linec_multisensor.models import build_model, count_parameters
 
@@ -198,6 +198,8 @@ def main() -> None:
         plot_measured_vs_predicted(true_db, pred_db, out_dir, split_name)
         plot_per_band_rmse(stats.band_nominal_hz, metrics["per_band_rmse_db"], out_dir, split_name)
         plot_amplitude_compression(true_db, pred_db, out_dir, split_name)
+        plot_mean_median_spectra(true_db, pred_db, stats.band_nominal_hz, out_dir, split_name)
+        plot_random_events(true_db, pred_db, events, stats.band_nominal_hz, out_dir, split_name, n_events=10, seed=args.seed)
         print(f"  {split_name}: macro_rmse={metrics['macro_rmse_db']:.3f} dB  "
               f"total_rms_r2={metrics['total_rms']['r2']:.3f}  "
               f"strong_event_rmse={metrics['strong_event_metrics']['macro_rmse_db']:.3f} dB")
