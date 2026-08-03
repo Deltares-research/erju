@@ -5,10 +5,18 @@ Train + evaluate ONE of {M0, M1, M2} for one seed on the 5-sensor Line-C
 spectral target (MP4/MP8/MP10/MP1/MP2, 19 bands), using the validated
 51-channel waveform product and the fixed 1,697-event split.
 
+Clean rerun (2026-08-03): FP32 only everywhere (no autocast/bfloat16). ALL
+models (M0, M1, M2) REQUIRE CUDA and abort immediately (no silent CPU
+fallback) if it is not available. Every run logs hostname, SLURM job id,
+CUDA_VISIBLE_DEVICES, torch.cuda.is_available(), GPU name, model/seed/
+parameter count. A run that never produces a finite validation checkpoint is
+marked invalid (RUN_INVALID marker file) and does NOT produce results.json.
+
 Examples
 --------
-Local deterministic smoke test:
-    venv\\Scripts\\python.exe run_linec_multisensor_v1.py --model M1 --smoke-n 24 --epochs 3 --num-workers 0
+Local smoke check (requires a local CUDA GPU; syntax/import/data-loading + a
+short 3-epoch run):
+    venv\\Scripts\\python.exe run_linec_multisensor_v1.py --model M0 --seed 42 --smoke --num-workers 0
 
 Full cluster run (one model, one seed):
     python run_linec_multisensor_v1.py --model M2 --seed 42 \\
@@ -21,6 +29,7 @@ import argparse
 import json
 import os
 import random
+import socket
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -44,13 +53,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", required=True, choices=["M0", "M1", "M2"])
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output-root", type=Path, default=None)
+    p.add_argument("--smoke", action="store_true",
+                    help="short 3-epoch stability smoke test (implies --smoke-n 32 --epochs 3 --patience 3 "
+                         "unless those are also given explicitly)")
     p.add_argument("--smoke-n", type=int, default=None, help="subsample N events per split for a fast smoke test")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--patience", type=int, default=None)
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--num-workers", type=int, default=0)
     p.add_argument("--n-boot", type=int, default=1000)
-    p.add_argument("--no-mixed-precision", action="store_true")
     return p.parse_args()
 
 
@@ -90,13 +101,45 @@ def _save_predictions(pred_db, true_db, r_m, tracks, events, split_name, band_no
     df.to_parquet(out_dir / f"predictions_{split_name}.parquet", index=False)
 
 
+def _log_environment(model_name: str) -> torch.device:
+    """Log hostname/SLURM/CUDA environment; abort immediately if CUDA is unavailable (no CPU fallback, ever)."""
+    hostname = socket.gethostname()
+    slurm_job_id = os.environ.get("SLURM_JOB_ID", "N/A")
+    cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "N/A")
+    cuda_avail = torch.cuda.is_available()
+    gpu_name = torch.cuda.get_device_name(0) if cuda_avail else "N/A"
+
+    print(f"hostname             : {hostname}")
+    print(f"SLURM_JOB_ID         : {slurm_job_id}")
+    print(f"CUDA_VISIBLE_DEVICES : {cuda_visible}")
+    print(f"torch.cuda.is_available(): {cuda_avail}")
+    print(f"GPU name             : {gpu_name}")
+
+    if not cuda_avail:
+        raise SystemExit(
+            f"[FATAL] model={model_name} requires CUDA but torch.cuda.is_available()=False "
+            f"(hostname={hostname}, SLURM_JOB_ID={slurm_job_id}, CUDA_VISIBLE_DEVICES={cuda_visible}). "
+            f"Aborting -- this experiment never falls back to CPU."
+        )
+    return torch.device("cuda")
+
+
 def main() -> None:
     args = parse_args()
     set_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    smoke_n = args.smoke_n
+    epochs = args.epochs
+    patience = args.patience
+    if args.smoke:
+        smoke_n = smoke_n if smoke_n is not None else 32
+        epochs = epochs if epochs is not None else 3
+        patience = patience if patience is not None else 3
+
+    device = _log_environment(args.model)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    suffix = f"_smoke{args.smoke_n}" if args.smoke_n else ""
+    suffix = f"_smoke{smoke_n}" if smoke_n else ""
     root = args.output_root or _default_root()
     out_dir = root / f"{args.model}_seed{args.seed}{suffix}_{stamp}"
     out_dir.mkdir(parents=True, exist_ok=False)
@@ -106,7 +149,7 @@ def main() -> None:
     print(f"output: {out_dir}")
     print("=" * 78)
 
-    train_ds, val_ds, test_ds, stats, events_df = build_datasets(smoke_n=args.smoke_n)
+    train_ds, val_ds, test_ds, stats, events_df = build_datasets(smoke_n=smoke_n)
     print(f"Events: train={len(train_ds)} val={len(val_ds)} test={len(test_ds)}  n_meta={stats.n_meta}")
 
     batch_size = args.batch_size or 32
@@ -119,23 +162,30 @@ def main() -> None:
     print(f"Model parameters: {n_params:,}")
 
     config = {
-        "model": args.model, "seed": args.seed, "smoke_n": args.smoke_n,
-        "epochs_arg": args.epochs, "patience_arg": args.patience, "batch_size": batch_size,
+        "model": args.model, "seed": args.seed, "smoke": args.smoke, "smoke_n": smoke_n,
+        "epochs_arg": epochs, "patience_arg": patience, "batch_size": batch_size,
         "n_meta": stats.n_meta, "sensors": SENSORS, "parameter_count": n_params,
         "git_commit": git_commit(), "device": str(device), "torch_version": torch.__version__,
-        "created": datetime.now().isoformat(),
+        "hostname": socket.gethostname(), "slurm_job_id": os.environ.get("SLURM_JOB_ID", "N/A"),
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES", "N/A"),
+        "precision": "float32", "created": datetime.now().isoformat(),
     }
     (out_dir / "config.json").write_text(json.dumps(config, indent=2))
     stats.save(out_dir / "data_stats.pkl")
 
-    history = train_model(
+    history, best_epoch = train_model(
         model, train_loader, val_loader, device, out_dir,
         target_mean=stats.target_mean, target_std=stats.target_std,
-        epochs=args.epochs, patience=args.patience, mixed_prec=not args.no_mixed_precision,
+        epochs=epochs, patience=patience,
     )
+    plot_training_history(history, out_dir)
+
+    if best_epoch == -1:
+        print(f"[INVALID RUN] no finite validation checkpoint was ever recorded; see {out_dir / 'RUN_INVALID'}")
+        return
+
     best_epoch = load_best_checkpoint(model, out_dir, device)
     print(f"Loaded best checkpoint from epoch {best_epoch}")
-    plot_training_history(history, out_dir)
 
     results = {"config": config, "best_epoch": best_epoch, "parameter_count": n_params}
     for split_name, loader, ds in (("val", val_loader, val_ds), ("test", test_loader, test_ds)):

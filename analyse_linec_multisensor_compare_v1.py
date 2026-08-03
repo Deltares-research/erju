@@ -54,6 +54,8 @@ def _load_pred_tensor(run_dir: Path, split_name: str):
 
 
 def _results_json(run_dir: Path) -> dict:
+    if (run_dir / "RUN_INVALID").exists():
+        raise RuntimeError(f"{run_dir} is marked RUN_INVALID (no finite validation checkpoint) -- cannot compare it")
     return json.loads((run_dir / "results.json").read_text())
 
 

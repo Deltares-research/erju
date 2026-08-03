@@ -181,6 +181,11 @@ def load_raw_tables():
     N_VALID_250HZ = np.clip(np.round(N_SAMPLES_ORIG * 250.0 / 1000.0).astype(np.int64), 1, N_SAMPLES)
     R = _load_active_track_distances(TRACK)  # (n,5) meters
 
+    if not np.isfinite(L).all():
+        raise ValueError("Non-finite values in spectral target matrix L after filtering to fully_inside_valid_range")
+    if not np.isfinite(R).all():
+        raise ValueError("Non-finite values in active-track distance matrix R")
+
     for split_name in ("train", "val", "test"):
         n = int(np.sum(SPLIT == split_name))
         print(f"  split={split_name:5s} n_events={n}")
@@ -204,8 +209,11 @@ def _load_n_o0() -> np.ndarray:
             f"run analyse_linec_spectral_oracle_v1.py (full, non-smoke) first."
         )
     curves = pd.read_csv(path)
-    return np.stack([curves["n_track1_O0"].to_numpy(dtype=np.float64),
+    n_o0 = np.stack([curves["n_track1_O0"].to_numpy(dtype=np.float64),
                       curves["n_track2_O0"].to_numpy(dtype=np.float64)], axis=0)
+    if not np.isfinite(n_o0).all():
+        raise ValueError(f"Non-finite values in frozen O0 n_track curve loaded from {path}")
+    return n_o0
 
 
 # ── Preprocessing (fit on TRAIN only) ─────────────────────────────────────────
@@ -262,6 +270,8 @@ def build_meta_matrix(raw: dict, stats: DataStats) -> np.ndarray:
 
     meta = np.hstack([ohe_mat, speed_z, speed_missing, dist_z]).astype(np.float32)
     assert meta.shape[1] == stats.n_meta
+    if not np.isfinite(meta).all():
+        raise ValueError("Non-finite values in metadata matrix after preprocessing")
     return meta
 
 

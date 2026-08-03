@@ -10,10 +10,16 @@ Composite loss shared by M0/M1/M2 (fixed weights, no sweep):
 
 All four terms are computed identically from the model's final (B,5,19) dB
 output, so M0/M1/M2 are directly comparable.
+
+Clean rerun (2026-08-03): FP32 only everywhere. Total-level is computed via
+a float32 `torch.logsumexp` (stable for any input magnitude -- no
+`10**(x/10)` overflow risk), and CCC uses epsilon-floored variances plus an
+output clamp to guard against near-zero-variance batches.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Dict, Tuple
 
 import torch
@@ -22,6 +28,8 @@ import torch.nn.functional as F
 SPECTRAL_HUBER_DELTA = 1.0     # standardized (z) units
 TOTAL_LEVEL_HUBER_DELTA = 1.5  # dB
 SHAPE_HUBER_DELTA = 1.5        # dB
+_CCC_EPS = 1e-6
+_LN10_10 = math.log(10.0) / 10.0  # dB -> natural-log-power conversion factor
 
 LOSS_WEIGHTS: Dict[str, float] = {
     "spectral": 1.0,
@@ -33,24 +41,33 @@ LOSS_WEIGHTS: Dict[str, float] = {
 
 def total_level_db(x_db: torch.Tensor) -> torch.Tensor:
     """(B,5,19) dB -> (B,) event total level: mean across sensors of each
-    sensor's own 10*log10(sum_f 10**(x/10))."""
-    power = torch.pow(10.0, x_db / 10.0)
-    sensor_total = 10.0 * torch.log10(power.sum(dim=-1).clamp_min(1e-30))  # (B,5)
-    return sensor_total.mean(dim=1)  # (B,)
+    sensor's own 10*log10(sum_f 10**(x/10)), via a stable float32 logsumexp
+    (equivalent to the direct pow/sum/log10 form but immune to overflow)."""
+    return _per_sensor_total_db(x_db).mean(dim=1)  # (B,)
 
 
 def _per_sensor_total_db(x_db: torch.Tensor) -> torch.Tensor:
-    """(B,5,19) dB -> (B,5) per-sensor total level."""
-    power = torch.pow(10.0, x_db / 10.0)
-    return 10.0 * torch.log10(power.sum(dim=-1).clamp_min(1e-30))
+    """(B,5,19) dB -> (B,5) per-sensor total level (stable float32 logsumexp)."""
+    x32 = x_db.float()
+    nat = torch.logsumexp(x32 * _LN10_10, dim=-1)  # natural-log(sum power)
+    return nat / _LN10_10
 
 
 def _ccc_loss(pred: torch.Tensor, true: torch.Tensor) -> torch.Tensor:
-    """1 - Lin's concordance correlation coefficient, batch-level."""
+    """1 - Lin's concordance correlation coefficient, batch-level.
+
+    Variances are epsilon-floored (near-zero-variance batches would otherwise
+    make the ratio ill-conditioned) and the final CCC is clamped to a valid
+    [-1, 1] range before subtracting from 1, so a pathological batch can only
+    ever contribute a bounded loss value.
+    """
     pm, tm = pred.mean(), true.mean()
-    pv, tv = pred.var(unbiased=False), true.var(unbiased=False)
+    pv = pred.var(unbiased=False).clamp_min(_CCC_EPS)
+    tv = true.var(unbiased=False).clamp_min(_CCC_EPS)
     cov = ((pred - pm) * (true - tm)).mean()
-    ccc = (2.0 * cov) / (pv + tv + (pm - tm) ** 2 + 1e-12)
+    denom = (pv + tv + (pm - tm) ** 2).clamp_min(_CCC_EPS)
+    ccc = (2.0 * cov) / denom
+    ccc = ccc.clamp(-1.0 + 1e-6, 1.0 - 1e-6)
     return 1.0 - ccc
 
 

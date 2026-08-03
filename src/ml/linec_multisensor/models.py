@@ -9,6 +9,10 @@ Reuses (read-only import, not modified):
         FusionHead, RawAmplitudeFeatures, _infer_raw_valid_mask, count_parameters}
     src.ml.spectral.config_spectral_v001.get_config("S6_amp").arch
         (the exact S6 no-BatchNorm architecture hyperparameters)
+
+Clean rerun (2026-08-03): FP32 only, no autocast/bfloat16 anywhere. M2's
+shape normalisation uses a float32 F.log_softmax (numerically stable for any
+logit magnitude).
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from src.ml.spectral.config_spectral_v001 import get_config
 from src.ml.spectral.models_spectral import (
@@ -111,15 +116,15 @@ class M2Model(nn.Module):
     def forward(self, wf: torch.Tensor, meta: torch.Tensor, n_valid: torch.Tensor,
                 r: torch.Tensor, track: torch.Tensor) -> torch.Tensor:
         z = self.trunk(wf, meta, n_valid)
-        out = self.head(z)
+        out = self.head(z).float()   # clean run: fp32 only
         t_hat = out[:, 0]            # (B,)
         shape_logits = out[:, 1:]    # (B, 19)
 
-        # Energy-normalise: sum_f 10**(S_hat[f]/10) = 1
+        # Energy-normalise via float32 log_softmax: sum_f 10**(S_hat[f]/10) = 1
         ln10_10 = math.log(10.0) / 10.0
-        norm_db = torch.logsumexp(shape_logits * ln10_10, dim=1) / ln10_10
-        s_hat = shape_logits - norm_db.unsqueeze(1)  # (B, 19)
-        c_hat = t_hat.unsqueeze(1) + s_hat            # (B, 19) source spectrum at r0
+        log_probs = F.log_softmax(shape_logits * ln10_10, dim=1)  # natural-log domain
+        s_hat = log_probs / ln10_10                   # (B, 19) energy-normalised dB shape
+        c_hat = t_hat.unsqueeze(1) + s_hat             # (B, 19) source spectrum at r0
 
         n_idx = (track - 1).clamp(0, 1)               # track {1,2} -> row {0,1}
         n_sel = self.n_o0[n_idx]                       # (B, 19) frozen

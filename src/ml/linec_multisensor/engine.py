@@ -1,6 +1,13 @@
 """engine.py
 ============
 Training loop, early stopping, checkpointing and history for M0/M1/M2.
+
+Clean rerun (2026-08-03): FP32 only -- no autocast/bfloat16 anywhere. Every
+batch is checked for finiteness at each stage (inputs, predictions, loss
+components, gradients); validation macro RMSE is checked too. The instant a
+non-finite value appears, a diagnostic artifact is written and the run
+aborts (see stability.py) -- batches are never skipped silently.
+
 Fixed hyperparameters (documented, not swept):
 
     optimizer      AdamW(lr=1e-4, weight_decay=1e-4)
@@ -9,16 +16,15 @@ Fixed hyperparameters (documented, not swept):
     epochs         250 (full) / --epochs override for smoke
     patience       40 (full, early stopping) / --patience override for smoke
     grad_clip      1.0 (max grad norm)
-    mixed_prec     bf16 autocast on CUDA only (identical for all 3 models)
+    precision      float32 only
 """
 
 from __future__ import annotations
 
 import json
 import time
-from contextlib import nullcontext
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -26,34 +32,45 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from src.ml.linec_multisensor.losses import composite_loss
+from src.ml.linec_multisensor.stability import save_diagnostic_and_abort
 
 TRAIN_HP = dict(lr=1e-4, weight_decay=1e-4, batch_size=32, epochs=250, patience=40, grad_clip=1.0)
 
 
-def _autocast(device: torch.device, enabled: bool):
-    if enabled and device.type == "cuda":
-        return torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
-    return nullcontext()
+def _check_batch_finite(stage: str, epoch: int, batch_idx: int, out_dir: Path, **tensors) -> None:
+    for name, t in tensors.items():
+        if isinstance(t, torch.Tensor) and not bool(torch.isfinite(t).all()):
+            save_diagnostic_and_abort(out_dir, stage, epoch, batch_idx, tensors,
+                                       message=f"non-finite values in '{name}'")
 
 
 @torch.no_grad()
-def _macro_rmse_db(model: nn.Module, loader: DataLoader, device: torch.device) -> float:
+def _evaluate(model: nn.Module, loader: DataLoader, device: torch.device,
+              out_dir: Path, epoch: int) -> float:
     model.eval()
     se, n = 0.0, 0
-    for wf, meta, nv, tgt, r, track, _ in loader:
+    for batch_idx, (wf, meta, nv, tgt, r, track, _) in enumerate(loader):
         wf, meta, nv, tgt, r, track = (t.to(device) for t in (wf, meta, nv, tgt, r, track))
+        _check_batch_finite("val_input", epoch, batch_idx, out_dir, wf=wf, meta=meta, tgt=tgt, r=r)
         pred = model(wf, meta, nv, r, track)
+        _check_batch_finite("val_pred", epoch, batch_idx, out_dir, pred=pred)
         se += float(((pred - tgt) ** 2).sum().item())
         n += tgt.numel()
-    return float(np.sqrt(se / max(n, 1)))
+    val_rmse = float(np.sqrt(se / max(n, 1)))
+    if not np.isfinite(val_rmse):
+        save_diagnostic_and_abort(out_dir, "val_rmse", epoch, -1, {},
+                                   message=f"val_macro_rmse_db is non-finite ({val_rmse})")
+    return val_rmse
 
 
 def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader,
                  device: torch.device, out_dir: Path, target_mean: np.ndarray, target_std: np.ndarray,
-                 epochs: int = None, patience: int = None, mixed_prec: bool = True) -> List[Dict]:
+                 epochs: int = None, patience: int = None) -> Tuple[List[Dict], int]:
     hp = TRAIN_HP
     epochs = epochs if epochs is not None else hp["epochs"]
     patience = patience if patience is not None else hp["patience"]
+    if epochs < 1:
+        raise ValueError(f"epochs must be >= 1, got {epochs}")
 
     model.to(device)
     t_mean = torch.as_tensor(target_mean, dtype=torch.float32, device=device)
@@ -66,31 +83,56 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
     best_epoch = -1
     epochs_since_best = 0
     history: List[Dict] = []
-    ckpt_dir = out_dir
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, epochs + 1):
         t0 = time.time()
         model.train()
         train_loss_sum, n_batches = 0.0, 0
-        comp_sums = {}
-        for wf, meta, nv, tgt, r, track, _ in train_loader:
+        comp_sums: Dict[str, float] = {}
+
+        for batch_idx, (wf, meta, nv, tgt, r, track, _) in enumerate(train_loader):
             wf, meta, nv, tgt, r, track = (t.to(device) for t in (wf, meta, nv, tgt, r, track))
+            _check_batch_finite("train_input", epoch, batch_idx, out_dir, wf=wf, meta=meta, tgt=tgt, r=r)
+
             opt.zero_grad(set_to_none=True)
-            with _autocast(device, mixed_prec):
-                pred = model(wf, meta, nv, r, track)
-                loss, comps = composite_loss(pred.float(), tgt.float(), t_mean, t_std)
+            pred = model(wf, meta, nv, r, track)
+            _check_batch_finite("train_pred", epoch, batch_idx, out_dir, pred=pred)
+
+            loss, comps = composite_loss(pred, tgt, t_mean, t_std)
+            if not bool(torch.isfinite(loss)):
+                save_diagnostic_and_abort(out_dir, "train_loss", epoch, batch_idx,
+                                           {"pred": pred, "tgt": tgt}, message=f"loss is non-finite: {comps}")
+            for k, v in comps.items():
+                if not np.isfinite(v):
+                    save_diagnostic_and_abort(out_dir, "train_loss_component", epoch, batch_idx,
+                                               {"pred": pred, "tgt": tgt},
+                                               message=f"loss component '{k}'={v} is non-finite")
+
             loss.backward()
-            if hp["grad_clip"] > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), hp["grad_clip"])
+
+            grad_norm_sq = 0.0
+            for p in model.parameters():
+                if p.grad is not None:
+                    if not bool(torch.isfinite(p.grad).all()):
+                        save_diagnostic_and_abort(out_dir, "train_grad", epoch, batch_idx,
+                                                   {"pred": pred, "tgt": tgt},
+                                                   message="non-finite gradient detected")
+                    grad_norm_sq += float(p.grad.detach().float().pow(2).sum())
+            if not np.isfinite(grad_norm_sq):
+                save_diagnostic_and_abort(out_dir, "train_grad_norm", epoch, batch_idx, {},
+                                           message=f"gradient norm is non-finite ({grad_norm_sq})")
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), hp["grad_clip"])
             opt.step()
+
             train_loss_sum += comps["total"]
             n_batches += 1
             for k, v in comps.items():
                 comp_sums[k] = comp_sums.get(k, 0.0) + v
 
         train_loss = train_loss_sum / max(n_batches, 1)
-        val_rmse_db = _macro_rmse_db(model, val_loader, device)
+        val_rmse_db = _evaluate(model, val_loader, device, out_dir, epoch)
         sched.step(val_rmse_db)
         elapsed = time.time() - t0
 
@@ -107,18 +149,31 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             best_epoch = epoch
             epochs_since_best = 0
             torch.save({"epoch": epoch, "model_state": model.state_dict(),
-                        "val_macro_rmse_db": val_rmse_db}, ckpt_dir / "best_model.pt")
+                        "val_macro_rmse_db": val_rmse_db}, out_dir / "best_model.pt")
         else:
             epochs_since_best += 1
         if epochs_since_best >= patience:
             print(f"  early stopping at epoch {epoch} (best epoch {best_epoch}, val={best_val:.4f} dB)")
             break
 
-    (ckpt_dir / "training_history.json").write_text(json.dumps(history, indent=2))
-    return history
+    (out_dir / "training_history.json").write_text(json.dumps(history, indent=2))
+
+    if best_epoch == -1:
+        (out_dir / "RUN_INVALID").write_text(
+            "Run invalid: training loop completed without ever recording a finite "
+            "validation checkpoint (best_epoch=-1).\n"
+        )
+    return history, best_epoch
 
 
 def load_best_checkpoint(model: nn.Module, out_dir: Path, device: torch.device) -> int:
-    ckpt = torch.load(out_dir / "best_model.pt", map_location=device)
+    ckpt_path = out_dir / "best_model.pt"
+    if not ckpt_path.exists():
+        (out_dir / "RUN_INVALID").write_text(
+            f"Run invalid: no checkpoint found at {ckpt_path} -- training never produced a "
+            f"finite validation result.\n"
+        )
+        raise RuntimeError(f"No valid checkpoint for this run: {ckpt_path} does not exist. Run marked INVALID.")
+    ckpt = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(ckpt["model_state"])
     return int(ckpt["epoch"])
